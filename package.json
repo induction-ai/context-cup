@@ -1,0 +1,35 @@
+{
+  "private": true,
+  "name": "@induction-ai/context-cup",
+  "version": "0.1.0",
+  "description": "Benchmark harness that pits context-management strategies (drivers) against each other on a shared course, scored on accuracy and cost",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=11 <12"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "bin/test",
+    "db": "bin/db",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format"
+  },
+  "prettier": {
+    "plugins": [
+      "@ianvs/prettier-plugin-sort-imports"
+    ],
+    "trailingComma": "es5"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "catalog:",
+    "@types/node": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

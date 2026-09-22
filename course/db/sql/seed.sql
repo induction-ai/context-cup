@@ -1,0 +1,1 @@
+-- Rows every worker database starts with. Empty until the schema has tables.

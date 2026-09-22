@@ -1,0 +1,5 @@
+#!/bin/bash
+# One vitest suite for the whole workspace (see vitest.config.ts at the root).
+# Args pass through to vitest: file paths, -t, --project <name>.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" && exec node_modules/.bin/vitest --run "$@"
