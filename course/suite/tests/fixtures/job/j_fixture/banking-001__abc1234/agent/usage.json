@@ -1,0 +1,41 @@
+{
+  "calls": [
+    {
+      "turn_id": "001_k3v9xq",
+      "provider": "openai",
+      "model": "gpt-5.5",
+      "wire": "responses",
+      "purpose": "turn",
+      "usage": {
+        "input": 10000,
+        "cached_input": 8000,
+        "cache_write_input": 0,
+        "output": 300,
+        "reasoning_output": 100
+      },
+      "duration_ms": 1200
+    },
+    {
+      "turn_id": "002_pz7m1a",
+      "provider": "openai",
+      "model": "gpt-5.5",
+      "wire": "responses",
+      "purpose": "turn",
+      "usage": {
+        "input": 2000,
+        "cached_input": 0,
+        "cache_write_input": 0,
+        "output": 200,
+        "reasoning_output": 0
+      },
+      "duration_ms": 800
+    }
+  ],
+  "totals": {
+    "input": 12000,
+    "cached_input": 8000,
+    "cache_write_input": 0,
+    "output": 500,
+    "reasoning_output": 100
+  }
+}

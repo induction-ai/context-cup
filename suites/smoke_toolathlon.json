@@ -1,0 +1,30 @@
+{
+  "suite_name": "toolathlon",
+  "targets": {
+    "gpt-5.5@medium": {
+      "provider": "openai",
+      "model": "gpt-5.5",
+      "reasoning_effort": "medium"
+    },
+    "claude-sonnet-4-6": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "explicit_only": true
+    },
+    "gemini-3.1-pro-preview": {
+      "provider": "gemini",
+      "model": "gemini-3.1-pro-preview",
+      "explicit_only": true
+    }
+  },
+  "drivers": {
+    "base_passthrough": {
+      "count": 1
+    }
+  },
+  "tasks": {
+    "sales_accounting": {
+      "runner": "toolathlon"
+    }
+  }
+}

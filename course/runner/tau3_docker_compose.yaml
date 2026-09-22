@@ -1,0 +1,8 @@
+# Passed to harbor with --extra-docker-compose for tau3 tasks. The task's
+# verifier imports websockets, which the task image does not ship; install it
+# when the container starts so grading works whatever agent ran.
+services:
+  main:
+    post_start:
+      - command: python3 -m pip install websockets==15.0.1
+        user: root

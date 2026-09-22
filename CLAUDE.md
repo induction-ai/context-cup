@@ -19,22 +19,30 @@ Context Cup benchmarks context-management strategies. Each **driver** implements
 
 ## Workspace layout
 
-This is a pnpm workspace. `course/*` is the framework and `drivers/*` holds one package per strategy. Packages are scoped `@context-cup/*`.
+This is a pnpm workspace (TypeScript) with a uv workspace (Python) beside it. `course/*` is the framework, `engines/*` are what drivers build on, `drivers/*` holds one package per strategy, and `suites/*.json` say what a run covers. Course and engine packages are scoped `@context-cup/*`; drivers are `@context-cup-drivers/*`.
 
 - `course/shared` owns env loading (`load_env.ts`, `REPO_ROOT`), `NODE_ENV` parsing, and the test bootstrap other packages import.
 - `course/db` owns the Postgres schema (`src/schema.ts`), migrations under `drizzle/`, the connection, and the database test setup.
+- `course/suite` is `bin/suite`: expands a suite file into harbor jobs, schedules them, ingests results.
+- `course/runner` (Python) is the harbor agent that runs inside a trial: it owns the thread and hands each turn to the driver.
+- `engines/python` implements the driver protocol so a Python driver is one module.
 - `bin/` wrappers stay at the root and run their owning package; `.env` lives at the root and is loaded via `REPO_ROOT`, so run anything from any directory.
 
-Dependency rule: `drivers` may import `course`; `course` never imports `drivers`.
+The driver protocol is `docs/protocol.md`. Read it before touching a runner, an engine, or a driver; it is the contract, and a change there is a change to every driver. A driver's or engine's manifest is its `package.json` `contextCup` block; there is no other manifest file.
+
+Dependency rule: `drivers` build on `engines`; `course` invokes both by their scripts and never imports them; `engines` and `drivers` never import `course`.
 
 Third-party dependencies used by more than one package belong in the pnpm catalog in `pnpm-workspace.yaml`. Each package that uses one declares it with `"catalog:"` in its own manifest.
 
 ## Commands
 
 ```
-bin/test                   whole test suite (vitest; pass file paths, -t, --project)
+bin/test                   TypeScript test suite (vitest; pass file paths, -t, --project)
+uv run pytest              Python test suite (runner and engines)
+uv run ruff check .        Python lint
 pnpm typecheck             tsc across every package
 pnpm lint / pnpm format    prettier
+bin/suite <key> [--dry_run]   run a suite file from suites/
 bin/db generate            write a migration for schema.ts changes
 bin/db migrate             apply pending migrations
 bin/db check               verify migrations, snapshots, and schema.ts agree
@@ -45,6 +53,7 @@ Tests need a local Postgres. Each vitest worker gets its own database, created a
 
 ## Conventions
 
+- Python is 3.12 everywhere: `.python-version` on the host, and a uv-managed 3.12 provisioned into every trial container for the runner loop and the engines. Never depend on a task image's own interpreter.
 - ESM, TypeScript run directly by `tsx` and vitest (no build step). Relative imports carry the `.ts` extension; cross-package imports use the package's `./*.js` export map.
 - Schema properties are camelCase; columns are snake_case via drizzle's casing option.
 - Prettier is the formatter; run `pnpm format` before finishing.

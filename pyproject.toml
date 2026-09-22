@@ -1,0 +1,37 @@
+[project]
+name = "context-cup"
+version = "0.1.0"
+description = "Workspace root for the Python side of Context Cup"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["course/runner", "engines/python"]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.9", "pytest-asyncio>=0.24", "mypy>=1.14"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["course/runner/tests", "engines/python/tests", "tests"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["engines/python/src", "course/runner/src"]
+mypy_path = "engines/python/src:course/runner/src:.harbor/repo/src"
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["litellm", "litellm.*", "brotli", "zstandard"]
+ignore_missing_imports = true
+
+# harbor is imported by the host-side agents, which run inside harbor's own
+# process. Its checkout under .harbor/repo supplies the types when present.
+[[tool.mypy.overrides]]
+module = ["harbor", "harbor.*"]
+ignore_missing_imports = true
+follow_imports = "silent"

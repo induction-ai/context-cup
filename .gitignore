@@ -154,15 +154,19 @@ vite.config.ts.timestamp-*
 # Python
 .venv/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
 *.pyc
 *.pyo
-.python-version
 
 # Vitest results
 .vitest-results.json
 
 # Real credentials
-secrets
+secrets/
+
+# Harbor fork checkout, cloned on first bin/suite run
+.harbor/
 
 # Nix
 .direnv/

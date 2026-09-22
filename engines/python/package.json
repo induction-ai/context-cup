@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "name": "@context-cup/engine-python",
+  "version": "0.1.0",
+  "description": "Python engine: a driver is one module with prepare() or run_turn(); the engine handles the protocol, model calls, and usage capture",
+  "contextCup": {
+    "kind": "engine",
+    "providers": [
+      "openai"
+    ]
+  },
+  "scripts": {
+    "test": "cd ../.. && uv run pytest engines/python -q",
+    "lint": "cd ../.. && uv run ruff check engines/python"
+  }
+}

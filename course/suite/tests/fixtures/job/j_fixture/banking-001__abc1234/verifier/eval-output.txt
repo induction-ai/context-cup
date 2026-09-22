@@ -1,0 +1,2 @@
+some log
+DETAILS: all 3 actions matched

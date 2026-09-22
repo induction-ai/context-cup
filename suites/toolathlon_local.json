@@ -1,0 +1,134 @@
+{
+  "suite_name": "toolathlon_local",
+  "concurrency": 64,
+  "timeout_minutes": 40,
+  "targets": {
+    "gpt-5.5@medium": {
+      "provider": "openai",
+      "model": "gpt-5.5",
+      "reasoning_effort": "medium"
+    },
+    "claude-sonnet-4-6": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "explicit_only": true
+    },
+    "gemini-3.1-pro-preview": {
+      "provider": "gemini",
+      "model": "gemini-3.1-pro-preview",
+      "explicit_only": true
+    }
+  },
+  "drivers": {
+    "base_passthrough": {
+      "count": 2
+    }
+  },
+  "tasks": {
+    "academic_pdf_report": {
+      "runner": "toolathlon"
+    },
+    "add_bibtex": {
+      "runner": "toolathlon"
+    },
+    "arrange_workspace": {
+      "runner": "toolathlon"
+    },
+    "cooking_guidance": {
+      "runner": "toolathlon"
+    },
+    "course_schedule": {
+      "runner": "toolathlon"
+    },
+    "courses_ta_hws": {
+      "runner": "toolathlon"
+    },
+    "cvpr_research": {
+      "runner": "toolathlon"
+    },
+    "detect_revised_terms": {
+      "runner": "toolathlon"
+    },
+    "dietary_health": {
+      "runner": "toolathlon"
+    },
+    "excel_data_transformation": {
+      "runner": "toolathlon"
+    },
+    "excel_market_research": {
+      "runner": "toolathlon"
+    },
+    "find_alita_paper": {
+      "runner": "toolathlon"
+    },
+    "git_milestone": {
+      "runner": "toolathlon"
+    },
+    "hk_top_conf": {
+      "runner": "toolathlon"
+    },
+    "identify_all_songs": {
+      "runner": "toolathlon"
+    },
+    "imagenet": {
+      "runner": "toolathlon"
+    },
+    "interview_report": {
+      "runner": "toolathlon"
+    },
+    "invoice_org": {
+      "runner": "toolathlon"
+    },
+    "ipad_edu_price": {
+      "runner": "toolathlon"
+    },
+    "language_school": {
+      "runner": "toolathlon"
+    },
+    "latex_prompt_box": {
+      "runner": "toolathlon"
+    },
+    "logical_datasets_collection": {
+      "runner": "toolathlon"
+    },
+    "mrbeast_analysis": {
+      "runner": "toolathlon"
+    },
+    "nvidia_market": {
+      "runner": "toolathlon"
+    },
+    "paper_checker": {
+      "runner": "toolathlon"
+    },
+    "ppt_analysis": {
+      "runner": "toolathlon"
+    },
+    "privacy_desensitization": {
+      "runner": "toolathlon"
+    },
+    "profile_update_online": {
+      "runner": "toolathlon"
+    },
+    "reimbursement_form_filler": {
+      "runner": "toolathlon"
+    },
+    "sales_accounting": {
+      "runner": "toolathlon"
+    },
+    "shopping_helper": {
+      "runner": "toolathlon"
+    },
+    "stock_build_position": {
+      "runner": "toolathlon"
+    },
+    "travel_exchange": {
+      "runner": "toolathlon"
+    },
+    "university_course_selection": {
+      "runner": "toolathlon"
+    },
+    "yahoo_analysis": {
+      "runner": "toolathlon"
+    }
+  }
+}

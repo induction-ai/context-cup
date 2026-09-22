@@ -1,0 +1,4 @@
+#!/bin/bash
+# Run a suite of benchmark tasks across drivers and targets (see suites/).
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" && exec node_modules/.bin/tsx course/suite/src/cli.ts "$@"

@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "name": "@context-cup-drivers/base_passthrough",
+  "version": "0.1.0",
+  "description": "Sends the whole thread to the model unchanged. The baseline every other driver is measured against.",
+  "contextCup": {
+    "kind": "driver",
+    "extends": "@context-cup/engine-python",
+    "providers": [
+      "openai"
+    ]
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "protocol": 2,
+  "turn_id": "001_k3v9xq",
+  "response": {
+    "id": "resp_fixture",
+    "object": "response",
+    "status": "completed",
+    "model": "gpt-5.5-2026-04-23",
+    "output": [
+      {
+        "type": "function_call",
+        "call_id": "call_1",
+        "name": "get_balance",
+        "arguments": "{}"
+      }
+    ],
+    "usage": {
+      "input_tokens": 9451,
+      "output_tokens": 221
+    }
+  },
+  "context_payload": {
+    "model": "gpt-5.5",
+    "input": [
+      {
+        "role": "user",
+        "content": "\u2026"
+      }
+    ],
+    "tools": []
+  },
+  "state": {},
+  "calls": [
+    {
+      "provider": "openai",
+      "model": "gpt-5.5",
+      "wire": "responses",
+      "purpose": "turn",
+      "usage": {
+        "input": 10000,
+        "cached_input": 8000,
+        "cache_write_input": 0,
+        "output": 300,
+        "reasoning_output": 100
+      },
+      "duration_ms": 1200,
+      "host": "api.openai.com"
+    }
+  ]
+}

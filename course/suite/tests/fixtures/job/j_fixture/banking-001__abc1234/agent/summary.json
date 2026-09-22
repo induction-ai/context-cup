@@ -1,0 +1,7 @@
+{
+  "stop_reason": "user_stop",
+  "turns": 2,
+  "env_tool_calls": 3,
+  "errors": 0,
+  "provider": "openai"
+}

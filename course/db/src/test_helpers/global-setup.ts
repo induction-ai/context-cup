@@ -20,7 +20,10 @@ const TEST_DATABASE_URL = readTestDatabaseUrl();
 
 const { TEST_WORKERS } = z
   .object({
-    TEST_WORKERS: z.coerce.number().int().positive().optional(),
+    TEST_WORKERS: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.coerce.number().int().positive().optional()
+    ),
   })
   .parse(process.env);
 

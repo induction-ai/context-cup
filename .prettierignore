@@ -1,3 +1,9 @@
 pnpm-lock.yaml
 node_modules
 dist
+course/db/drizzle
+.pytest_cache
+.ruff_cache
+.venv
+.harbor
+.temp

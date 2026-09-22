@@ -6,11 +6,26 @@ import { defineConfig } from "vitest/config";
 const testDatabaseEnvironment =
   "course/shared/src/test_helpers/test_database_environment.ts";
 
+// TEST_WORKERS caps both the worker databases the global setup prepares and
+// the vitest workers that use them, so a worker never lands on a database
+// that was not created.
+const maxWorkers = Number(process.env.TEST_WORKERS);
+
 export default defineConfig({
   test: {
     passWithNoTests: true,
+    ...(Number.isInteger(maxWorkers) && maxWorkers > 0 ? { maxWorkers } : {}),
     globalSetup: ["course/db/src/test_helpers/global-setup.ts"],
     projects: [
+      {
+        test: {
+          name: "model-stats",
+          root: "course/model-stats",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["node_modules", "dist"],
+        },
+      },
       {
         test: {
           name: "db",
@@ -21,6 +36,20 @@ export default defineConfig({
           setupFiles: [
             `../../${testDatabaseEnvironment}`,
             "src/test_helpers/setup.ts",
+          ],
+          sequence: { setupFiles: "list" },
+        },
+      },
+      {
+        test: {
+          name: "suite",
+          root: "course/suite",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["node_modules", "dist"],
+          setupFiles: [
+            `../../${testDatabaseEnvironment}`,
+            "../db/src/test_helpers/setup.ts",
           ],
           sequence: { setupFiles: "list" },
         },

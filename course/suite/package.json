@@ -1,0 +1,37 @@
+{
+  "private": true,
+  "name": "@context-cup/suite",
+  "version": "0.1.0",
+  "description": "bin/suite: expands a suite file into harbor jobs, schedules them, and ingests results",
+  "type": "module",
+  "exports": {
+    "./*.js": "./src/*.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "test": "../../bin/test --project suite",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write src tests --log-level warn",
+    "lint": "prettier --check src tests"
+  },
+  "dependencies": {
+    "@context-cup/db": "workspace:*",
+    "@context-cup/model-stats": "workspace:*",
+    "@context-cup/shared": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "execa": "catalog:",
+    "nanoid": "catalog:",
+    "pino": "catalog:",
+    "yargs": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "catalog:",
+    "@types/node": "catalog:",
+    "@types/yargs": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

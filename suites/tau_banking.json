@@ -1,0 +1,611 @@
+{
+  "suite_name": "tau_banking",
+  "concurrency": 64,
+  "timeout_minutes": 40,
+  "targets": {
+    "gpt-5.5@medium": {
+      "provider": "openai",
+      "model": "gpt-5.5",
+      "reasoning_effort": "medium"
+    },
+    "claude-sonnet-4-6": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "explicit_only": true
+    },
+    "gemini-3.1-pro-preview": {
+      "provider": "gemini",
+      "model": "gemini-3.1-pro-preview",
+      "explicit_only": true
+    }
+  },
+  "drivers": {
+    "base_passthrough": {
+      "count": 2
+    }
+  },
+  "tasks": {
+    "banking_001": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_001"
+      }
+    },
+    "banking_002": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_002"
+      }
+    },
+    "banking_003": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_003"
+      }
+    },
+    "banking_004": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_004"
+      }
+    },
+    "banking_005": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_005"
+      }
+    },
+    "banking_006": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_006"
+      }
+    },
+    "banking_007": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_007"
+      }
+    },
+    "banking_008": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_008"
+      }
+    },
+    "banking_010": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_010"
+      }
+    },
+    "banking_012": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_012"
+      }
+    },
+    "banking_014": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_014"
+      }
+    },
+    "banking_015": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_015"
+      }
+    },
+    "banking_016": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_016"
+      }
+    },
+    "banking_017": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_017"
+      }
+    },
+    "banking_018": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_018"
+      }
+    },
+    "banking_019": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_019"
+      }
+    },
+    "banking_020": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_020"
+      }
+    },
+    "banking_021": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_021"
+      }
+    },
+    "banking_022": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_022"
+      }
+    },
+    "banking_023": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_023"
+      }
+    },
+    "banking_024": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_024"
+      }
+    },
+    "banking_025": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_025"
+      }
+    },
+    "banking_026": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_026"
+      }
+    },
+    "banking_027": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_027"
+      }
+    },
+    "banking_028": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_028"
+      }
+    },
+    "banking_029": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_029"
+      }
+    },
+    "banking_031": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_031"
+      }
+    },
+    "banking_032": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_032"
+      }
+    },
+    "banking_033": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_033"
+      }
+    },
+    "banking_034": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_034"
+      }
+    },
+    "banking_035": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_035"
+      }
+    },
+    "banking_036": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_036"
+      }
+    },
+    "banking_037": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_037"
+      }
+    },
+    "banking_038": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_038"
+      }
+    },
+    "banking_039": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_039"
+      }
+    },
+    "banking_040": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_040"
+      }
+    },
+    "banking_041": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_041"
+      }
+    },
+    "banking_043": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_043"
+      }
+    },
+    "banking_044": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_044"
+      }
+    },
+    "banking_045": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_045"
+      }
+    },
+    "banking_046": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_046"
+      }
+    },
+    "banking_047": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_047"
+      }
+    },
+    "banking_048": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_048"
+      }
+    },
+    "banking_049": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_049"
+      }
+    },
+    "banking_050": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_050"
+      }
+    },
+    "banking_051": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_051"
+      }
+    },
+    "banking_052": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_052"
+      }
+    },
+    "banking_053": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_053"
+      }
+    },
+    "banking_054": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_054"
+      }
+    },
+    "banking_055": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_055"
+      }
+    },
+    "banking_056": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_056"
+      }
+    },
+    "banking_057": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_057"
+      }
+    },
+    "banking_058": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_058"
+      }
+    },
+    "banking_059": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_059"
+      }
+    },
+    "banking_060": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_060"
+      }
+    },
+    "banking_061": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_061"
+      }
+    },
+    "banking_062": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_062"
+      }
+    },
+    "banking_063": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_063"
+      }
+    },
+    "banking_064": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_064"
+      }
+    },
+    "banking_065": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_065"
+      }
+    },
+    "banking_066": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_066"
+      }
+    },
+    "banking_067": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_067"
+      }
+    },
+    "banking_068": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_068"
+      }
+    },
+    "banking_069": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_069"
+      }
+    },
+    "banking_070": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_070"
+      }
+    },
+    "banking_071": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_071"
+      }
+    },
+    "banking_072": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_072"
+      }
+    },
+    "banking_073": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_073"
+      }
+    },
+    "banking_074": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_074"
+      }
+    },
+    "banking_075": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_075"
+      }
+    },
+    "banking_076": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_076"
+      }
+    },
+    "banking_077": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_077"
+      }
+    },
+    "banking_078": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_078"
+      }
+    },
+    "banking_079": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_079"
+      }
+    },
+    "banking_080": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_080"
+      }
+    },
+    "banking_081": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_081"
+      }
+    },
+    "banking_082": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_082"
+      }
+    },
+    "banking_083": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_083"
+      }
+    },
+    "banking_084": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_084"
+      }
+    },
+    "banking_085": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_085"
+      }
+    },
+    "banking_086": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_086"
+      }
+    },
+    "banking_087": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_087"
+      }
+    },
+    "banking_088": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_088"
+      }
+    },
+    "banking_089": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_089"
+      }
+    },
+    "banking_090": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_090"
+      }
+    },
+    "banking_091": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_091"
+      }
+    },
+    "banking_092": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_092"
+      }
+    },
+    "banking_093": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_093"
+      }
+    },
+    "banking_094": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_094"
+      }
+    },
+    "banking_095": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_095"
+      }
+    },
+    "banking_096": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_096"
+      }
+    },
+    "banking_097": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_097"
+      }
+    },
+    "banking_098": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_098"
+      }
+    },
+    "banking_099": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_099"
+      }
+    },
+    "banking_100": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_100"
+      }
+    },
+    "banking_101": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_101"
+      }
+    },
+    "banking_102": {
+      "runner": "tau3",
+      "tau3": {
+        "customer": "banking_102"
+      }
+    }
+  }
+}
