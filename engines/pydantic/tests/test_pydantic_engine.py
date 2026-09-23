@@ -11,6 +11,7 @@ import httpx2
 import pytest
 from context_cup_protocol import Dirs, ProviderClient, ProviderInfo, Target, TurnInput
 from context_cup_pydantic import HISTORY, PydanticContext, finish
+from context_cup_pydantic.engine import SEEN
 from pydantic_ai import Agent
 from pydantic_ai_harness.compaction import ClearToolResults
 
@@ -131,7 +132,9 @@ def test_capabilities_get_the_target_through_the_proxy_and_the_raw_response(
     assert request["instructions"] == "Be a bank agent."
     assert [t["name"] for t in request["tools"]] == ["get_balance"]
     assert "Hi! How can I help?" in json.dumps(request["input"])
-    assert ctx.state == {"seen": 2} and (tmp_path / HISTORY).exists()
+    assert (tmp_path / HISTORY).exists()
+    assert json.loads((tmp_path / SEEN).read_text()) == {"seen": 2}
+    assert ctx.state is None, "state stays the driver's"
 
     # Next turn: the tool result goes back as a deferred result.
     items = [

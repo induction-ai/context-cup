@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "name": "@context-cup-drivers/base_litellm",
+  "version": "0.1.0",
+  "description": "LiteLLM's own trimming: trim_messages cuts the conversation to fit the model's window (config.max_tokens, default 75% of it), keeping tool calls paired with their results.",
+  "contextCup": {
+    "kind": "driver",
+    "extends": "@context-cup/engine-litellm",
+    "providers": [
+      "openai",
+      "anthropic",
+      "gemini"
+    ]
+  }
+}

@@ -9,6 +9,7 @@ move."""
 from __future__ import annotations
 
 import copy
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,10 +39,28 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.tools import ToolDefinition
 
 HISTORY = "pydantic_history.json"
+SEEN = "pydantic_seen.json"
+"""How many conversation messages the history accounts for. The engine's own
+bookkeeping lives in these files so `ctx.state` stays the driver's."""
 
 
 @dataclass
 class PydanticContext:
+    """What a Pydantic AI driver's `run(ctx)` receives, to inform its choice
+    of capabilities. It returns a list of capabilities or an `Agent`; the
+    engine builds, connects, and runs the agent (see `finish`).
+
+    - `first`, `provider`, `target`, `dirs`, `config` (the manifest's
+      `contextCup.config`), and `turn`, the whole `input.json`: read only.
+    - `context_payload`, `original_payload`: the course's native request
+      bodies, informational only. The agent's real context is its own
+      history, kept in `dirs.state/pydantic_history.json`.
+    - `state`: the engine's; `finish` overwrites it every turn, so a driver
+      keeps its own memory in files under `dirs.state`.
+    - `http_client`: the connection the engine gives the model.
+
+    engines/pydantic/README.md has the full table and examples."""
+
     turn: TurnInput
     config: dict[str, Any] = field(default_factory=dict)
     http_client: httpx2.AsyncClient = field(
@@ -94,7 +113,8 @@ def finish(ctx: PydanticContext, result: Any) -> Payload:
 
     conversation = view(ctx.provider.name, ctx.context_payload)
     history_file = Path(ctx.dirs.state) / HISTORY
-    seen = 0 if ctx.first else int((ctx.state or {}).get("seen", 0))
+    seen_file = Path(ctx.dirs.state) / SEEN
+    seen = 0 if ctx.first else int(json.loads(seen_file.read_text())["seen"])
     history: list[ModelMessage] = (
         []
         if ctx.first
@@ -164,5 +184,5 @@ def finish(ctx: PydanticContext, result: Any) -> Payload:
     if not responses:
         raise RuntimeError("the agent made no successful Responses call this turn")
     history_file.write_bytes(ModelMessagesTypeAdapter.dump_json(run.all_messages()))
-    ctx.state = {"seen": len(conversation.messages)}
+    seen_file.write_text(json.dumps({"seen": len(conversation.messages)}))
     return responses[-1]

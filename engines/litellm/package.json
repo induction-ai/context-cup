@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "name": "@context-cup/engine-litellm",
+  "version": "0.1.0",
+  "description": "LiteLLM engine: a driver gets ctx.llm, a litellm handle preconfigured for the run, and returns the litellm response of its turn.",
+  "contextCup": {
+    "kind": "engine",
+    "providers": [
+      "openai",
+      "anthropic",
+      "gemini"
+    ]
+  },
+  "scripts": {
+    "test": "cd ../.. && uv run pytest engines/litellm -q",
+    "lint": "cd ../.. && uv run ruff check engines/litellm"
+  }
+}

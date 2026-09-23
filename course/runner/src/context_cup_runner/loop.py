@@ -39,6 +39,7 @@ from .environment import Environment, StepResult
 from .protocol import (
     PLACEHOLDER_KEY,
     Dirs,
+    EmptyResponse,
     ProviderInfo,
     Target,
     TargetSpec,
@@ -50,7 +51,7 @@ from .protocol import (
     validate_output,
 )
 
-DEFAULT_TURN_RETRIES = 2
+DEFAULT_TURN_RETRIES = 3
 DEFAULT_MAX_STEPS = 200
 DEFAULT_MAX_TOOL_OUTPUT_CHARS = 100_000
 DEFAULT_TURN_TIMEOUT_SEC = 1800.0
@@ -214,7 +215,9 @@ class Trial:
 
     def _run_once(
         self, turn_index: int
-    ) -> tuple[str, TurnOutput | None, Extracted | None, str | None]:
+    ) -> tuple[str, TurnOutput | None, Extracted | None, str | None, bool]:
+        """One attempt: (turn id, output, move, error, discarded). An empty
+        reply is `discarded`: kept out of the trial's turns, usage, and cost."""
         turn_id, turn_dir = self._next_turn_dir()
         payload = self._turn_input(turn_id, turn_dir, turn_index)
         self._write_input(turn_dir, payload)
@@ -234,25 +237,28 @@ class Trial:
                 None,
                 None,
                 f"driver exited {run.returncode}: " + " | ".join(tail),
+                False,
             )
         output_path = turn_dir / "output.json"
         if not output_path.exists():
-            return turn_id, None, None, "driver wrote no output.json"
+            return turn_id, None, None, "driver wrote no output.json", False
         try:
             output, extracted = validate_output(
                 json.loads(output_path.read_text(encoding="utf-8")),
                 turn_id,
                 self.adapter,
             )
+        except EmptyResponse as exc:
+            return turn_id, None, None, f"empty reply: {exc}", True
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
-            return turn_id, None, None, f"invalid output.json: {exc}"
-        return turn_id, output, extracted, None
+            return turn_id, None, None, f"invalid output.json: {exc}", False
+        return turn_id, output, extracted, None, False
 
     def run_turn(self, turn_index: int) -> tuple[TurnOutput, Extracted]:
         attempts = self.settings.turn_retries + 1
         last_error = "unknown"
         for attempt in range(attempts):
-            turn_id, output, extracted, error = self._run_once(turn_index)
+            turn_id, output, extracted, error, discarded = self._run_once(turn_index)
             if output is not None and extracted is not None:
                 return output, extracted
             last_error = error or "unknown"
@@ -262,12 +268,22 @@ class Trial:
                     "turn_index": turn_index,
                     "attempt": attempt + 1,
                     "error": last_error,
+                    "discarded": discarded,
                 }
             )
-            print(
-                f"[runner] turn {turn_id} failed ({attempt + 1}/{attempts}): {last_error}",
-                flush=True,
-            )
+            if discarded:
+                print(
+                    f"[runner] turn {turn_id} empty reply discarded, retrying "
+                    f"({attempt + 1}/{attempts - 1})"
+                    if attempt + 1 < attempts
+                    else f"[runner] turn {turn_id} empty reply discarded, no retries left",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[runner] turn {turn_id} failed ({attempt + 1}/{attempts}): {last_error}",
+                    flush=True,
+                )
         raise TrialError(
             f"turn {turn_index} failed after {attempts} attempts: {last_error}"
         )

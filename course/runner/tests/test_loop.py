@@ -274,6 +274,21 @@ def test_retry_then_success(workspace):
     )
 
 
+def test_an_empty_reply_is_discarded_and_other_failures_are_not(workspace, capsys):
+    write_script(
+        workspace["driver"], [{"text": ""}, {"crash": True}, {"text": "recovered"}]
+    )
+    trial = Trial(make_settings(workspace, turn_retries=3), MemoryEnvironment())
+    result = run(trial)
+
+    assert result.turns == 1, "failed attempts are not turns"
+    assert [e["discarded"] for e in result.errors] == [True, False]
+    assert "empty reply" in result.errors[0]["error"]
+    assert "empty reply discarded, retrying (1/3)" in capsys.readouterr().out
+    summary = json.loads((workspace["agent"] / "summary.json").read_text())
+    assert summary["errors"][0]["discarded"] is True
+
+
 @pytest.mark.parametrize(
     "steps, expected",
     [
@@ -370,7 +385,7 @@ def test_settings_from_env(tmp_path: Path):
         "CC_MAX_STEPS": "7",
     }
     settings = Settings.from_env(env, default_max_steps=99)
-    assert settings.max_steps == 7 and settings.turn_retries == 2
+    assert settings.max_steps == 7 and settings.turn_retries == 3
     assert settings.target.reasoning_effort == "low"
     assert settings.proxy_url == "http://proxy.test:1"
     info = settings.provider_info()

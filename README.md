@@ -21,7 +21,8 @@ suites/     which tasks, drivers, and models a run covers (toolathlon_local: the
 Workspace packages are scoped `@context-cup/*`, for example `@context-cup/db`,
 `@context-cup/engine-python`, while drivers use `@context-cup-drivers/*`, for example
 `@context-cup-drivers/base_truncate`. How a driver
-plugs in is specified in [docs/protocol.md](docs/protocol.md).
+plugs in is specified in [docs/protocol.md](docs/protocol.md); to write one,
+start with [docs/drivers.md](docs/drivers.md).
 
 ## Setup
 
@@ -79,7 +80,9 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
   `base_truncate` speak the turn protocol directly; `base_pydantic` is a
   Pydantic AI agent that owns the model side while the course runs the
   environment's tools, the baseline for drivers built from Pydantic AI
-  Harness capabilities (`engines/pydantic`); `base_codex` is a whole agent
+  Harness capabilities (`engines/pydantic`); `base_litellm` trims the
+  conversation to the model's window with LiteLLM's `trim_messages` and
+  sends it as chat messages, the baseline for litellm-based drivers (`engines/litellm`); `base_codex` is a whole agent
   run by harbor and compared on score and cost only.
 - `--count` is attempts per task. `--task` narrows to named tasks.
 - `--harbor_env daytona` runs in Daytona sandboxes instead of local Docker

@@ -1,0 +1,134 @@
+# Writing a driver
+
+A driver is a context-management strategy: each turn it decides what the
+model sees, makes the call, and hands back the model's answer. The course
+runs the environment (tools, simulated user, verifier) and scores the result
+on accuracy and cost. This page is for driver authors; the wire-level
+contract is [protocol.md](protocol.md).
+
+## Pick a lane
+
+| lane                                      | `run(ctx)` receives                                                                    | `run(ctx)` returns                                           | copy this                           | pick it when                                                                                                                                           |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`engines/python`](../engines/python)     | the provider's native request body, plus a provider-neutral view of it                 | the provider's response: the SDK object or its JSON          | `base_passthrough`, `base_truncate` | you want exact control: reasoning items, cache-control blocks, and thought signatures are all in front of you. Bring any SDK.                          |
+| [`engines/pydantic`](../engines/pydantic) | read-only turn facts                                                                   | Pydantic AI capabilities (a list), or a whole `Agent`        | `base_pydantic`                     | your strategy is a Pydantic AI (Harness) capability: compaction, tool-output limits, your own history processor.                                       |
+| [`engines/litellm`](../engines/litellm)   | the conversation as litellm chat messages, and `ctx.llm`, a litellm handle for the run | a litellm response from `ctx.llm.completion(...)`            | `base_litellm`                      | you want one strategy for OpenAI, Anthropic, and Gemini over chat messages, and can live without OpenAI reasoning items and Anthropic thinking blocks. |
+| `kind: "agent"`                           | nothing: harbor runs a whole agent against the task                                    | nothing: the agent works the task and the verifier scores it | `base_codex`                        | you are entering an existing agent (Codex, Claude Code) as it is. Compared on score and cost only.                                                     |
+
+In the first three lanes the course owns the loop: every turn it writes
+`input.json`, runs your `run(ctx)` once, reads the model's response, runs any
+tools it asked for, appends the results, and calls you again. A turn ends
+when the model asks for an environment tool or answers in text. Tools a
+driver owns itself (a read-back tool for clipped output, a memory) run inside
+your turn and never reach the course.
+
+## Start a driver
+
+Copy the base driver of your lane to `drivers/<your_name>/` and edit.
+
+`package.json` holds everything the course reads about a driver:
+
+```json
+{
+  "private": true,
+  "name": "@context-cup-drivers/keep_recent",
+  "version": "0.1.0",
+  "description": "Blanks all but the three most recent tool results.",
+  "contextCup": {
+    "kind": "driver",
+    "extends": "@context-cup/engine-python",
+    "providers": ["openai"],
+    "config": { "keep": 3 }
+  }
+}
+```
+
+- `name`: scoped `@context-cup-drivers/`; the part after the slash is what
+  `bin/suite --driver` takes. The `base_` prefix is reserved for the course's
+  own drivers.
+- `extends`: the engine, which decides what `ctx` is and what `run` returns.
+- `providers`: the providers your driver can drive. `bin/suite` refuses a
+  target on any other provider. Omitted, it inherits the engine's list.
+- `config`: free-form; it arrives as `ctx.config`. Keep tunables here so a
+  variant is a manifest edit, not a code change.
+
+`driver.py` defines `run(ctx)`. It may import sibling files in its own
+directory, and `context_cup_protocol` (the protocol library), and nothing
+else from the course.
+
+`setup.sh` (optional) installs what your driver needs into the engine's
+venv, once per trial container. The Python engine installs no provider SDK,
+so its drivers always have one:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+uv pip install --quiet --python "${CC_CHAIN%%:*}/.venv/bin/python" openai
+```
+
+`${CC_CHAIN%%:*}` is the first package of your chain, the engine, whose venv
+runs your code. `uv` is on `PATH` in every setup script; the container's own
+Python is never used.
+
+## Models, keys, and accounting
+
+- **Every call goes through the run's proxy.** Your process has placeholder
+  keys (`cc-proxy`) and base URLs pointing at the proxy
+  (`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `GOOGLE_GEMINI_BASE_URL`, and
+  `ctx.provider.client.base_url`). SDKs read those without configuration. A
+  call that goes around the proxy has no key and fails with 401.
+- **Every call is counted.** The proxy records each call's model, tokens,
+  and timing; the suite prices it. Summaries, reranking, subagents: all of it
+  is in your cost. Label auxiliary calls with the header
+  `x-cc-purpose: <label>` (`ctx.llm.completion(purpose=...)` on litellm);
+  unlabelled calls count as `turn`.
+- **You pick your models.** `target` is the run's model and the default, not
+  a rule: call a cheaper model for summaries, or a different one entirely.
+  Name `cc-model` (or omit the model) to get the run's target; a model you
+  name is forwarded unchanged and priced under that name.
+
+## What persists between turns
+
+Each turn is a fresh process, so anything you keep must be written down:
+
+- `ctx.state`: any JSON; whatever it holds at the end of `run` comes back
+  next turn. (The Pydantic engine uses it for its own bookkeeping.)
+- `ctx.dirs.state`: a directory that survives the whole trial, for anything
+  too big for `state`: indexes, summaries, spilled outputs.
+- The working conversation: `ctx.context_payload` on the Python engine,
+  `ctx.context_messages` on litellm. Your edits carry forward; the course
+  appends the model's reply and the tool results to what you left.
+
+## Run it
+
+```
+bin/suite smoke_tau --driver keep_recent --target gpt-5.5@medium
+bin/suite smoke_tau --driver keep_recent --target gpt-5.5@medium --count 5
+bin/suite toolathlon_local --driver keep_recent --target gpt-5.5@medium
+bin/suite smoke_tau                                    # choose driver and target from a list
+```
+
+`--count` is attempts per task; single trials swing widely, so compare
+drivers at `--count 5` or more. The last lines print the results table and a
+link to the results site (`pnpm site:dev`), where every trial has its own
+page with its model calls.
+
+## When a turn fails
+
+The run ends with a non-zero exit and a line pointing at the results page,
+where each errored trial shows its error. Each turn leaves a directory under
+the trial's agent logs,
+`.temp/suites/<suite>/<job>/harbor/<job>/<trial>/agent/turns/NNN_xxxxxx/`:
+
+| file          | what to read in it                                       |
+| ------------- | -------------------------------------------------------- |
+| `input.json`  | exactly what your `run(ctx)` was given                   |
+| `output.json` | what it returned: `response`, `context_payload`, `state` |
+| `stderr.txt`  | your traceback, and any provider error message           |
+| `stdout.txt`  | anything your driver printed                             |
+
+A failed turn is retried twice with a fresh turn id; three failures end the
+trial with the last error, which also shows on the trial's page. Beside
+`turns/`, `setup_<package>.txt` holds each `setup.sh`'s output, and
+`runner.txt` the loop's own log. Set `CC_SAVE_BODIES=1` to keep every request
+and response the proxy saw under `.temp/suites/<suite>/bodies/`.

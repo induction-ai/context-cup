@@ -1,5 +1,9 @@
 # Driver protocol
 
+Writing a driver? Start with [drivers.md](drivers.md): the lanes, what `ctx`
+holds, and how to run and debug one. This page is the wire-level contract
+underneath.
+
 How the course talks to a driver during a trial. Everything here is a file on
 disk or a command line, so a driver can be written in any language.
 
@@ -38,7 +42,10 @@ tooling treats them alike. The pattern is Dev Container Features: a manifest,
 an install script, and a dependency order the tooling honours. An engine
 defines the `ctx` its drivers' `run` receives: the Python engine hands over
 the payloads with a provider-neutral view of them; the Pydantic engine takes
-back Pydantic AI capabilities and runs the agent itself.
+back Pydantic AI capabilities and runs the agent itself; the LiteLLM engine
+hands over the conversation as litellm chat messages with a litellm handle
+for the call. [drivers.md](drivers.md) and each engine's README have the
+details.
 
 ```
 drivers/base_truncate/
@@ -103,16 +110,16 @@ engines/python/
 Scripts run inside the trial container with the working directory set to
 their own package directory, and see:
 
-| var               | meaning                                                         |
-| ----------------- | --------------------------------------------------------------- |
-| `CC_DRIVER_DIR`   | the leaf package directory                                      |
-| `CC_SELF_DIR`     | the directory of the script being run                           |
-| `CC_CHAIN`        | every package directory root to leaf, colon separated           |
-| `CC_STATE_DIR`    | the driver-private directory that survives across turns         |
-| `CC_TRIAL_ID`     | the trial id                                                    |
-| `CC_PYTHON`       | the runner's own Python 3.12, a uv venv; engines make their own |
-| `CC_PROTOCOL_DIR` | setup.sh only: the uploaded protocol library to install         |
-| `CC_TURN_DIR`     | run.sh only: the current turn directory                         |
+| var               | meaning                                                                        |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `CC_DRIVER_DIR`   | the leaf package directory                                                     |
+| `CC_SELF_DIR`     | the directory of the script being run                                          |
+| `CC_CHAIN`        | every package directory root to leaf, colon separated                          |
+| `CC_STATE_DIR`    | the driver-private directory that survives across turns                        |
+| `CC_TRIAL_ID`     | the trial id                                                                   |
+| `CC_PYTHON`       | setup.sh only: the runner's own Python 3.12, a uv venv; engines make their own |
+| `CC_PROTOCOL_DIR` | setup.sh only: the uploaded protocol library to install                        |
+| `CC_TURN_DIR`     | run.sh only: the current turn directory                                        |
 
 Python in a trial container is always a uv-managed 3.12. The runner uploads a
 pinned `uv`, puts it on `PATH` for every script with `UV_CACHE_DIR` and
@@ -289,6 +296,9 @@ call on the host and stores it as a `model_call` row.
 | `CC_TRIAL_ID`                                                             | same as `trial_id` in the payload                  |
 | `CC_TURN_DIR`                                                             | same as `dirs.turn`                                |
 
+The process also inherits `run.sh`'s script variables above (`CC_DRIVER_DIR`,
+`CC_SELF_DIR`, `CC_CHAIN`, `CC_STATE_DIR`).
+
 Every provider endpoint a driver sees is the run's proxy; no real key is in
 the container.
 
@@ -296,12 +306,11 @@ the container.
 
 Besides `turns/`, in the agent log directory:
 
-- `usage.json`: `{ "calls": [ …every call from every turn, with turn_id… ],
-"totals": { input, cached_input, cache_write_input, output, reasoning_output } }`.
 - `trajectory.json`: harbor ATIF, built from `original_payload`.
 - `summary.json`: `{ stop_reason, turns, env_tool_calls, errors, driver, target, started_at, finished_at }`.
 
-The suite ingests these, the proxy's call log, harbor's `result.json`, and
+Usage is not among them: every call is in the proxy's call log (see
+Accounting). The suite ingests these, the proxy's call log, harbor's `result.json`, and
 the verifier's `reward.txt`.
 
 ## How the suite launches the runner
@@ -315,8 +324,8 @@ The harbor agent classes live in `course/runner` and are selected with
 The agent class runs on the host inside harbor's process. Its `setup` uploads
 the in-container loop and every package directory in `CC_HOST_DRIVER_CHAIN` into
 the trial container and runs each `setup.sh` root to leaf. Its `run` execs the loop
-inside the container and, when it finishes, reads `usage.json` and
-`summary.json` back into harbor's `AgentContext`.
+inside the container and, when it finishes, reads `summary.json`
+back into harbor's `AgentContext`.
 
 Settings reach the agent class through `--agent-env`:
 
@@ -333,8 +342,11 @@ never see.
 
 ## Naming
 
-Drivers shipped with the course are prefixed `base_`: `base_passthrough`
-sends the context payload unchanged, `base_truncate` clips oversized tool results.
+Drivers shipped with the course are prefixed `base_`, one or two per lane:
+`base_passthrough` sends the context payload unchanged and `base_truncate`
+clips oversized tool results (Python engine), `base_pydantic` runs Pydantic
+AI with no strategy (Pydantic engine), `base_litellm` trims with LiteLLM
+(LiteLLM engine), and `base_codex` is OpenAI's Codex CLI (agent).
 Contestants pick any other prefix.
 
 ## Agent drivers

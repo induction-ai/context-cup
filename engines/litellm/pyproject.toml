@@ -1,0 +1,20 @@
+[project]
+name = "context-cup-litellm"
+version = "0.1.0"
+description = "LiteLLM engine: a driver calls ctx.llm and returns the litellm response of its turn"
+requires-python = ">=3.12"
+dependencies = [
+  "context-cup-protocol",
+  "httpx",
+  "litellm==1.83.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/context_cup_litellm"]
+
+[tool.uv.sources]
+context-cup-protocol = { workspace = true }

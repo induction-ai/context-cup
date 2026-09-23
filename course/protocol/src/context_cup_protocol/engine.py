@@ -83,7 +83,18 @@ def run_engine(
     finish: Finish | None = None,
 ) -> int:
     """`--driver DIR --input in.json --output out.json`: one turn, exit 0, or
-    a traceback on stderr and exit 1."""
+    a traceback on stderr and exit 1.
+
+    An engine's entry point is a call to this. It reads `input.json`, loads
+    the driver's `package.json` and `driver.py` (the driver's directory goes
+    on `sys.path`, so it may import sibling files), creates the state
+    directory, and builds `ctx` with `make_ctx(turn, contextCup.config)`. It
+    calls `run(ctx)`, passes the result through `finish(ctx, result)` when
+    the engine gives one, and takes it as the response: a dict, or an SDK
+    object dumped with only the fields the provider sent. `output.json` gets
+    that response plus `ctx.context_payload` and `ctx.state` as they stand
+    after the call. Any exception, from the driver or here, fails the turn;
+    the runner retries it."""
     parser = argparse.ArgumentParser(prog=f"engine-{engine}")
     for flag in ("--driver", "--input", "--output"):
         parser.add_argument(flag, required=True, type=Path)

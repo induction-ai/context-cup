@@ -108,6 +108,11 @@ def proxy_env(proxy_url: str, trial_id: str) -> dict[str, str]:
     }
 
 
+class EmptyResponse(ValueError):
+    """A well-formed response with neither text nor tool calls: nothing the
+    environment can act on. Its attempt is discarded and re-asked."""
+
+
 def validate_output(
     raw: dict[str, Any], turn_id: str, adapter: ProviderAdapter
 ) -> tuple[TurnOutput, Extracted]:
@@ -122,7 +127,7 @@ def validate_output(
         ensure_json_dict(output.context_payload, "context_payload")
     extracted = adapter.extract(output.response)
     if extracted.empty:
-        raise ValueError("response has neither text nor tool calls")
+        raise EmptyResponse("response has neither text nor tool calls")
     for call in extracted.tool_calls:
         if not call.name:
             raise ValueError(f"malformed tool call: {call!r}")

@@ -350,11 +350,15 @@ importers:
 
   drivers/base_codex: {}
 
+  drivers/base_litellm: {}
+
   drivers/base_passthrough: {}
 
   drivers/base_pydantic: {}
 
   drivers/base_truncate: {}
+
+  engines/litellm: {}
 
   engines/pydantic: {}
 

@@ -26,10 +26,10 @@ This is a pnpm workspace (TypeScript) with a uv workspace (Python) beside it. `c
 - `course/suite` is `bin/suite`: expands a suite file into harbor jobs, schedules them, ingests results.
 - `course/runner` (Python) is the harbor agent that runs inside a trial: it owns the payloads and hands each turn to the driver.
 - `course/protocol` (Python) is the protocol as a library: the `input.json`/`output.json` models, the provider adapters, the provider-neutral view, and `run_engine`, shared by the runner and every engine.
-- `engines/*` each define the `ctx` their drivers' `run(ctx)` receives: `engines/python` hands over the payloads (a driver brings its own SDK), `engines/pydantic` takes back Pydantic AI capabilities.
+- `engines/*` each define the `ctx` their drivers' `run(ctx)` receives: `engines/python` hands over the payloads (a driver brings its own SDK), `engines/pydantic` takes back Pydantic AI capabilities, `engines/litellm` hands over `ctx.llm` (a preconfigured litellm handle) and takes back its response.
 - `bin/` wrappers stay at the root and run their owning package; `.env` lives at the root and is loaded via `REPO_ROOT`, so run anything from any directory.
 
-The driver protocol is `docs/protocol.md`. Read it before touching a runner, an engine, or a driver; it is the contract, and a change there is a change to every driver. A driver's or engine's manifest is its `package.json` `contextCup` block; there is no other manifest file.
+The driver protocol is `docs/protocol.md`. Read it before touching a runner, an engine, or a driver; it is the contract, and a change there is a change to every driver. A driver's or engine's manifest is its `package.json` `contextCup` block; there is no other manifest file. `docs/drivers.md` is the driver author's guide (lanes, what `ctx` holds, debugging a failed turn), and each engine's README documents its `ctx`; update them with any change to what a driver receives.
 
 Dependency rule: `drivers` build on `engines`; `course` invokes both by their scripts and never imports them; `engines` and `drivers` may import `context_cup_protocol` (`course/protocol`, the protocol as a library) and nothing else from `course`.
 

@@ -21,7 +21,23 @@ from context_cup_protocol import (
 @dataclass
 class PythonContext:
     """The turn's input, read only, plus the two things a driver may change:
-    `context_payload` (the working copy of the conversation) and `state`."""
+    `context_payload` (the working copy of the conversation) and `state`.
+
+    - `context_payload`: the provider's native request body. It persists: the
+      course appends the model's reply and the tool results to what the
+      driver left and hands it back next turn.
+    - `state`: any JSON, `{}` on turn one; what it holds when `run` returns
+      comes back next turn.
+    - `original_payload`: the full record, appended each turn, never edited.
+    - `first`, `provider` (name, placeholder key, proxy base URL), `target`
+      (model, reasoning effort), `dirs` (`turn`, new each turn; `state`,
+      kept for the trial; `workspace`), `turn_id`, `config` (the manifest's
+      `contextCup.config`), and `turn`, the whole `input.json`.
+    - `view()` / `write(conversation)`: read `context_payload` as a
+      provider-neutral conversation and put edits back.
+
+    `run(ctx)` returns the provider's response, an SDK object or a dict.
+    engines/python/README.md has examples of each."""
 
     turn: TurnInput
     config: dict[str, Any] = field(default_factory=dict)
