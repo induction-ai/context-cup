@@ -7,7 +7,9 @@
     "kind": "driver",
     "extends": "@context-cup/engine-python",
     "providers": [
-      "openai"
+      "openai",
+      "anthropic",
+      "gemini"
     ],
     "config": {
       "max_bytes": 100000

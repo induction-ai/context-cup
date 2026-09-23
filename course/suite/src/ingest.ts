@@ -68,10 +68,11 @@ const zCall = z.object({
   model: z.string().min(1),
   wire: zWire,
   host: z.string().default(""),
-  purpose: z.string().optional(),
+  purpose: z.string().nullable().optional(),
   usage: zUsage,
-  duration_ms: z.number().optional(),
-  service_tier: z.string().optional(),
+  duration_ms: z.number().nullable().optional(),
+  // Providers that have no tiers report null; the engine writes it as such.
+  service_tier: z.string().nullable().optional(),
 });
 export type ReportedCall = z.infer<typeof zCall>;
 

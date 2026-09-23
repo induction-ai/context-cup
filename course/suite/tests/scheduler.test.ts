@@ -196,3 +196,28 @@ describe("processQueue", () => {
     );
   });
 });
+
+describe("failures in the finish hook", () => {
+  it("mark the job failed, are reported, and reach the results", async () => {
+    const fake: Fake = { running: [], max: 0, order: [], resolve: new Map() };
+    const lines: string[] = [];
+    const running = processQueue([entry("a")], {
+      suite_concurrency: 4,
+      docker_jobs: 0,
+      log_dir: "/tmp",
+      launcher: fakeLauncher(fake),
+      report: (line) => lines.push(line),
+      on_finished: async () => {
+        throw new Error("ingest: bad usage.json");
+      },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    fake.resolve.get("a")!();
+    const results = await running;
+    expect(results[0]?.ok).toBe(false);
+    expect(results[0]?.error).toContain("ingest: bad usage.json");
+    expect(
+      lines.some((l) => l.includes("failed (ingest: bad usage.json)"))
+    ).toBe(true);
+  });
+});

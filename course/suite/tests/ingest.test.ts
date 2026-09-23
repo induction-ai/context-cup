@@ -30,7 +30,8 @@ describe("parseTrial", () => {
       output: 500,
       reasoning_output: 100,
     });
-    expect(t.calls.map((c) => c.sequence)).toEqual([1, 2]);
+    expect(t.calls.map((c) => c.sequence)).toEqual([1, 2, 3]);
+    expect(t.calls[2]?.service_tier ?? null).toBeNull();
     const expected =
       ((8000 * 0.5 + 2000 * 5 + 300 * 30) / 1e6 + (2000 * 5 + 200 * 30) / 1e6) *
       100;
@@ -119,13 +120,13 @@ describe("ingestJob", () => {
     const scored = rows.find((r) => r.trialName === "banking-001__abc1234")!;
     expect(scored.reward).toBe(1);
     expect(scored.inputTokens).toBe(12000);
-    expect(scored.modelCalls).toBe(2);
+    expect(scored.modelCalls).toBe(3);
     expect(scored.costCents).toBeGreaterThan(0);
     const calls = await db
       .select()
       .from(modelCall)
       .where(eq(modelCall.trialId, scored.id));
-    expect(calls.map((c) => c.sequence)).toEqual([1, 2]);
+    expect(calls.map((c) => c.sequence)).toEqual([1, 2, 3]);
     expect(calls[0]?.turnId).toBe("001_k3v9xq");
 
     const cell = summarizeCell(run, trials);

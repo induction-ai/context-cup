@@ -355,10 +355,12 @@ async function main(): Promise<void> {
       // A trial that died early can leave partial artifacts; a parse failure
       // must still close the job out as failed rather than leave it running.
       let trials: ReturnType<typeof parseJob> = [];
+      let parse_error: string | undefined;
       try {
         trials = parseJob(entry.command.jobs_dir, entry.command.job_name);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        parse_error = message;
         result = {
           ...result,
           ok: false,
@@ -381,6 +383,11 @@ async function main(): Promise<void> {
       await ingestJob(suite_id, entry.job_id, result, trials);
       const cell = summarizeCell(entry.run, trials);
       cells.push(cell);
+      if (parse_error) {
+        // The row now says failed; the scheduler must too (console, exit
+        // code, results.json), so the failure keeps bubbling.
+        throw new Error(`ingest: ${parse_error.split("\n")[0]}`);
+      }
       report(
         `[${entry.job_id}] ${trials.length} trial(s): reward ${cell.mean_reward?.toFixed(2) ?? "-"}, cost ${cell.mean_cost_cents?.toFixed(1) ?? "-"}¢`
       );

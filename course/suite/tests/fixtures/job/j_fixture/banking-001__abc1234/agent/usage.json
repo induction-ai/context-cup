@@ -29,6 +29,23 @@
         "reasoning_output": 0
       },
       "duration_ms": 800
+    },
+    {
+      "turn_id": "002_zz9yy8",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "wire": "anthropic",
+      "purpose": null,
+      "usage": {
+        "input": 0,
+        "cached_input": 0,
+        "cache_write_input": 0,
+        "output": 0,
+        "reasoning_output": 0
+      },
+      "duration_ms": null,
+      "host": "api.anthropic.com",
+      "service_tier": null
     }
   ],
   "totals": {
