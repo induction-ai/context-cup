@@ -2,11 +2,13 @@
   "private": true,
   "name": "@context-cup/engine-python",
   "version": "0.1.0",
-  "description": "Python engine: a driver is one module with prepare() or run_turn(); the engine handles the protocol, model calls, and usage capture",
+  "description": "Python engine: a driver is run(ctx) in driver.py returning the provider's response; it brings its own SDK.",
   "contextCup": {
     "kind": "engine",
     "providers": [
-      "openai"
+      "openai",
+      "anthropic",
+      "gemini"
     ]
   },
   "scripts": {

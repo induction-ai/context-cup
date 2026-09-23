@@ -352,7 +352,11 @@ importers:
 
   drivers/base_passthrough: {}
 
+  drivers/base_pydantic: {}
+
   drivers/base_truncate: {}
+
+  engines/pydantic: {}
 
   engines/python: {}
 

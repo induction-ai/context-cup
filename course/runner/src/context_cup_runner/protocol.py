@@ -1,17 +1,52 @@
-"""The turn protocol between the runner and a driver (docs/protocol.md,
-version 2): provider-native payloads in, the provider's response out.
-"""
+"""The runner's side of the turn protocol. The models themselves live in
+`context_cup_protocol` (course/protocol); this module adds what only the
+runner needs: turn ids, the run target, proxy addressing, output checks."""
 
 from __future__ import annotations
 
 import secrets
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from context_cup_protocol import (
+    PLACEHOLDER_KEY,
+    PROTOCOL_VERSION,
+    Dirs,
+    DriverInfo,
+    Extracted,
+    Payload,
+    Provider,
+    ProviderAdapter,
+    ProviderApi,
+    ProviderClient,
+    ProviderInfo,
+    TurnInput,
+    TurnOutput,
+    Wire,
+)
+from context_cup_protocol import Target as TargetSpec
+from context_cup_protocol.providers.base import ensure_json_dict
+from pydantic import BaseModel, ConfigDict
 
-from .providers.base import Extracted, Payload, ProviderAdapter, ensure_json_dict
+__all__ = [
+    "PLACEHOLDER_KEY",
+    "PROTOCOL_VERSION",
+    "Dirs",
+    "DriverInfo",
+    "Payload",
+    "Provider",
+    "ProviderClient",
+    "ProviderInfo",
+    "Target",
+    "TargetSpec",
+    "TurnInput",
+    "TurnOutput",
+    "Wire",
+    "new_turn_id",
+    "proxy_client",
+    "proxy_env",
+    "validate_output",
+]
 
-PROTOCOL_VERSION = 2
 TURN_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 
@@ -23,13 +58,9 @@ def new_turn_id(index: int) -> str:
     return f"{index:03d}_{suffix}"
 
 
-# Mirrors PROVIDERS and WIRES in course/shared/src/provider.ts.
-Provider = Literal["openai", "anthropic", "gemini"]
-Wire = Literal["responses", "completions", "anthropic", "gemini"]
-
-
 class Target(BaseModel):
-    """What the suite asks for (CC_TARGET_JSON)."""
+    """What the suite asks for (CC_TARGET_JSON): the input's target plus the
+    provider, which input.json carries separately."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -38,29 +69,8 @@ class Target(BaseModel):
     reasoning_effort: str | None = None
 
 
-ClientApi = Literal["responses", "messages", "generate_content"]
-
-
-class ClientInfo(BaseModel):
-    """Where and how the driver reaches the provider."""
-
-    base_url: str
-    api: ClientApi
-
-
-class ProviderInfo(BaseModel):
-    """The `provider` object in input.json. `api_key` is a placeholder: every
-    call goes through the run's proxy, which holds the real keys."""
-
-    name: Provider
-    api_key: str
-    client: ClientInfo
-
-
-PLACEHOLDER_KEY = "cc-proxy"
-
 # Where each provider's API lives behind the proxy: `<proxy>/t/<trial>/<provider><suffix>`.
-PROVIDER_API: dict[Provider, tuple[str, ClientApi]] = {
+PROVIDER_API: dict[Provider, tuple[str, ProviderApi]] = {
     "openai": ("/v1", "responses"),
     "anthropic": ("/v1", "messages"),
     "gemini": ("/v1beta", "generate_content"),
@@ -72,8 +82,8 @@ def proxy_base_url(proxy_url: str, trial_id: str, provider: Provider) -> str:
     return f"{proxy_url.rstrip('/')}/t/{trial_id}/{provider}{suffix}"
 
 
-def proxy_client(proxy_url: str, trial_id: str, provider: Provider) -> ClientInfo:
-    return ClientInfo(
+def proxy_client(proxy_url: str, trial_id: str, provider: Provider) -> ProviderClient:
+    return ProviderClient(
         base_url=proxy_base_url(proxy_url, trial_id, provider),
         api=PROVIDER_API[provider][1],
     )
@@ -83,66 +93,19 @@ def proxy_env(proxy_url: str, trial_id: str) -> dict[str, str]:
     """What a driver process needs so any SDK it uses talks to the proxy:
     base URLs for every provider and placeholder keys, since SDKs refuse to
     start without one. No real key exists in the container."""
+    # SDK conventions differ: OpenAI's base URL includes /v1, while the
+    # Anthropic and Google SDKs append their own version path.
+    root = f"{proxy_url.rstrip('/')}/t/{trial_id}"
     return {
         "OPENAI_BASE_URL": proxy_base_url(proxy_url, trial_id, "openai"),
-        "ANTHROPIC_BASE_URL": proxy_base_url(proxy_url, trial_id, "anthropic"),
-        "GOOGLE_GEMINI_BASE_URL": proxy_base_url(proxy_url, trial_id, "gemini"),
-        "GEMINI_API_BASE_URL": proxy_base_url(proxy_url, trial_id, "gemini"),
+        "ANTHROPIC_BASE_URL": f"{root}/anthropic",
+        "GOOGLE_GEMINI_BASE_URL": f"{root}/gemini",
+        "GEMINI_API_BASE_URL": f"{root}/gemini",
         "OPENAI_API_KEY": PLACEHOLDER_KEY,
         "ANTHROPIC_API_KEY": PLACEHOLDER_KEY,
         "GEMINI_API_KEY": PLACEHOLDER_KEY,
         "GOOGLE_API_KEY": PLACEHOLDER_KEY,
     }
-
-
-class TargetSpec(BaseModel):
-    """The `target` object in input.json: the provider travels separately."""
-
-    model: str
-    reasoning_effort: str | None = None
-
-
-class Dirs(BaseModel):
-    turn: str
-    state: str
-    workspace: str | None = None
-
-
-class TurnInput(BaseModel):
-    protocol: int = PROTOCOL_VERSION
-    trial_id: str
-    turn_id: str
-    turn_index: int
-    first: bool
-    provider: ProviderInfo
-    target: TargetSpec
-    context_payload: Payload
-    original_payload: Payload
-    state: Any = None
-    limits: dict[str, Any] = Field(default_factory=dict)
-    dirs: Dirs
-
-
-class DriverInfo(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    name: str
-    engine: str | None = None
-    version: str | None = None
-
-
-class TurnOutput(BaseModel):
-    protocol: int = PROTOCOL_VERSION
-    turn_id: str
-    response: Payload
-    context_payload: Payload | None = None
-    state: Any = None
-    driver: DriverInfo | None = None
-
-    @property
-    def state_given(self) -> bool:
-        """Whether the driver sent `state` at all (absent means unchanged)."""
-        return "state" in self.model_fields_set
 
 
 def validate_output(

@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "name": "@context-cup-drivers/base_pydantic",
+  "version": "0.1.0",
+  "description": "Pydantic AI with no context strategy: the baseline for drivers built from Pydantic AI Harness capabilities.",
+  "contextCup": {
+    "kind": "driver",
+    "extends": "@context-cup/engine-pydantic",
+    "providers": [
+      "openai"
+    ]
+  }
+}

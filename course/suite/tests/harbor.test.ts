@@ -91,7 +91,9 @@ describe("buildHarborCommand", () => {
       "j_test",
     ]);
     expect(command.env.OPENAI_BASE_URL).toBe("https://api.openai.com/v1");
-    expect(command.env.PYTHONPATH).toMatch(/course\/runner\/src$/);
+    expect(command.env.PYTHONPATH).toMatch(
+      /course\/runner\/src:.*course\/protocol\/src$/
+    );
     expect(command.env.OPENAI_API_KEY).toBe("sk-test");
     expect(command.missing_keys).toEqual([]);
   });

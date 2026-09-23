@@ -1,109 +1,57 @@
-"""The runner writes input.json and reads output.json; the engine does the
-reverse. Both sides carry their own models of the same protocol, so check
-they agree on real instances rather than by inspection."""
+"""The runner and the engines share one Python implementation of the
+protocol (course/protocol), so what is left to check is the boundary with
+TypeScript, and one runner-built input.json surviving the trip through JSON."""
 
 from __future__ import annotations
 
-import json
+import re
 from pathlib import Path
+from typing import get_args
 
-import context_cup_engine.protocol as engine_protocol
+import context_cup_protocol as protocol
 import context_cup_runner.protocol as runner_protocol
-from context_cup_runner.providers.registry import adapter_for
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def runner_input() -> dict:
-    """An input.json as the runner produces it, straight from its models."""
-    adapter = adapter_for("openai")
+def ts_list(name: str) -> set[str]:
+    source = (ROOT / "course/shared/src/provider.ts").read_text()
+    match = re.search(rf"{name} = (\[.*?\]) as const", source, re.DOTALL)
+    assert match, name
+    return set(re.findall(r'"([^"]+)"', match.group(1)))
+
+
+def test_typescript_and_python_agree_on_providers_and_wires() -> None:
+    assert ts_list("PROVIDERS") == set(get_args(protocol.Provider))
+    assert ts_list("WIRES") == set(get_args(protocol.Wire))
+
+
+def test_a_runner_built_input_is_what_the_engine_reads() -> None:
+    adapter = protocol.adapter_for("openai")
     payload = adapter.initial_payload(
         model="gpt-5.5",
         system="be brief",
-        opening=[runner_protocol_utterance("user", "hello")],
-        tools=[
-            {
-                "type": "function",
-                "function": {
-                    "name": "echo",
-                    "description": "echo",
-                    "parameters": {"type": "object", "properties": {}},
-                },
-            }
-        ],
+        opening=[protocol.Utterance("user", "hello")],
+        tools=[{"type": "function", "function": {"name": "echo", "parameters": {}}}],
         reasoning_effort="low",
     )
-    turn = runner_protocol.TurnInput(
+    turn = protocol.TurnInput(
         trial_id="t__1",
         turn_id="001_abcdef",
         turn_index=1,
         first=True,
-        provider=runner_protocol.ProviderInfo(
+        provider=protocol.ProviderInfo(
             name="openai",
-            api_key=runner_protocol.PLACEHOLDER_KEY,
+            api_key=protocol.PLACEHOLDER_KEY,
             client=runner_protocol.proxy_client(
                 "http://proxy.test:1", "t__1", "openai"
             ),
         ),
-        target=runner_protocol.TargetSpec(model="gpt-5.5", reasoning_effort="low"),
+        target=protocol.Target(model="gpt-5.5", reasoning_effort="low"),
         context_payload=payload,
         original_payload=payload,
-        state=None,
-        limits={"max_steps": 5},
-        dirs=runner_protocol.Dirs(turn="/t", state="/s", workspace=None),
+        dirs=protocol.Dirs(turn="/t", state="/s"),
     )
-    return json.loads(turn.model_dump_json())
-
-
-def runner_protocol_utterance(role: str, text: str):
-    from context_cup_runner.providers.base import Utterance
-
-    return Utterance(role, text)  # type: ignore[arg-type]
-
-
-def test_runner_input_validates_in_the_engine():
-    data = runner_input()
-    parsed = engine_protocol.TurnInput.model_validate(data)
-    assert parsed.protocol == 2 and parsed.first is True
-    assert (
-        parsed.provider.name == "openai" and parsed.provider.client.api == "responses"
-    )
-    assert parsed.context_payload["model"] == "gpt-5.5"
-    assert parsed.context_payload["tools"][0]["name"] == "echo"
-
-
-def test_engine_output_validates_in_the_runner():
-    output = engine_protocol.TurnOutput(
-        turn_id="001_abcdef",
-        response={
-            "id": "resp_1",
-            "output": [
-                {
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [{"type": "output_text", "text": "hi"}],
-                }
-            ],
-        },
-        context_payload={"model": "gpt-5.5", "input": []},
-        state={"n": 1},
-        driver=engine_protocol.DriverInfo(name="base_passthrough", engine="python"),
-    )
-    raw = json.loads(output.model_dump_json(exclude_none=True))
-    parsed, extracted = runner_protocol.validate_output(
-        raw, "001_abcdef", adapter_for("openai")
-    )
-    assert extracted.text == "hi" and not extracted.tool_calls
-    assert parsed.state == {"n": 1}
-
-
-def test_both_sides_agree_on_provider_literals():
-    assert set(engine_protocol.Provider.__args__) == set(
-        runner_protocol.Provider.__args__
-    )
-
-
-def test_shared_ts_provider_list_matches(tmp_path: Path):
-    ts = (
-        Path(__file__).resolve().parents[1] / "course/shared/src/provider.ts"
-    ).read_text()
-    listed = set(json.loads(ts.split("PROVIDERS = ")[1].split(" as const")[0]))
-    assert listed == set(engine_protocol.Provider.__args__)
+    parsed = protocol.TurnInput.model_validate_json(turn.model_dump_json())
+    assert parsed == turn
+    assert parsed.provider.client.base_url == "http://proxy.test:1/t/t__1/openai/v1"

@@ -226,6 +226,10 @@ async function main(): Promise<void> {
     proxy = await startProxy({
       port: 0,
       callsFile: calls_file,
+      defaultModel: {
+        provider: spec.target.provider,
+        model: spec.target.model,
+      },
       bodiesDir:
         process.env.CC_SAVE_BODIES === "1"
           ? path.join(suite_dir, "bodies")
@@ -413,8 +417,16 @@ async function main(): Promise<void> {
         // code, results.json), so the failure keeps bubbling.
         throw new Error(`ingest: ${parse_error.split("\n")[0]}`);
       }
+      if (result.ok && trials.length === 0) {
+        // harbor exited cleanly but left nothing to score.
+        throw new Error("no trials recorded");
+      }
+      const errored = trials.filter((t) => t.error);
       report(
-        `[${entry.job_id}] ${trials.length} trial(s): reward ${cell.mean_reward?.toFixed(2) ?? "-"}, cost ${cell.mean_cost_cents?.toFixed(1) ?? "-"}¢`
+        `[${entry.job_id}] ${trials.length} trial(s): reward ${cell.mean_reward?.toFixed(2) ?? "-"}, cost ${cell.mean_cost_cents?.toFixed(1) ?? "-"}¢` +
+          (errored.length > 0
+            ? `, ${errored.length} errored: ${errored[0]!.error!.split("\n")[0]}`
+            : "")
       );
     },
   });
@@ -452,6 +464,14 @@ async function main(): Promise<void> {
   if (failed > 0) {
     console.log(
       `${failed} of ${results.length} job(s) failed; see ${path.relative(process.cwd(), suite_dir)}/<job_id>.log`
+    );
+    process.exitCode = 1;
+  }
+  // A trial error is unscored work: the run did not measure what it meant to.
+  const errored = cells.reduce((n, c) => n + c.errors, 0);
+  if (errored > 0) {
+    console.log(
+      `${errored} trial(s) errored; see ${suiteUrl(suite_id)} for each error`
     );
     process.exitCode = 1;
   }

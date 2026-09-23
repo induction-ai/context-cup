@@ -9,7 +9,6 @@ storage.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from .base import (
@@ -146,7 +145,3 @@ class OpenAIAdapter:
                 steps.append(Step(source="user", message=_text_of_message_item(item)))
             # reasoning and other items carry no conversation text
         return steps
-
-
-def arguments_json(arguments: dict[str, Any]) -> str:
-    return json.dumps(arguments, ensure_ascii=False)

@@ -1,24 +1,8 @@
-"""Python engine for Context Cup drivers. See docs/protocol.md."""
+"""Python engine: a driver is `run(ctx)` in driver.py, returning the
+provider's response. See README.md and docs/protocol.md."""
 
-from .client import ProviderError, call
-from .engine import TurnContext
-from .protocol import (
-    Payload,
-    Provider,
-    ProviderInfo,
-    Target,
-    TurnInput,
-    TurnOutput,
-)
+from context_cup_protocol import Conversation, Message, Payload, Tool, ToolCall
 
-__all__ = [
-    "Payload",
-    "Provider",
-    "ProviderError",
-    "ProviderInfo",
-    "Target",
-    "TurnContext",
-    "TurnInput",
-    "TurnOutput",
-    "call",
-]
+from .engine import PythonContext
+
+__all__ = ["Conversation", "Message", "Payload", "PythonContext", "Tool", "ToolCall"]

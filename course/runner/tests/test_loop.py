@@ -6,9 +6,9 @@ import re
 from pathlib import Path
 
 import pytest
+from context_cup_protocol import Utterance
 from context_cup_runner.loop import Trial, TrialError
 from context_cup_runner.protocol import new_turn_id
-from context_cup_runner.providers import Utterance
 
 from tests.conftest import MemoryEnvironment, make_settings, write_script
 
@@ -377,7 +377,10 @@ def test_settings_from_env(tmp_path: Path):
     assert info.api_key == "cc-proxy"
     assert info.client.base_url == "http://proxy.test:1/t/t__1/gemini/v1beta"
     script_env = settings.script_env()
-    assert script_env["GOOGLE_GEMINI_BASE_URL"] == info.client.base_url
+    # SDKs append their own version path; OpenAI's base URL carries /v1.
+    assert script_env["GOOGLE_GEMINI_BASE_URL"] == "http://proxy.test:1/t/t__1/gemini"
+    assert script_env["ANTHROPIC_BASE_URL"] == "http://proxy.test:1/t/t__1/anthropic"
+    assert script_env["OPENAI_BASE_URL"] == "http://proxy.test:1/t/t__1/openai/v1"
     assert script_env["GEMINI_API_KEY"] == "cc-proxy"
     info = settings.provider_info()
     assert info.name == "gemini" and info.client.api == "generate_content"

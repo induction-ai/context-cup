@@ -1,4 +1,5 @@
-"""Pydantic models for the driver protocol, version 2 (docs/protocol.md)."""
+"""The files a turn exchanges (docs/protocol.md): `input.json`, written by
+the runner and read by an engine, and `output.json`, the reverse."""
 
 from __future__ import annotations
 
@@ -8,30 +9,37 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 PROTOCOL_VERSION = 2
 
-# Mirrors PROVIDERS in course/shared/src/provider.ts.
+# Mirrors PROVIDERS and WIRES in course/shared/src/provider.ts.
 Provider = Literal["openai", "anthropic", "gemini"]
+Wire = Literal["responses", "completions", "anthropic", "gemini"]
+ProviderApi = Literal["responses", "messages", "generate_content"]
 
-# A provider request body or response object: JSON, shape owned by the provider.
+PLACEHOLDER_KEY = "cc-proxy"
+"""The only key a trial container holds. Every call goes through the run's
+proxy, which injects the real one."""
+
 Payload = dict[str, Any]
+"""A provider request body or response object, as JSON."""
 
 
 class Target(BaseModel):
+    """The `target` object: the model the suite runs against."""
+
     model_config = ConfigDict(extra="allow")
 
     model: str = Field(min_length=1)
     reasoning_effort: str | None = None
 
 
-ProviderApi = Literal["responses", "messages", "generate_content"]
-
-
 class ProviderClient(BaseModel):
+    """Where and how to reach the provider: a base URL into the proxy."""
+
     base_url: str = Field(min_length=1)
     api: ProviderApi
 
 
 class ProviderInfo(BaseModel):
-    """Everything needed to call the model: family, key, and where."""
+    """The `provider` object: family, placeholder key, and client."""
 
     name: Provider
     api_key: str = Field(min_length=1)
@@ -62,8 +70,10 @@ class TurnInput(BaseModel):
 
 
 class DriverInfo(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     name: str
-    engine: str
+    engine: str | None = None
     version: str | None = None
 
 
@@ -71,6 +81,12 @@ class TurnOutput(BaseModel):
     protocol: Literal[2] = 2
     turn_id: str
     response: Payload
+    """The provider's response object for the turn, verbatim."""
     context_payload: Payload | None = None
     state: JsonValue = None
-    driver: DriverInfo
+    driver: DriverInfo | None = None
+
+    @property
+    def state_given(self) -> bool:
+        """Whether the driver sent `state` at all (absent means unchanged)."""
+        return "state" in self.model_fields_set

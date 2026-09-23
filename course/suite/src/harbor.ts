@@ -142,6 +142,8 @@ export function syncToolathlonAuthConfig(report: Report): void {
 // ---------------------------------------------------------------------------
 
 export const RUNNER_SRC = path.join(REPO_ROOT, "course", "runner", "src");
+/** The shared protocol library the runner imports on the host side too. */
+export const PROTOCOL_SRC = path.join(REPO_ROOT, "course", "protocol", "src");
 export const TAU3_COMPOSE_OVERRIDE = path.join(
   REPO_ROOT,
   "course",
@@ -368,9 +370,9 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
   const processEnv: Record<string, string> = {
     PYTHONUNBUFFERED: "1",
     LITELLM_LOG: env.LITELLM_LOG ?? "ERROR",
-    PYTHONPATH: env.PYTHONPATH
-      ? `${RUNNER_SRC}${path.delimiter}${env.PYTHONPATH}`
-      : RUNNER_SRC,
+    PYTHONPATH: [RUNNER_SRC, PROTOCOL_SRC, env.PYTHONPATH]
+      .filter(Boolean)
+      .join(path.delimiter),
     // Job-level env for harbor itself: the tau3 user simulator and verifier
     // run on the real OpenAI API. Agent processes never see these.
     OPENAI_BASE_URL: "https://api.openai.com/v1",

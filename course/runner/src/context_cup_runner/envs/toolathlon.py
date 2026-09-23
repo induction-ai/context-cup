@@ -20,10 +20,10 @@ from pathlib import Path
 from typing import Any
 
 import anyio
+from context_cup_protocol import ToolCallRef, Utterance
 
 from ..environment import EnvironmentStart, StepResult, ToolResult
 from ..mcp_util import mcp_tool_to_function_tool, result_text
-from ..providers import ToolCallRef, Utterance
 
 DEFAULT_GATEWAY = {"name": "gw", "transport": "sse", "url": "http://127.0.0.1:8765/sse"}
 DEFAULT_STOP_TOOLS = ["local-claim_done"]

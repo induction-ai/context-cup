@@ -24,13 +24,14 @@ This is a pnpm workspace (TypeScript) with a uv workspace (Python) beside it. `c
 - `course/shared` owns env loading (`load_env.ts`, `REPO_ROOT`), `NODE_ENV` parsing, and the test bootstrap other packages import.
 - `course/db` owns the Postgres schema (`src/schema.ts`), migrations under `drizzle/`, the connection, and the database test setup.
 - `course/suite` is `bin/suite`: expands a suite file into harbor jobs, schedules them, ingests results.
-- `course/runner` (Python) is the harbor agent that runs inside a trial: it owns the thread and hands each turn to the driver.
-- `engines/python` implements the driver protocol so a Python driver is one module.
+- `course/runner` (Python) is the harbor agent that runs inside a trial: it owns the payloads and hands each turn to the driver.
+- `course/protocol` (Python) is the protocol as a library: the `input.json`/`output.json` models, the provider adapters, the provider-neutral view, and `run_engine`, shared by the runner and every engine.
+- `engines/*` each define the `ctx` their drivers' `run(ctx)` receives: `engines/python` hands over the payloads (a driver brings its own SDK), `engines/pydantic` takes back Pydantic AI capabilities.
 - `bin/` wrappers stay at the root and run their owning package; `.env` lives at the root and is loaded via `REPO_ROOT`, so run anything from any directory.
 
 The driver protocol is `docs/protocol.md`. Read it before touching a runner, an engine, or a driver; it is the contract, and a change there is a change to every driver. A driver's or engine's manifest is its `package.json` `contextCup` block; there is no other manifest file.
 
-Dependency rule: `drivers` build on `engines`; `course` invokes both by their scripts and never imports them; `engines` and `drivers` never import `course`.
+Dependency rule: `drivers` build on `engines`; `course` invokes both by their scripts and never imports them; `engines` and `drivers` may import `context_cup_protocol` (`course/protocol`, the protocol as a library) and nothing else from `course`.
 
 Third-party dependencies used by more than one package belong in the pnpm catalog in `pnpm-workspace.yaml`. Each package that uses one declares it with `"catalog:"` in its own manifest.
 

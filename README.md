@@ -76,8 +76,11 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
   overrides the path).
 - `--driver` is a package under `drivers/`; it must declare support for the
   target's provider in its `package.json`. `base_passthrough` and
-  `base_truncate` speak the turn protocol; `base_codex` is a whole agent run by
-  harbor and compared on score and cost only.
+  `base_truncate` speak the turn protocol directly; `base_pydantic` is a
+  Pydantic AI agent that owns the model side while the course runs the
+  environment's tools, the baseline for drivers built from Pydantic AI
+  Harness capabilities (`engines/pydantic`); `base_codex` is a whole agent
+  run by harbor and compared on score and cost only.
 - `--count` is attempts per task. `--task` narrows to named tasks.
 - `--harbor_env daytona` runs in Daytona sandboxes instead of local Docker
   (needs `DAYTONA_API_KEY`).

@@ -9,7 +9,12 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { startProxy, type RunningProxy } from "../src/server.ts";
+import {
+  MODEL_ALIAS,
+  resolveModel,
+  startProxy,
+  type RunningProxy,
+} from "../src/server.ts";
 
 type Seen = {
   method: string;
@@ -364,5 +369,66 @@ describe("websocket upgrades", () => {
     expect(status).toBe(426);
     expect(upstream.seen).toHaveLength(0);
     expect(records()).toHaveLength(before);
+  });
+});
+
+describe("model alias", () => {
+  const target = { provider: "openai" as const, model: "gpt-5.5" };
+  const body = (o: unknown) => Buffer.from(JSON.stringify(o));
+  const modelOf = (r: ReturnType<typeof resolveModel>) =>
+    "error" in r
+      ? r.error
+      : (JSON.parse(r.body.toString()) as { model?: string }).model;
+
+  it("fills in the target where the call names no model or the alias", () => {
+    expect(
+      modelOf(
+        resolveModel("openai", "/v1/responses", body({ input: "x" }), target)
+      )
+    ).toBe("gpt-5.5");
+    expect(
+      modelOf(
+        resolveModel(
+          "openai",
+          "/v1/responses",
+          body({ model: MODEL_ALIAS, input: "x" }),
+          target
+        )
+      )
+    ).toBe("gpt-5.5");
+  });
+
+  it("never changes a model the caller named, byte for byte", () => {
+    const original = body({ model: "gpt-5.2", input: "x" });
+    const r = resolveModel("openai", "/v1/responses", original, target);
+    expect("error" in r ? null : r.body).toBe(original);
+  });
+
+  it("resolves the alias in a gemini path and refuses it for a provider the run has no model for", () => {
+    const gemini = { provider: "gemini" as const, model: "gemini-3.1-pro" };
+    const r = resolveModel(
+      "gemini",
+      "/v1beta/models/cc-model:generateContent",
+      body({}),
+      gemini
+    );
+    expect("error" in r ? r.error : r.path).toBe(
+      "/v1beta/models/gemini-3.1-pro:generateContent"
+    );
+    const refused = resolveModel(
+      "anthropic",
+      "/v1/messages",
+      body({ model: MODEL_ALIAS }),
+      target
+    );
+    expect("error" in refused ? refused.error : "").toContain(
+      "no anthropic model"
+    );
+  });
+
+  it("leaves non-model paths alone", () => {
+    const original = body({ anything: true });
+    const r = resolveModel("openai", "/v1/models", original, target);
+    expect("error" in r ? null : r.body).toBe(original);
   });
 });

@@ -1,0 +1,21 @@
+[project]
+name = "context-cup-pydantic"
+version = "0.1.0"
+description = "Pydantic AI engine: a driver returns capabilities or an Agent, the engine runs the turn"
+requires-python = ">=3.12"
+dependencies = [
+  "context-cup-protocol",
+  "httpx2",
+  "pydantic-ai-slim[openai]>=2.48",
+  "pydantic-ai-harness>=0.34",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/context_cup_pydantic"]
+
+[tool.uv.sources]
+context-cup-protocol = { workspace = true }

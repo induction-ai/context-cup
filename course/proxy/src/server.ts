@@ -6,7 +6,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { PROVIDERS, type Provider } from "@context-cup/shared/provider.js";
 import express, { type Request, type Response } from "express";
-import { parseCall } from "./parsers.ts";
+import { parseCall, wireForPath } from "./parsers.ts";
 import { CallLog, TrialState, type CallRecord } from "./records.ts";
 
 export type ProxyOptions = {
@@ -15,7 +15,56 @@ export type ProxyOptions = {
   bodiesDir?: string;
   /** Provider keys; defaults to the process env. */
   env?: Record<string, string | undefined>;
+  /** The run's target: filled in where a call names no model or names
+   *  {@link MODEL_ALIAS}. A model the caller named is never changed. */
+  defaultModel?: DefaultModel;
 };
+
+export type DefaultModel = { provider: Provider; model: string };
+
+/** The model name that means "the run's target model". */
+export const MODEL_ALIAS = "cc-model";
+
+/** Fill in the run's model where a model call names none or names the alias.
+ *  Anything else passes through byte for byte. */
+export function resolveModel(
+  provider: Provider,
+  path: string,
+  body: Buffer,
+  fallback: DefaultModel | undefined
+): { path: string; body: Buffer } | { error: string } {
+  const target = fallback?.provider === provider ? fallback.model : undefined;
+  if (provider === "gemini") {
+    const m = /^(.*\/models\/)([^/:]+)(:.*)$/.exec(path);
+    if (!m || m[2] !== MODEL_ALIAS) return { path, body };
+    if (!target)
+      return { error: `no ${provider} model for ${MODEL_ALIAS} in this run` };
+    return { path: `${m[1]}${target}${m[3]}`, body };
+  }
+  if (!wireForPath(path) || body.length === 0) return { path, body };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
+    return { path, body };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { path, body };
+  }
+  const request = parsed as { model?: unknown };
+  const named = request.model;
+  if (named !== undefined && named !== MODEL_ALIAS) return { path, body };
+  if (!target) {
+    if (named === MODEL_ALIAS) {
+      return { error: `no ${provider} model for ${MODEL_ALIAS} in this run` };
+    }
+    return { path, body };
+  }
+  return {
+    path,
+    body: Buffer.from(JSON.stringify({ ...request, model: target })),
+  };
+}
 
 export type RunningProxy = {
   port: number;
@@ -142,12 +191,23 @@ export function createApp(options: ProxyOptions) {
       });
       return;
     }
+    const resolved = resolveModel(
+      provider,
+      rest,
+      Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
+      options.defaultModel
+    );
+    if ("error" in resolved) {
+      res.status(400).json({ error: resolved.error });
+      return;
+    }
+    const requestBody = resolved.body;
+    const forwardPath = resolved.path;
     const upstream = upstreamFor(provider, env);
-    const url = `${upstream}${rest}${query}`;
+    const url = `${upstream}${forwardPath}${query}`;
     const host = new URL(url).hostname;
     const started = Date.now();
     const started_at = new Date(started).toISOString();
-    const requestBody = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     const purpose = firstHeader(req, "x-cc-purpose") ?? "turn";
 
     const headers: Record<string, string> = {};
@@ -224,7 +284,7 @@ export function createApp(options: ProxyOptions) {
     ): void {
       const parsed = parseCall({
         host,
-        path: rest,
+        path: forwardPath,
         requestBody,
         responseBody,
         contentType: responseContentType ?? "",

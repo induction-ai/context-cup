@@ -23,6 +23,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from context_cup_protocol import (
+    Extracted,
+    Payload,
+    ProviderAdapter,
+    ToolCallRef,
+    adapter_for,
+)
+
 from . import __version__
 from .atif import TurnRecord, build_trajectory
 from .chain import DriverChain, run_script, run_turn_script
@@ -41,7 +49,6 @@ from .protocol import (
     proxy_env,
     validate_output,
 )
-from .providers import Extracted, Payload, ProviderAdapter, ToolCallRef, adapter_for
 
 DEFAULT_TURN_RETRIES = 2
 DEFAULT_MAX_STEPS = 200
@@ -272,8 +279,9 @@ class Trial:
             self.context = copy.deepcopy(output.context_payload)
         if output.state_given:
             self.state = output.state
-        self.adapter.append_response(self.original, output.response)
-        self.adapter.append_response(self.context, copy.deepcopy(output.response))
+        response = output.response
+        self.adapter.append_response(self.original, response)
+        self.adapter.append_response(self.context, copy.deepcopy(response))
         self.turn_records.append(TurnRecord(output.turn_id))
 
     # -- the loop ---------------------------------------------------------

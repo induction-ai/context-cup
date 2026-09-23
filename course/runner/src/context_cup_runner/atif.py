@@ -8,8 +8,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from context_cup_protocol import Step
+
 from .protocol import Target
-from .providers.base import Step
 
 ATIF_VERSION = "ATIF-v1.7"
 AGENT_NAME = "context-cup-runner"

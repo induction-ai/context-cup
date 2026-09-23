@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["course/runner", "engines/python"]
+members = ["course/protocol", "course/runner", "engines/python", "engines/pydantic"]
 
 [dependency-groups]
 dev = ["pytest>=8.3", "ruff>=0.9", "pytest-asyncio>=0.24", "mypy>=1.14"]
@@ -16,13 +16,13 @@ line-length = 88
 target-version = "py312"
 
 [tool.pytest.ini_options]
-testpaths = ["course/runner/tests", "engines/python/tests", "tests"]
+testpaths = ["course/protocol/tests", "course/runner/tests", "engines/python/tests", "engines/pydantic/tests", "tests"]
 
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["engines/python/src", "course/runner/src"]
-mypy_path = "engines/python/src:course/runner/src:.harbor/repo/src"
+files = ["course/protocol/src", "engines/python/src", "engines/pydantic/src", "course/runner/src"]
+mypy_path = "course/protocol/src:engines/python/src:engines/pydantic/src:course/runner/src:.harbor/repo/src"
 warn_unreachable = true
 
 [[tool.mypy.overrides]]

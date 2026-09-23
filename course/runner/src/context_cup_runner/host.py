@@ -16,6 +16,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+import context_cup_protocol
 from harbor.agents.capabilities import AgentCapabilities
 from harbor.agents.installed.base import BaseInstalledAgent
 from harbor.environments.base import BaseEnvironment
@@ -28,6 +29,10 @@ from .uv_bootstrap import cached_uv_binary, uv_target_triple
 INSTALL_ROOT = "/installed-agent"
 AGENT_DIR = "/logs/agent"
 REMOTE_PACKAGE = f"{INSTALL_ROOT}/context_cup_runner"
+# The shared protocol library (course/protocol), installed into the runner's
+# venv here and into engine venvs by their setup.sh via CC_PROTOCOL_DIR.
+REMOTE_PROTOCOL = f"{INSTALL_ROOT}/protocol"
+PROTOCOL_DIR = Path(context_cup_protocol.__file__).resolve().parents[2]
 REMOTE_CHAIN = f"{INSTALL_ROOT}/chain"
 REMOTE_STATE = f"{AGENT_DIR}/driver_state"
 REMOTE_INSTRUCTION = f"{INSTALL_ROOT}/instruction.md"
@@ -119,6 +124,7 @@ class CourseAgent(BaseInstalledAgent):
             "CC_CHAIN": ":".join(dirs),
             "CC_STATE_DIR": REMOTE_STATE,
             "CC_TRIAL_ID": self.trial_id(),
+            "CC_PROTOCOL_DIR": REMOTE_PROTOCOL,
         }
         env.update(UV_ENV)
         env["CC_PYTHON"] = RUNNER_PYTHON
@@ -130,11 +136,14 @@ class CourseAgent(BaseInstalledAgent):
     def trial_id(self) -> str:
         return str(self.logs_dir.parent.name)
 
-    def stage_package(self, package_dir: Path, index: int) -> Path:
+    def stage_package(self, package_dir: Path, index: int | str) -> Path:
         """A copy without host-only clutter (node_modules and friends), so the
         upload carries the scripts and sources, not a pnpm tree."""
         staged = (
-            Path(self.logs_dir) / "setup" / "chain" / f"{index:02d}_{package_dir.name}"
+            Path(self.logs_dir)
+            / "setup"
+            / "chain"
+            / (f"{index:02d}_{package_dir.name}" if isinstance(index, int) else index)
         )
         if staged.exists():
             shutil.rmtree(staged)
@@ -156,6 +165,9 @@ class CourseAgent(BaseInstalledAgent):
             command=f"mkdir -p {REMOTE_CHAIN} {AGENT_DIR} && chmod a+rwx {AGENT_DIR}",
         )
         await environment.upload_dir(Path(__file__).parent, REMOTE_PACKAGE)
+        await environment.upload_dir(
+            self.stage_package(PROTOCOL_DIR, "protocol"), REMOTE_PROTOCOL
+        )
         for index, (package, remote) in enumerate(
             zip(chain.packages, self.remote_chain_dirs(chain), strict=True)
         ):
@@ -168,7 +180,8 @@ class CourseAgent(BaseInstalledAgent):
             environment,
             command=(
                 f"{UV_BIN} venv --quiet --python {PYTHON_VERSION} {RUNNER_VENV} && "
-                f"{UV_BIN} pip install --quiet --python {RUNNER_PYTHON} {deps} && "
+                f"{UV_BIN} pip install --quiet --no-sources --python {RUNNER_PYTHON} "
+                f"{REMOTE_PROTOCOL} {deps} && "
                 f"mkdir -p {REMOTE_STATE} && chmod 777 {REMOTE_STATE}"
             ),
             env=UV_ENV,

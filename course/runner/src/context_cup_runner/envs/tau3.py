@@ -21,9 +21,10 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from context_cup_protocol import ToolCallRef, Utterance
+
 from ..environment import EnvironmentStart, StepResult, ToolResult
 from ..mcp_util import mcp_tool_to_function_tool, result_text
-from ..providers import ToolCallRef, Utterance
 
 FIRST_AGENT_MESSAGE = "Hi! How can I help you today?"
 USER_STOP_TOKENS = ("###STOP###", "###TRANSFER###", "###OUT-OF-SCOPE###")

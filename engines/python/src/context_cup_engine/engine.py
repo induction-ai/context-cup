@@ -2,43 +2,42 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
+import copy
+from dataclasses import dataclass, field
 from typing import Any
 
-from . import client
-from .protocol import (
+from context_cup_protocol import (
+    Conversation,
     Dirs,
     Payload,
-    Provider,
     ProviderInfo,
     Target,
     TurnInput,
+    view,
+    write,
 )
 
 
 @dataclass
-class TurnContext:
-    """The parsed input plus a way to call the model."""
+class PythonContext:
+    """The turn's input, read only, plus the two things a driver may change:
+    `context_payload` (the working copy of the conversation) and `state`."""
 
     turn: TurnInput
-    config: dict[str, Any]
-    context_payload: Payload
-    state: Any
+    config: dict[str, Any] = field(default_factory=dict)
+    context_payload: Payload = field(init=False)
+    state: Any = field(init=False)
 
-    # -- input, read only -------------------------------------------------
+    def __post_init__(self) -> None:
+        self.context_payload = copy.deepcopy(self.turn.context_payload)
+        self.state = copy.deepcopy(self.turn.state)
 
     @property
     def first(self) -> bool:
         return self.turn.first
 
     @property
-    def provider(self) -> Provider:
-        """The provider family name; `ctx.provider_info` has key and client."""
-        return self.turn.provider.name
-
-    @property
-    def provider_info(self) -> ProviderInfo:
+    def provider(self) -> ProviderInfo:
         return self.turn.provider
 
     @property
@@ -54,24 +53,15 @@ class TurnContext:
         return self.turn.dirs
 
     @property
-    def state_dir(self) -> Path:
-        return Path(self.turn.dirs.state)
-
-    @property
     def turn_id(self) -> str:
         return self.turn.turn_id
 
-    # -- doing things -----------------------------------------------------
+    def view(self) -> Conversation:
+        """`context_payload` as a provider-neutral conversation."""
+        return view(self.provider.name, self.context_payload)
 
-    def call(
-        self,
-        payload: Payload,
-        *,
-        purpose: str = "turn",
-        provider: ProviderInfo | None = None,
-    ) -> Payload:
-        """POST a native request body through the proxy and return the
-        provider's response object. `purpose` labels the call in the run's
-        accounting (`x-cc-purpose`); `turn` is the call whose reply becomes
-        the turn's response."""
-        return client.call(provider or self.provider_info, payload, purpose=purpose)
+    def write(self, conversation: Conversation) -> None:
+        """Apply the conversation's edits to `context_payload`."""
+        self.context_payload = write(
+            self.provider.name, self.context_payload, conversation
+        )

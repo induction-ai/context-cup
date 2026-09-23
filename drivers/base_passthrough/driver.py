@@ -1,7 +1,8 @@
 """The baseline: no context management at all."""
 
-from context_cup_engine import Payload, TurnContext
+from context_cup_engine import PythonContext
+from openai import OpenAI
 
 
-def run(ctx: TurnContext) -> Payload:
-    return ctx.call(ctx.context_payload)
+def run(ctx: PythonContext):
+    return OpenAI().responses.create(**ctx.context_payload)

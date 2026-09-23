@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from context_cup_protocol import ToolCallRef, Utterance
 from context_cup_runner.chain import DriverChain
 from context_cup_runner.environment import EnvironmentStart, StepResult, ToolResult
 from context_cup_runner.loop import Settings
 from context_cup_runner.protocol import Target
-from context_cup_runner.providers import ToolCallRef, Utterance
 
 # The fake engine reads a script of steps from the driver dir. Each step says
 # what the "model" replied: `text`, `tool_calls` [{id, name, args}], plus

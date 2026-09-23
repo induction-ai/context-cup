@@ -1,0 +1,99 @@
+"""The turn mechanics every engine shares: an engine supplies the `ctx` its
+drivers' `run(ctx)` receives, and `run_engine` does the rest."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import sys
+import traceback
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, Protocol
+
+from .models import DriverInfo, Payload, TurnInput, TurnOutput
+
+
+class EngineContext(Protocol):
+    context_payload: Payload
+    state: Any
+
+
+MakeContext = Callable[[TurnInput, dict[str, Any]], EngineContext]
+Finish = Callable[[Any, Any], Any]
+"""Turns what `run(ctx)` returned into the turn's response, for engines whose
+drivers return something else (a configured agent, say)."""
+
+
+def load_driver(driver_dir: Path) -> tuple[dict[str, Any], Any]:
+    """The driver's package.json and its imported driver.py."""
+    manifest: dict[str, Any] = json.loads((driver_dir / "package.json").read_text())
+    spec = importlib.util.spec_from_file_location("driver", driver_dir / "driver.py")
+    if spec is None or spec.loader is None:
+        raise ImportError(f"no driver.py in {driver_dir}")
+    sys.path.insert(0, str(driver_dir))  # a driver may split itself into files
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if not callable(getattr(module, "run", None)):
+        raise TypeError(f"{driver_dir / 'driver.py'} must define run(ctx)")
+    return manifest, module
+
+
+def as_payload(value: Any) -> Payload:
+    """What `run` returned, as JSON: a dict, or an SDK response object."""
+    if hasattr(value, "model_dump"):
+        # Only the fields the provider actually sent: an SDK object dumps its
+        # unsent optional fields as null, and a provider rejects those when
+        # the course sends the response back as input next turn.
+        value = value.model_dump(mode="json", exclude_unset=True)
+    if not isinstance(value, dict):
+        raise TypeError(
+            f"run(ctx) must return the provider's response, not {type(value).__name__}"
+        )
+    return value
+
+
+def run_turn(
+    make_ctx: MakeContext,
+    engine: str,
+    driver_dir: Path,
+    turn: TurnInput,
+    finish: Finish | None = None,
+) -> TurnOutput:
+    manifest, module = load_driver(driver_dir)
+    Path(turn.dirs.state).mkdir(parents=True, exist_ok=True)
+    ctx = make_ctx(turn, dict((manifest.get("contextCup") or {}).get("config") or {}))
+    result = module.run(ctx)
+    response = as_payload(finish(ctx, result) if finish else result)
+    name = str(manifest.get("name") or driver_dir.name).rsplit("/", 1)[-1]
+    return TurnOutput(
+        turn_id=turn.turn_id,
+        response=response,
+        context_payload=ctx.context_payload,
+        state=ctx.state,
+        driver=DriverInfo(name=name, engine=engine, version=manifest.get("version")),
+    )
+
+
+def run_engine(
+    make_ctx: MakeContext,
+    engine: str,
+    argv: list[str] | None = None,
+    finish: Finish | None = None,
+) -> int:
+    """`--driver DIR --input in.json --output out.json`: one turn, exit 0, or
+    a traceback on stderr and exit 1."""
+    parser = argparse.ArgumentParser(prog=f"engine-{engine}")
+    for flag in ("--driver", "--input", "--output"):
+        parser.add_argument(flag, required=True, type=Path)
+    args = parser.parse_args(argv)
+    try:
+        turn = TurnInput.model_validate_json(args.input.read_text())
+        output = run_turn(make_ctx, engine, args.driver, turn, finish)
+    except Exception:  # noqa: BLE001 - any failure is the turn failing
+        traceback.print_exc(file=sys.stderr)
+        return 1
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(output.model_dump_json(indent=2))
+    return 0

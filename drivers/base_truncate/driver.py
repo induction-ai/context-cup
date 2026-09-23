@@ -1,11 +1,13 @@
-"""Clip oversized tool results before they reach the model. The simplest
-thing that is not nothing, and an example of editing a native payload."""
-
-from __future__ import annotations
+"""Clip oversized tool results before they reach the model: one function for
+every provider, through the provider-neutral view, so the native payload
+changes only where a result was clipped."""
 
 from typing import Any
 
-from context_cup_engine import Payload, TurnContext
+import httpx
+from anthropic import Anthropic
+from context_cup_engine import PythonContext
+from openai import OpenAI
 
 MARKER = "\n\n[truncated by base_truncate: {dropped} bytes removed]"
 
@@ -18,38 +20,26 @@ def clip(text: str, max_bytes: int) -> str:
     return kept + MARKER.format(dropped=len(raw) - max_bytes)
 
 
-def clip_openai(payload: Payload, max_bytes: int) -> None:
-    for item in payload.get("input", []):
-        if item.get("type") == "function_call_output" and isinstance(
-            item.get("output"), str
-        ):
-            item["output"] = clip(item["output"], max_bytes)
+def call(ctx: PythonContext) -> Any:
+    payload = ctx.context_payload
+    if ctx.provider.name == "openai":
+        return OpenAI().responses.create(**payload)
+    if ctx.provider.name == "anthropic":
+        return Anthropic().messages.create(**payload)
+    body = {k: v for k, v in payload.items() if k != "model"}
+    url = f"{ctx.provider.client.base_url}/models/{payload['model']}:generateContent"
+    response = httpx.post(
+        url, json=body, headers={"x-goog-api-key": ctx.provider.api_key}, timeout=600
+    )
+    response.raise_for_status()
+    return response.json()
 
 
-def clip_anthropic(payload: Payload, max_bytes: int) -> None:
-    for message in payload.get("messages", []):
-        content = message.get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if block.get("type") == "tool_result" and isinstance(
-                block.get("content"), str
-            ):
-                block["content"] = clip(block["content"], max_bytes)
-
-
-def clip_gemini(payload: Payload, max_bytes: int) -> None:
-    for content in payload.get("contents", []):
-        for part in content.get("parts", []):
-            response: Any = (part.get("functionResponse") or {}).get("response")
-            if isinstance(response, dict) and isinstance(response.get("result"), str):
-                response["result"] = clip(response["result"], max_bytes)
-
-
-CLIPPERS = {"openai": clip_openai, "anthropic": clip_anthropic, "gemini": clip_gemini}
-
-
-def run(ctx: TurnContext) -> Payload:
+def run(ctx: PythonContext) -> Any:
     max_bytes = int(ctx.config.get("max_bytes", 100_000))
-    CLIPPERS[ctx.provider](ctx.context_payload, max_bytes)
-    return ctx.call(ctx.context_payload)
+    conversation = ctx.view()
+    for message in conversation.messages:
+        if message.role == "tool" and message.text:
+            message.text = clip(message.text, max_bytes)
+    ctx.write(conversation)
+    return call(ctx)

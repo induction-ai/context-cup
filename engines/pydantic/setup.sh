@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Once per trial container: a private venv on a uv-managed Python 3.12 with the
-# shared protocol library (from the runner's upload) and this engine. It
-# installs no provider SDK: each driver brings its own client in its setup.sh.
+# shared protocol library (from the runner's upload), Pydantic AI, the harness,
+# and this engine. A driver that needs more installs it into this venv.
 set -euo pipefail
 PROTOCOL_DIR="${CC_PROTOCOL_DIR:-$CC_SELF_DIR/../../course/protocol}"
 uv venv --quiet --python 3.12 "$CC_SELF_DIR/.venv"

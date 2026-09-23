@@ -3,6 +3,12 @@
 How the course talks to a driver during a trial. Everything here is a file on
 disk or a command line, so a driver can be written in any language.
 
+The reference implementation of the models below, the provider adapters,
+the provider-neutral view, and the turn mechanics every engine shares
+(`run_engine`) is the Python library `course/protocol`
+(`context_cup_protocol`). The runner and the engines both import it; engines
+and drivers may import it and nothing else from `course/`.
+
 ## Roles
 
 ```
@@ -29,7 +35,10 @@ The course never calls a model. The driver never calls an environment tool.
 A driver is a pnpm workspace package with up to three executables. An engine
 is a driver that other drivers build on; the two have the same shape and the
 tooling treats them alike. The pattern is Dev Container Features: a manifest,
-an install script, and a dependency order the tooling honours.
+an install script, and a dependency order the tooling honours. An engine
+defines the `ctx` its drivers' `run` receives: the Python engine hands over
+the payloads with a provider-neutral view of them; the Pydantic engine takes
+back Pydantic AI capabilities and runs the agent itself.
 
 ```
 drivers/base_truncate/
@@ -38,12 +47,13 @@ drivers/base_truncate/
   run.sh         optional  runs once per turn: run.sh <input.json> <output.json>
   teardown.sh    optional  runs once per trial, before the parent's teardown.sh
   driver.py      what the inherited run.sh expects: for the python engine,
-                 `def run(ctx)` that calls the model and returns its response
+                 `def run(ctx)` that calls the model with any client and
+                 returns the provider's response
 
 engines/python/
   package.json   { "name": "@context-cup/engine-python", … }
-  setup.sh       installs litellm, pydantic and the engine package
-  run.sh         exec python3 -m context_cup_engine --driver "$CC_DRIVER_DIR" \
+  setup.sh       a venv with the protocol library and the engine; no SDKs
+  run.sh         exec .venv/bin/python -m context_cup_engine --driver "$CC_DRIVER_DIR" \
                    --input "$1" --output "$2"
 ```
 
@@ -71,11 +81,11 @@ engines/python/
   workspace (`course/*`, `engines/*`, `drivers/*`). Absent for a root
   package. Chains may be any depth: an engine can extend an engine.
 - `providers` lists the providers the package can drive, from `openai`,
-  `anthropic`, `gemini`. A driver built on litellm can list all three; one
-  that speaks a single SDK lists one. When absent, the package
-  supports whatever its parent supports, and a root package with no list
-  supports every provider. The suite skips a driver × target cell whose
-  provider is not supported and says so, rather than running it to fail.
+  `anthropic`, `gemini`. A driver with a client for each can list all three;
+  one built on a single SDK lists one. When absent, the package supports
+  whatever its parent supports, and a root package with no list supports
+  every provider. `bin/suite` refuses a target whose provider the driver
+  does not list.
 - `config` is free-form and is passed to the driver by whichever engine runs
   it.
 - Ordinary `dependencies` and `scripts` are for the host side only:
@@ -93,15 +103,16 @@ engines/python/
 Scripts run inside the trial container with the working directory set to
 their own package directory, and see:
 
-| var             | meaning                                                         |
-| --------------- | --------------------------------------------------------------- |
-| `CC_DRIVER_DIR` | the leaf package directory                                      |
-| `CC_SELF_DIR`   | the directory of the script being run                           |
-| `CC_CHAIN`      | every package directory root to leaf, colon separated           |
-| `CC_STATE_DIR`  | the driver-private directory that survives across turns         |
-| `CC_TRIAL_ID`   | the trial id                                                    |
-| `CC_PYTHON`     | the runner's own Python 3.12, a uv venv; engines make their own |
-| `CC_TURN_DIR`   | run.sh only: the current turn directory                         |
+| var               | meaning                                                         |
+| ----------------- | --------------------------------------------------------------- |
+| `CC_DRIVER_DIR`   | the leaf package directory                                      |
+| `CC_SELF_DIR`     | the directory of the script being run                           |
+| `CC_CHAIN`        | every package directory root to leaf, colon separated           |
+| `CC_STATE_DIR`    | the driver-private directory that survives across turns         |
+| `CC_TRIAL_ID`     | the trial id                                                    |
+| `CC_PYTHON`       | the runner's own Python 3.12, a uv venv; engines make their own |
+| `CC_PROTOCOL_DIR` | setup.sh only: the uploaded protocol library to install         |
+| `CC_TURN_DIR`     | run.sh only: the current turn directory                         |
 
 Python in a trial container is always a uv-managed 3.12. The runner uploads a
 pinned `uv`, puts it on `PATH` for every script with `UV_CACHE_DIR` and
@@ -235,29 +246,51 @@ calls it made.
 - Anything else a driver wants remembered, such as private tool round trips
   it answered itself, belongs in `state`.
 
-A non-zero exit, a missing `output.json`, or a `response` with neither text
-nor tool calls fails the turn. The runner retries a failed turn up to
+A non-zero exit, a missing `output.json`, a missing `response`, or a reply
+with neither text nor tool calls fails the turn. The runner retries a failed turn up to
 `CC_TURN_RETRIES` times (default 2) with a fresh turn id, then ends the
 trial with an error that harbor records.
 
-The driver may call any model for auxiliary work: subagents, summaries,
-reranking, anything. Only `response` is the turn's answer; the rest is
-accounted for through `calls`. The Python engine records calls made from the
-driver's own process, with any client library. Work done in a subprocess is
-invisible to it and therefore does not count; a driver that needs that
-should keep the calls in-process. A trial whose main-turn calls went to a model other than the
-target is flagged in the results, not blocked.
+`target` is the model the course builds the initial payload for and labels
+the run with. A driver may call whatever models it likes, for the turn's
+main call or for subagents, summaries, and reranking, and every call is
+recorded and priced under the model it actually named. Name `cc-model`, or
+omit the model, to get the run's target; the proxy fills it in. A model a
+driver names itself is forwarded unchanged and priced under that name. Only
+`response` is the turn's answer; every call is accounted for by the run's
+proxy (see Accounting), whichever process or language makes it.
+
+## Accounting
+
+Every model call goes through one proxy per run, started by `bin/suite` on
+the host. Containers hold no provider keys: a driver gets a placeholder key
+and base URLs of the form `<proxy>/t/<trial_id>/<provider>/…`, and the proxy
+injects the real key and forwards to the provider. A call that bypasses the
+proxy has no credential and fails with 401.
+
+The proxy writes one line per call to `calls.jsonl` in the suite directory:
+trial, turn, sequence, purpose, provider, host, model, wire, usage (input
+including cached, cached input, cache writes, output, reasoning output),
+duration, status, and service tier. The runner tells the proxy which turn is
+current before each attempt, so calls are attributed to turns; an agent
+driver's calls carry no turn. A driver labels an auxiliary call by sending
+the header `x-cc-purpose` with it (any SDK can add a header), and anything
+unlabelled counts as `turn`. The suite prices every
+call on the host and stores it as a `model_call` row.
 
 ## Environment variables the runner sets for the driver process
 
-| var                  | meaning                                      |
-| -------------------- | -------------------------------------------- |
-| `OPENAI_API_KEY` etc | provider keys forwarded from the host `.env` |
-| `CC_TRIAL_ID`        | same as `trial_id` in the payload            |
-| `CC_TURN_DIR`        | same as `dirs.turn`                          |
+| var                                                                       | meaning                                            |
+| ------------------------------------------------------------------------- | -------------------------------------------------- |
+| `OPENAI_BASE_URL`                                                         | the proxy's OpenAI prefix, ending in `/v1`         |
+| `ANTHROPIC_BASE_URL`                                                      | the proxy's Anthropic prefix (the SDK adds `/v1`)  |
+| `GOOGLE_GEMINI_BASE_URL`, `GEMINI_API_BASE_URL`                           | the proxy's Gemini prefix (the SDK adds `/v1beta`) |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY` | the placeholder `cc-proxy`                         |
+| `CC_TRIAL_ID`                                                             | same as `trial_id` in the payload                  |
+| `CC_TURN_DIR`                                                             | same as `dirs.turn`                                |
 
-Provider base URLs are the real provider endpoints. Nothing sits between the
-driver and the provider.
+Every provider endpoint a driver sees is the run's proxy; no real key is in
+the container.
 
 ## Files the runner writes per trial
 
