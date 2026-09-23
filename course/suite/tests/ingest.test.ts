@@ -8,7 +8,7 @@ import {
 } from "@context-cup/shared/test_helpers/index.js";
 import { eq } from "drizzle-orm";
 import { ingestJob, insertJob, parseJob, parseTrial } from "../src/ingest.ts";
-import { resultsTable, summarizeCell } from "../src/results.ts";
+import { resultsTable, suiteTotals, summarizeCell } from "../src/results.ts";
 import { FIXTURE_JOBS_DIR, sampleRun } from "./helpers.ts";
 
 describe("parseTrial", () => {
@@ -132,5 +132,19 @@ describe("ingestJob", () => {
     expect(cell).toMatchObject({ n: 3, scored: 1, errors: 2, mean_reward: 1 });
     expect(resultsTable([cell])).toContain("banking_001");
     expect(resultsTable([cell])).toContain("ALL");
+    // The suite is the mean of its cells: two tasks at 1 and 0 score 0.5,
+    // whatever their trial counts.
+    const other = {
+      ...cell,
+      task_name: "banking_002",
+      mean_reward: 0,
+      n: 5,
+      scored: 5,
+    };
+    expect(suiteTotals([cell, other])).toEqual({
+      score: 0.5,
+      mean_cost_cents: cell.mean_cost_cents,
+    });
+    expect(suiteTotals([])).toEqual({ score: null, mean_cost_cents: null });
   });
 });

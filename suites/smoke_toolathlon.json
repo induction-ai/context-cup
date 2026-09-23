@@ -1,5 +1,4 @@
 {
-  "suite_name": "toolathlon",
   "tasks": {
     "sales_accounting": {
       "runner": "toolathlon"

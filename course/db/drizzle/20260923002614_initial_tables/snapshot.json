@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "7c49b644-704e-43c1-87a9-e1960c0d93e3",
+  "id": "e2ea641c-4832-47be-a586-23c5549cc286",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -646,6 +646,45 @@
       "generated": null,
       "identity": null,
       "name": "git_sha",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "github_run_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "github_run_attempt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "github_repository",
       "entityType": "columns",
       "schema": "public",
       "table": "suite"

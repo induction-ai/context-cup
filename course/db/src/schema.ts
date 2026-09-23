@@ -28,6 +28,11 @@ export const suite = pgTable("suite", {
   /** Trials per task (harbor `--n-attempts`). */
   count: integer().notNull(),
   gitSha: text(),
+  /** Set when bin/suite runs inside GitHub Actions, from GITHUB_RUN_ID,
+   *  GITHUB_RUN_ATTEMPT, and GITHUB_REPOSITORY; null for local runs. */
+  githubRunId: text(),
+  githubRunAttempt: integer(),
+  githubRepository: text(),
   harborEnv: text().notNull(),
   logDir: text().notNull(),
   startedAt: timestamp({ withTimezone: true }).notNull(),

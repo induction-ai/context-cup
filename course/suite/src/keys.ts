@@ -33,7 +33,6 @@ export type RunnerName = SuiteTask["runner"];
  *  target are chosen at launch (`bin/suite --driver … --target …`). */
 export const zSuiteFile = z
   .object({
-    suite_name: z.string().min(1),
     /** Max concurrent trials across the whole suite. */
     concurrency: z.number().int().positive().default(8),
     /** Per-task budget for the agent; harbor's timeout multiplier derives from it. */

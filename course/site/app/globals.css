@@ -1,0 +1,18 @@
+/* Bootstrap does the work; this is only what it lacks. */
+
+/* Numbers line up in columns. */
+.font-monospace,
+.text-end {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Error text stays readable inside a table row. */
+td.error {
+  max-width: 60ch;
+  white-space: normal;
+  font-size: 0.85em;
+}
+
+details > summary {
+  cursor: pointer;
+}

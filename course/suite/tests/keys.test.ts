@@ -9,7 +9,6 @@ import { sampleSuite } from "./helpers.ts";
 describe("suite files", () => {
   it("parses a suite and fills defaults", async () => {
     const file = parseSuiteFile({
-      suite_name: "x",
       tasks: {
         banking_047: { runner: "tau3", tau3: { customer: "banking_047" } },
       },

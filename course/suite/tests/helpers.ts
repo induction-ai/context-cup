@@ -9,7 +9,6 @@ export const FIXTURE_JOBS_DIR = path.join(FIXTURES, "job");
 
 export function sampleSuite(overrides: Partial<SuiteFile> = {}): SuiteFile {
   return zSuiteFile.parse({
-    suite_name: "sample",
     tasks: {
       banking_001: { runner: "tau3", tau3: { customer: "banking_001" } },
       sales_accounting: { runner: "toolathlon", concurrency: 1 },

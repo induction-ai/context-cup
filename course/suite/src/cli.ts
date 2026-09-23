@@ -37,12 +37,40 @@ import { workspacePackages } from "./packages.ts";
 import {
   resultsHeader,
   resultsTable,
+  suiteTotals,
   summarizeCell,
   writeResults,
   type CellResult,
 } from "./results.ts";
 import { dockerJobCap, processQueue, type QueueEntry } from "./scheduler.ts";
 import { describeTarget, loadTargets } from "./targets.ts";
+
+/** Where the results site is served; bin/suite prints a link into it. */
+export function suiteUrl(suite_id: string, env = process.env): string {
+  const base = (env.SITE_URL || "http://localhost:3300").replace(/\/+$/, "");
+  return `${base}/suites/${suite_id}`;
+}
+
+/** The GitHub Actions run this suite belongs to, when there is one. */
+export function githubRun(env: Record<string, string | undefined>): {
+  githubRunId: string | null;
+  githubRunAttempt: number | null;
+  githubRepository: string | null;
+} {
+  if (!env.GITHUB_RUN_ID) {
+    return {
+      githubRunId: null,
+      githubRunAttempt: null,
+      githubRepository: null,
+    };
+  }
+  const attempt = Number(env.GITHUB_RUN_ATTEMPT);
+  return {
+    githubRunId: env.GITHUB_RUN_ID,
+    githubRunAttempt: Number.isInteger(attempt) && attempt > 0 ? attempt : null,
+    githubRepository: env.GITHUB_REPOSITORY ?? null,
+  };
+}
 
 function gitSha(): string | null {
   try {
@@ -223,7 +251,7 @@ async function main(): Promise<void> {
 
   if (argv.dry_run) {
     console.log(
-      `suite ${file.suite_name} (${key_file}): ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}), count ${count}, harbor_env ${harbor_env}, docker cap ${docker_jobs || "none"}`
+      `suite ${suite_key} (${key_file}): ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}), count ${count}, harbor_env ${harbor_env}, docker cap ${docker_jobs || "none"}`
     );
     if (!harborProvisioned()) {
       console.log(
@@ -250,17 +278,18 @@ async function main(): Promise<void> {
     logger.info({ event: "report", line });
   };
   report(
-    `suite ${suite_id}: ${file.suite_name}, ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}) → ${path.relative(process.cwd(), suite_dir)}`
+    `suite ${suite_id}: ${suite_key}, ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}) → ${path.relative(process.cwd(), suite_dir)}`
   );
 
   prepareHarbor(report);
+  report(`results page: ${suiteUrl(suite_id)}`);
   const started_at = new Date();
   await withTransaction(async () => {
     await getCurrentTransaction()
       .insert(suiteTable)
       .values({
         id: suite_id,
-        name: file.suite_name,
+        name: suite_key,
         keyFile: path.relative(REPO_ROOT, key_file),
         driverName: spec.driver_name,
         targetName: spec.target_name,
@@ -269,6 +298,7 @@ async function main(): Promise<void> {
         reasoningEffort: spec.target.reasoning_effort ?? null,
         count,
         gitSha: gitSha(),
+        ...githubRun(process.env),
         harborEnv: harbor_env,
         logDir: suite_dir,
         startedAt: started_at,
@@ -365,7 +395,7 @@ async function main(): Promise<void> {
   cells.sort((a, b) => a.task_name.localeCompare(b.task_name));
   const results_out = {
     suite_id,
-    suite_name: file.suite_name,
+    suite_name: suite_key,
     driver_name: spec.driver_name,
     target_name: spec.target_name,
     target: spec.target,
@@ -376,13 +406,14 @@ async function main(): Promise<void> {
     harbor_env,
     jobs: results.map((r) => ({ job_id: r.job_id, ok: r.ok, error: r.error })),
     cells,
+    ...suiteTotals(cells),
   };
   writeResults(path.join(suite_dir, "results.json"), results_out);
   const table = `${resultsHeader(results_out)}\n${resultsTable(cells)}`;
   writeFileSync(path.join(suite_dir, "results.txt"), table + "\n");
   console.log("\n" + table);
   console.log(
-    `\nresults: ${path.relative(process.cwd(), path.join(suite_dir, "results.json"))}`
+    `\nresults: ${path.relative(process.cwd(), path.join(suite_dir, "results.json"))}\n         ${suiteUrl(suite_id)}`
   );
   const failed = results.filter((r) => !r.ok).length;
   if (failed > 0) {

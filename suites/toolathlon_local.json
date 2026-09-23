@@ -1,5 +1,4 @@
 {
-  "suite_name": "toolathlon_local",
   "concurrency": 64,
   "timeout_minutes": 40,
   "tasks": {

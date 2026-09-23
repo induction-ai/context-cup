@@ -122,3 +122,29 @@ describe("resolveLaunch", () => {
     ]);
   });
 });
+
+describe("run provenance", () => {
+  it("links to the results site and records the GitHub run when present", async () => {
+    const { githubRun, suiteUrl } = await import("../src/cli.ts");
+    expect(suiteUrl("s_abc", {})).toBe("http://localhost:3300/suites/s_abc");
+    expect(suiteUrl("s_abc", { SITE_URL: "https://cup.example/" })).toBe(
+      "https://cup.example/suites/s_abc"
+    );
+    expect(githubRun({})).toEqual({
+      githubRunId: null,
+      githubRunAttempt: null,
+      githubRepository: null,
+    });
+    expect(
+      githubRun({
+        GITHUB_RUN_ID: "123",
+        GITHUB_RUN_ATTEMPT: "2",
+        GITHUB_REPOSITORY: "example/context-cup",
+      })
+    ).toEqual({
+      githubRunId: "123",
+      githubRunAttempt: 2,
+      githubRepository: "example/context-cup",
+    });
+  });
+});

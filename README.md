@@ -85,6 +85,28 @@ the harbor fork, which the first run clones into `.harbor/repo`. Toolathlon
 tasks that need credentials read `secrets/toolathlon_auth_configs.zip` when
 present.
 
+A job's score is the mean reward over its done trials (a verdict and no
+error; errored or unfinished trials are left out, not counted as zero), its
+cost the mean over those trials' prices, and a suite's score and cost are the
+means of its jobs' values. Nothing is stored; every view computes it.
+
 Output lands in `.temp/suites/<suite_id>/` (`results.json`, `results.txt`,
 `logs/suite.log`, and every trial's artifacts) and in Postgres: `suite`,
-`job`, `trial`, and `model_call` rows.
+`job`, `trial`, and `model_call` rows. A run inside GitHub Actions needs
+`DATABASE_URL` for a Postgres the runner can reach; its suite row records the
+workflow run id, attempt, and repository, and the results site links back to
+the run.
+
+## Results site
+
+`course/site` is a small Next.js app over the database.
+
+```
+pnpm site:dev            # http://localhost:3300
+```
+
+`/suites` lists every run, newest first, and `/suites/<suite_id>` drills into
+a run's tasks, jobs, trials, and each trial's model calls. `bin/suite` prints
+the link to its run at start and finish; `SITE_URL` sets the base for those
+links (default `http://localhost:3300`). Runs started in GitHub Actions show
+a link to the workflow run.

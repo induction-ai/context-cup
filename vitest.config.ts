@@ -42,6 +42,20 @@ export default defineConfig({
       },
       {
         test: {
+          name: "site",
+          root: "course/site",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["node_modules", ".next"],
+          setupFiles: [
+            `../../${testDatabaseEnvironment}`,
+            "../db/src/test_helpers/setup.ts",
+          ],
+          sequence: { setupFiles: "list" },
+        },
+      },
+      {
+        test: {
           name: "suite",
           root: "course/suite",
           environment: "node",

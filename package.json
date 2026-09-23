@@ -15,7 +15,9 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "format": "pnpm -r format"
+    "format": "pnpm -r format",
+    "site:dev": "pnpm --filter @context-cup/site dev",
+    "site:build": "pnpm --filter @context-cup/site build"
   },
   "prettier": {
     "plugins": [

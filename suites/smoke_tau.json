@@ -1,5 +1,4 @@
 {
-  "suite_name": "tau_banking",
   "tasks": {
     "banking_001": {
       "runner": "tau3",
