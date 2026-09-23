@@ -1,0 +1,10 @@
+{
+  "trial_name": "banking-001__agent01",
+  "task_name": "banking-001",
+  "agent_execution": {
+    "started_at": "2026-09-22T10:00:00Z",
+    "finished_at": "2026-09-22T10:02:00Z"
+  },
+  "verifier_result": { "rewards": { "reward": 1.0 } },
+  "exception_info": null
+}

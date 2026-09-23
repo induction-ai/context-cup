@@ -15,14 +15,43 @@ export const DRIVER_SCOPE = "@context-cup-drivers/";
 /** The workspace globs that may hold drivers and engines. */
 const PACKAGE_DIRS = ["course", "engines", "drivers"];
 
-const zContextCup = z.object({
-  kind: z.enum(["driver", "engine"]),
-  extends: z.string().min(1).optional(),
-  /** Providers this package can drive. Absent means "whatever the parent
-   *  supports"; a root package without a list supports every provider. */
-  providers: z.array(zProvider).min(1).optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
-});
+const zContextCup = z
+  .object({
+    /** `driver` and `engine` speak the turn protocol; an `agent` is a whole
+     *  agent harbor runs by itself (Codex, Claude Code), reached through the
+     *  proxy but owning its own loop and context. */
+    kind: z.enum(["driver", "engine", "agent"]),
+    extends: z.string().min(1).optional(),
+    /** For `agent`: the harbor agent class as `module:Class`. */
+    harbor_agent: z
+      .string()
+      .regex(/^[\w.]+:\w+$/, "harbor_agent must be module.path:ClassName")
+      .optional(),
+    /** Providers this package can drive. Absent means "whatever the parent
+     *  supports"; a root package without a list supports every provider. */
+    providers: z.array(zProvider).min(1).optional(),
+    config: z.record(z.string(), z.unknown()).optional(),
+  })
+  .superRefine((cc, ctx) => {
+    if (cc.kind === "agent" && !cc.harbor_agent) {
+      ctx.addIssue({
+        code: "custom",
+        message: "an agent package needs harbor_agent (module:Class)",
+      });
+    }
+    if (cc.kind === "agent" && cc.extends) {
+      ctx.addIssue({
+        code: "custom",
+        message: "an agent package does not extend an engine",
+      });
+    }
+    if (cc.kind !== "agent" && cc.harbor_agent) {
+      ctx.addIssue({
+        code: "custom",
+        message: "harbor_agent only applies to kind: agent",
+      });
+    }
+  });
 
 const zManifest = z.object({
   name: z.string().min(1),
@@ -34,8 +63,9 @@ const zManifest = z.object({
 export type CupPackage = {
   name: string;
   dir: string;
-  kind: "driver" | "engine";
+  kind: "driver" | "engine" | "agent";
   extends?: string;
+  harbor_agent?: string;
   providers?: Provider[];
   config?: Record<string, unknown>;
   description?: string;
@@ -65,6 +95,7 @@ export function scanPackages(
         dir,
         kind: manifest.contextCup.kind,
         extends: manifest.contextCup.extends,
+        harbor_agent: manifest.contextCup.harbor_agent,
         providers: manifest.contextCup.providers,
         config: manifest.contextCup.config,
         description: manifest.description,
@@ -141,15 +172,20 @@ export function driverProviders(
   return chainProviders(resolveChain(driver.name, packages));
 }
 
+/** Packages `--driver` may name: turn-protocol drivers and whole agents. */
+export function isRunnable(pkg: CupPackage): boolean {
+  return pkg.kind === "driver" || pkg.kind === "agent";
+}
+
 /** The driver a suite file names, or an error listing the drivers that exist. */
 export function findDriver(
   shortName: string,
   packages: ReadonlyMap<string, CupPackage> = workspacePackages()
 ): CupPackage {
   const pkg = packages.get(driverPackageName(shortName));
-  if (!pkg || pkg.kind !== "driver") {
+  if (!pkg || !isRunnable(pkg)) {
     const drivers = [...packages.values()]
-      .filter((p) => p.kind === "driver")
+      .filter(isRunnable)
       .map((p) => driverShortName(p.name));
     throw new Error(
       `Unknown driver "${shortName}". Drivers in the workspace: ${drivers.join(", ") || "(none)"}`

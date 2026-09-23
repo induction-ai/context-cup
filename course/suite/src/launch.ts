@@ -7,6 +7,7 @@ import {
   driverProviders,
   driverShortName,
   findDriver,
+  isRunnable,
   type CupPackage,
 } from "./packages.ts";
 import {
@@ -32,7 +33,7 @@ export function driverChoices(
   packages: ReadonlyMap<string, CupPackage>
 ): Choice[] {
   return [...packages.values()]
-    .filter((p) => p.kind === "driver")
+    .filter(isRunnable)
     .map((p) => ({
       name: driverShortName(p.name),
       detail: p.description ?? "",

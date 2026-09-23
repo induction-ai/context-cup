@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import {
   createServer,
+  request,
   type IncomingMessage,
   type Server,
   type ServerResponse,
@@ -338,5 +339,30 @@ describe("proxy", () => {
     }
     const r = await fetch(`${proxy.url}/nope`);
     expect(r.status).toBe(404);
+  });
+});
+
+describe("websocket upgrades", () => {
+  it("are refused with 426 and never forwarded or recorded", async () => {
+    const before = records().length;
+    // fetch refuses to send an Upgrade header, so go through node:http.
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request(
+        `${proxy.url}/t/trial-ws/openai/v1/responses`,
+        {
+          method: "POST",
+          headers: { upgrade: "websocket", connection: "Upgrade" },
+        },
+        (res) => {
+          res.resume();
+          res.on("end", () => resolve(res.statusCode ?? 0));
+        }
+      );
+      req.on("error", reject);
+      req.end("{}");
+    });
+    expect(status).toBe(426);
+    expect(upstream.seen).toHaveLength(0);
+    expect(records()).toHaveLength(before);
   });
 });

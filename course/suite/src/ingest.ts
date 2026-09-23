@@ -186,10 +186,15 @@ function priceCall(call: CallRecord): PricedCall {
     usage,
     duration_ms: call.duration_ms ?? null,
     service_tier: call.service_tier ?? null,
+    // A call the provider rejected (4xx/5xx) billed nothing, so it costs 0
+    // and must not leave the trial unpriced; a successful call with no model
+    // or no usage is genuinely unpriced.
     cost_cents:
-      call.model && call.usage
-        ? callCostCents(call.model, usage, call.service_tier)
-        : null,
+      call.status != null && call.status >= 400 && !call.usage
+        ? 0
+        : call.model && call.usage
+          ? callCostCents(call.model, usage, call.service_tier)
+          : null,
   };
 }
 
@@ -215,6 +220,37 @@ function readScoreReason(trialDir: string): string | null {
   return details.at(-1)?.slice("DETAILS:".length).trim() ?? null;
 }
 
+const zAtif = z.object({
+  steps: z
+    .array(
+      z.object({
+        source: z.string().optional(),
+        tool_calls: z.array(z.unknown()).optional(),
+      })
+    )
+    .default([]),
+});
+
+/** Turn and tool-call counts from an ATIF trajectory: one turn per agent
+ *  step, tool calls summed over them. Empty when the file is absent. */
+export function trajectoryCounts(file: string): {
+  stop_reason?: string;
+  turns?: number;
+  env_tool_calls?: number;
+} {
+  if (!existsSync(file)) return {};
+  const parsed = zAtif.safeParse(readJson(file));
+  if (!parsed.success) return {};
+  const agentSteps = parsed.data.steps.filter((s) => s.source === "agent");
+  return {
+    turns: agentSteps.length,
+    env_tool_calls: agentSteps.reduce(
+      (n, s) => n + (s.tool_calls?.length ?? 0),
+      0
+    ),
+  };
+}
+
 /** Everything the suite records about one trial directory, given the calls
  *  the proxy recorded for it. */
 export function parseTrial(
@@ -226,9 +262,11 @@ export function parseTrial(
   );
   const agentDir = path.join(trialDir, "agent");
   const summaryFile = path.join(agentDir, "summary.json");
+  // Our loop writes summary.json. A whole agent (kind: agent) does not; then
+  // harbor's ATIF trajectory of its session is the best source for turns.
   const summary = existsSync(summaryFile)
     ? zSummary.parse(readJson(summaryFile))
-    : {};
+    : trajectoryCounts(path.join(agentDir, "trajectory.json"));
   const calls = recorded.map(priceCall);
   const totals = {
     input: 0,

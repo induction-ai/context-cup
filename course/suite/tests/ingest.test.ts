@@ -168,3 +168,24 @@ describe("ingestJob", () => {
     expect(suiteTotals([])).toEqual({ score: null, mean_cost_cents: null });
   });
 });
+
+describe("agent-kind trials", () => {
+  it("take turns and tool calls from harbor's trajectory and tokens from the proxy log", async () => {
+    const trials = parseJob(
+      FIXTURE_JOBS_DIR,
+      "j_agent",
+      path.join(FIXTURE_JOBS_DIR, "..", "calls_agent.jsonl")
+    );
+    expect(trials).toHaveLength(1);
+    const t = trials[0]!;
+    expect(t.reward).toBe(1);
+    expect(t.stop_reason).toBeNull();
+    expect(t.turns).toBe(3);
+    expect(t.env_tool_calls).toBe(3);
+    expect(t.calls.map((c) => c.turn_id)).toEqual([null, null, null]);
+    expect(t.totals.input).toBe(8000);
+    // The rejected probe (401, no body) billed nothing: cost 0, not unpriced.
+    expect(t.calls[2]?.cost_cents).toBe(0);
+    expect(t.cost_cents).not.toBeNull();
+  });
+});

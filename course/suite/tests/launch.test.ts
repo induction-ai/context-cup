@@ -75,10 +75,13 @@ describe("resolveLaunch", () => {
   });
 
   it("with a terminal, asks for the driver then a target the driver can run", async () => {
-    const { ask, shown } = scripted([1, 0]);
+    const { ask, shown } = scripted([2, 0]);
     const launch = await resolveLaunch({ ...base(), ask });
     expect(shown).toEqual([
-      { question: "Driver", names: ["base_passthrough", "base_truncate"] },
+      {
+        question: "Driver",
+        names: ["base_codex", "base_passthrough", "base_truncate"],
+      },
       { question: "Target model", names: ["gpt-5.5@medium"] },
     ]);
     expect(launch.driver_name).toBe("base_truncate");
@@ -117,6 +120,7 @@ describe("resolveLaunch", () => {
 
   it("driver choices carry each package's description", async () => {
     expect(driverChoices(samplePackages())).toEqual([
+      { name: "base_codex", detail: "Codex CLI as a whole agent." },
       { name: "base_passthrough", detail: "" },
       { name: "base_truncate", detail: "Clips oversized tool results." },
     ]);

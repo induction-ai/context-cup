@@ -75,7 +75,9 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
   limits, merged with the suite's and each task's caps by the scheduler. `--target` refers to a name in it (`TARGETS_FILE`
   overrides the path).
 - `--driver` is a package under `drivers/`; it must declare support for the
-  target's provider in its `package.json`.
+  target's provider in its `package.json`. `base_passthrough` and
+  `base_truncate` speak the turn protocol; `base_codex` is a whole agent run by
+  harbor and compared on score and cost only.
 - `--count` is attempts per task. `--task` narrows to named tasks.
 - `--harbor_env daytona` runs in Daytona sandboxes instead of local Docker
   (needs `DAYTONA_API_KEY`).

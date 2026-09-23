@@ -194,6 +194,8 @@ export async function processQueue(
       report(
         `${prefix} start ${entry.run.task_name} × ${entry.run.driver_name} × ${entry.run.target_name}`
       );
+      // The exact command, as run; secrets appear only as $NAME references.
+      report(`${prefix} $ ${entry.command.shell}`);
       const launched = launcher({
         command: entry.command.shell,
         env: entry.env,

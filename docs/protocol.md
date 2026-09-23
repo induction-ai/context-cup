@@ -303,3 +303,33 @@ never see.
 Drivers shipped with the course are prefixed `base_`: `base_passthrough`
 sends the context payload unchanged, `base_truncate` clips oversized tool results.
 Contestants pick any other prefix.
+
+## Agent drivers
+
+A package with `"kind": "agent"` is a whole agent rather than a turn-protocol
+driver: Codex, Claude Code, an agent framework that must run its own tools.
+harbor runs it directly, so the package names the harbor agent class:
+
+```json
+{
+  "name": "@context-cup-drivers/base_codex",
+  "contextCup": {
+    "kind": "agent",
+    "harbor_agent": "context_cup_runner.codex:CodexAgent",
+    "providers": ["openai"]
+  }
+}
+```
+
+The course's runner loop, `input.json`, and `output.json` do not apply. The
+agent reaches the model through the proxy like everything else: the wrapper
+class stamps `OPENAI_BASE_URL` (or the provider's equivalent) with the
+trial's prefix and hands the agent the placeholder key, so its own client
+goes through the proxy and a direct call would fail with 401.
+
+What a run of an agent driver has: the verifier's reward, the proxy's call
+log (turn ids are null, calls are sequenced), cost, and, with body capture,
+every request the agent sent. What it does not have: `context_payload`,
+`original_payload`, or `state`, because the agent owns its conversation;
+the results show such drivers by name only, and they are compared on score
+and cost.

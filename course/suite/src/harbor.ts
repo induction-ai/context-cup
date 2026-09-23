@@ -11,7 +11,7 @@ import path from "node:path";
 import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import type { SuiteRun } from "./expand.ts";
 import type { Provider } from "./keys.ts";
-import { driverChainDirs, type CupPackage } from "./packages.ts";
+import { driverChainDirs, findDriver, type CupPackage } from "./packages.ts";
 import {
   tau3TaskGlob,
   TOOLATHLON_NOTION_TASKS,
@@ -276,17 +276,31 @@ export function assertTaskRunnable(run: SuiteRun): void {
 export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
   const { run, job_id, harbor_env } = inputs;
   const env = inputs.env ?? process.env;
-  const chain = driverChainDirs(run.driver_name, inputs.packages);
+  const driver = findDriver(run.driver_name, inputs.packages);
   const jobs_dir = path.join(inputs.suite_dir, job_id, "harbor");
   const target = targetJson(run);
   const keys = keyEnv(env);
 
   // No provider key reaches the agent: the proxy holds them all, so the
   // only way for a driver to call a model is through it.
+  // A whole agent (kind: agent) is harbor's own agent class, wrapped by the
+  // runner so its model calls go through the proxy; a turn-protocol driver
+  // runs under our loop, which needs the chain of package directories.
+  const agent =
+    driver.kind === "agent"
+      ? driver.harbor_agent!
+      : RUNNER_AGENTS[run.task.runner];
   const agentEnv: Record<string, string> = {
     // Host paths. harbor layers --agent-env over every exec the agent runs,
     // so the runner keeps a separate CC_DRIVER_CHAIN for the container copies.
-    CC_HOST_DRIVER_CHAIN: chain.join(":"),
+    ...(driver.kind === "agent"
+      ? {}
+      : {
+          CC_HOST_DRIVER_CHAIN: driverChainDirs(
+            run.driver_name,
+            inputs.packages
+          ).join(":"),
+        }),
     CC_TARGET_JSON: JSON.stringify(target),
     CC_MAX_STEPS: String(run.task.runner === "tau3" ? 200 : 150),
     CC_PROXY_URL: inputs.proxy_url,
@@ -298,7 +312,7 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
     "run",
     ...taskArgs(run),
     "--agent",
-    RUNNER_AGENTS[run.task.runner],
+    agent,
     "--model",
     `${run.target.provider}/${run.target.model}`,
     ...Object.entries(agentEnv).flatMap(([k, v]) => [

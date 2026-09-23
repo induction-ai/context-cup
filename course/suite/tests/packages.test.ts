@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   describe,
   expect,
@@ -165,5 +168,43 @@ describe("providers", () => {
       ["@context-cup-drivers/d", pkg("@context-cup-drivers/d", "driver")],
     ]);
     expect(driverProviders("d", packages)).toEqual([...PROVIDERS]);
+  });
+});
+
+describe("agent packages", () => {
+  it("are runnable drivers with their own providers and no chain", async () => {
+    const packages = samplePackages();
+    expect(findDriver("base_codex", packages).kind).toBe("agent");
+    expect(driverProviders("base_codex", packages)).toEqual(["openai"]);
+  });
+
+  it("must name a harbor agent and cannot extend an engine", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cup-agent-"));
+    try {
+      const pkg = join(dir, "drivers", "bad");
+      mkdirSync(pkg, { recursive: true });
+      writeFileSync(
+        join(pkg, "package.json"),
+        JSON.stringify({
+          name: "@context-cup-drivers/bad",
+          contextCup: { kind: "agent" },
+        })
+      );
+      expect(() => scanPackages(dir)).toThrow(/harbor_agent/);
+      writeFileSync(
+        join(pkg, "package.json"),
+        JSON.stringify({
+          name: "@context-cup-drivers/bad",
+          contextCup: {
+            kind: "agent",
+            harbor_agent: "x.y:Z",
+            extends: "@context-cup/engine-python",
+          },
+        })
+      );
+      expect(() => scanPackages(dir)).toThrow(/does not extend/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

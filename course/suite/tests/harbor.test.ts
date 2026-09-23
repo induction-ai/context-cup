@@ -171,3 +171,30 @@ describe("helpers", () => {
     );
   });
 });
+
+describe("agent-kind drivers", () => {
+  it("run harbor's own agent through the proxy, with no driver chain", async () => {
+    stub();
+    const command = buildHarborCommand({
+      run: sampleRun({ driver_name: "base_codex" }),
+      job_id: "j_codex",
+      suite_dir: "/tmp/suite",
+      harbor_env: "docker",
+      concurrency: 1,
+      packages,
+      proxy_url: "http://host.docker.internal:6123",
+    });
+    const agentIndex = command.argv.indexOf("--agent");
+    expect(command.argv[agentIndex + 1]).toBe(
+      "context_cup_runner.codex:CodexAgent"
+    );
+    expect(
+      command.argv.some((a) => a.startsWith("CC_HOST_DRIVER_CHAIN="))
+    ).toBe(false);
+    expect(command.argv).toContain(
+      "CC_PROXY_URL=http://host.docker.internal:6123"
+    );
+    expect(command.argv.some((a) => /_API_KEY=/.test(a))).toBe(false);
+    expect(command.env.PYTHONPATH).toContain("course/runner/src");
+  });
+});

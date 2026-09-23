@@ -66,3 +66,10 @@ The tests drive the loop with a fake two-package chain whose engine answers
 in each provider's response format, and an in-memory environment. Nothing
 touches the network, docker, or harbor. `tests/test_providers.py` covers the
 adapters against hand-built API-shaped fixtures.
+
+## Whole agents
+
+`codex.py` wraps harbor's Codex agent as `context_cup_runner.codex:CodexAgent`
+for `kind: agent` drivers. It sets the per-trial proxy base URL and the
+placeholder key before harbor installs Codex, and forwards the target's
+reasoning effort. Nothing else from this package runs for such a trial.

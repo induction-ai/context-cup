@@ -120,6 +120,15 @@ export function createApp(options: ProxyOptions) {
       next();
       return;
     }
+    // Codex first tries the Responses API over a WebSocket. This proxy speaks
+    // HTTP only; a fast, clear refusal makes the client fall back to HTTP
+    // streaming instead of retrying against an unrelated upstream error.
+    if ((req.headers.upgrade ?? "").toLowerCase() === "websocket") {
+      res.status(426).json({
+        error: "the course proxy speaks HTTP only; use HTTP streaming",
+      });
+      return;
+    }
     const trial_id = decodeURIComponent(match[1]!);
     const provider = match[2] as Provider;
     const rest = match[3]!;

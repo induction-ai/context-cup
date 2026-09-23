@@ -84,6 +84,14 @@ export function samplePackages(): Map<string, CupPackage> {
       config: { max_bytes: 100000 },
       description: "Clips oversized tool results.",
     },
+    {
+      name: "@context-cup-drivers/base_codex",
+      dir: "/ws/drivers/base_codex",
+      kind: "agent",
+      harbor_agent: "context_cup_runner.codex:CodexAgent",
+      providers: ["openai"],
+      description: "Codex CLI as a whole agent.",
+    },
   ];
   return new Map(pkgs.map((p) => [p.name, p]));
 }

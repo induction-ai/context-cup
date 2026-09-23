@@ -219,5 +219,7 @@ describe("failures in the finish hook", () => {
     expect(
       lines.some((l) => l.includes("failed (ingest: bad usage.json)"))
     ).toBe(true);
+    // The start line is followed by the exact command, as run.
+    expect(lines.some((l) => l === "[a] $ true")).toBe(true);
   });
 });

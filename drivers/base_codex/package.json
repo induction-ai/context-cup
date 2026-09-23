@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "name": "@context-cup-drivers/base_codex",
+  "version": "0.1.0",
+  "description": "OpenAI's Codex CLI running the task itself, via harbor's Codex agent. Owns its own context; compared on score and cost.",
+  "contextCup": {
+    "kind": "agent",
+    "harbor_agent": "context_cup_runner.codex:CodexAgent",
+    "providers": [
+      "openai"
+    ]
+  }
+}
