@@ -1,0 +1,20 @@
+{
+  "gpt-5.5@medium": {
+    "provider": "openai",
+    "model": "gpt-5.5",
+    "reasoning_effort": "medium"
+  },
+  "gpt-5.5@low": {
+    "provider": "openai",
+    "model": "gpt-5.5",
+    "reasoning_effort": "low"
+  },
+  "claude-sonnet-4-6": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-6"
+  },
+  "gemini-3.1-pro-preview": {
+    "provider": "gemini",
+    "model": "gemini-3.1-pro-preview"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "75d94dec-1d84-4fef-a337-05de0515e7d0",
+  "id": "7c49b644-704e-43c1-87a9-e1960c0d93e3",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -555,6 +555,84 @@
       "generated": null,
       "identity": null,
       "name": "key_file",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "driver_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "target_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "model",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "reasoning_effort",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "suite"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "count",
       "entityType": "columns",
       "schema": "public",
       "table": "suite"

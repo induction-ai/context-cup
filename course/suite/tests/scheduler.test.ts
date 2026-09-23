@@ -122,6 +122,34 @@ describe("processQueue", () => {
     expect(fake.order).toEqual(["a", "c", "b"]);
   });
 
+  it("caps a target's concurrency across every task, merged with the task caps", async () => {
+    const fake: Fake = { running: [], max: 0, order: [], resolve: new Map() };
+    const throttled = {
+      provider: "openai" as const,
+      model: "m",
+      concurrency: 1,
+    };
+    const queue = [
+      entry("a", { run: sampleRun({ task_name: "t1", target: throttled }) }),
+      entry("b", { run: sampleRun({ task_name: "t2", target: throttled }) }),
+    ];
+    const running = processQueue(queue, {
+      suite_concurrency: 64,
+      docker_jobs: 0,
+      log_dir: "/tmp",
+      launcher: fakeLauncher(fake),
+      report: quiet,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(fake.running).toEqual(["a"]);
+    fake.resolve.get("a")!();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(fake.running).toEqual(["b"]);
+    fake.resolve.get("b")!();
+    await running;
+    expect(fake.order).toEqual(["a", "b"]);
+  });
+
   it("stops admitting after abort and reports cancelled", async () => {
     const fake: Fake = { running: [], max: 0, order: [], resolve: new Map() };
     const controller = new AbortController();

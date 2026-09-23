@@ -42,7 +42,8 @@ uv run pytest              Python test suite (runner and engines)
 uv run ruff check .        Python lint
 pnpm typecheck             tsc across every package
 pnpm lint / pnpm format    prettier
-bin/suite <key> [--dry_run]   run a suite file from suites/
+bin/suite <key> --driver <d> --target <t> [--count N] [--dry_run]
+                           run a suite file with one driver against one target (targets.json)
 bin/db generate            write a migration for schema.ts changes
 bin/db migrate             apply pending migrations
 bin/db check               verify migrations, snapshots, and schema.ts agree

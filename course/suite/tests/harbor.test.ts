@@ -12,7 +12,12 @@ import {
   shellString,
   targetJson,
 } from "../src/harbor.ts";
-import { samplePackages, sampleRun, sampleSuite } from "./helpers.ts";
+import {
+  samplePackages,
+  sampleRun,
+  sampleSuite,
+  sampleTargets,
+} from "./helpers.ts";
 
 const env = {
   HARBOR_DIR: "/opt/harbor",
@@ -99,7 +104,7 @@ describe("buildHarborCommand", () => {
         task: file.tasks.sales_accounting!,
         runner: "toolathlon",
         target_name: "claude-sonnet-4-6",
-        target: file.targets["claude-sonnet-4-6"]!,
+        target: sampleTargets()["claude-sonnet-4-6"]!,
         count: 1,
       }),
       job_id: "j_tool",

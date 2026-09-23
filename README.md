@@ -59,33 +59,32 @@ for inspection.
 
 ## Running a suite
 
-A suite file under `suites/` names the tasks, the drivers, and the targets
-(provider and model) to race. `bin/suite` expands the matrix into one harbor
-job per cell, runs them under a concurrency cap, and records every trial and
-model call in Postgres plus a `results.json` next to the logs.
-
-Prerequisites beyond the setup above:
-
-- Docker running (the default sandbox), or `DAYTONA_API_KEY` for `--harbor_env daytona`.
-- `uv` and Python 3.12 or newer. The first run clones the harbor fork into
-  `.harbor/repo` and syncs its venv; set `HARBOR_DIR=global` to use a harbor on
-  your PATH instead.
-- Provider keys in `.env`: `OPENAI_API_KEY` is always needed (the tau3 user
-  simulator runs on it), plus the key for each target's provider.
-- Optional `secrets/` (gitignored): `toolathlon_auth_configs.zip` unlocks the
-  71 toolathlon tasks that need real service credentials, and `mcp/` holds the
-  Notion OAuth state for the nine Notion tasks.
+A run is one suite file, one driver, and one target model.
 
 ```
-bin/suite smoke_tau --dry_run          print the jobs and harbor commands, run nothing
-bin/suite smoke_tau                    one banking task, one driver, the default target
-bin/suite toolathlon --task sales_accounting --driver base_truncate
-bin/suite tau_banking --target claude-sonnet-4-6 --harbor_env daytona
+bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium
+bin/suite toolathlon_local --driver base_truncate --target gpt-5.5@medium --count 2
+bin/suite smoke_tau                       # prompts for the driver, then a target it supports
+bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
 ```
 
-Naming a task, driver, or target on the command line selects only those and
-includes entries marked `explicit_only` in the suite file. Output lands under
-`.temp/suites/<suite_id>/`: one log per job, harbor's own job directory with
-each trial's `agent/turns/`, and `results.json` and `results.txt` at the end.
-Local docker runs are capped at two jobs at once on arm64 and four on x86;
-`SUITE_DOCKER_COUNT` overrides that.
+- `suites/*.json` list the tasks and how hard to run them (concurrency,
+  timeouts). Nothing else.
+- `targets.json` at the repo root names the target models: provider, model,
+  reasoning effort, and an optional `concurrency` cap for provider rate
+  limits, merged with the suite's and each task's caps by the scheduler. `--target` refers to a name in it (`TARGETS_FILE`
+  overrides the path).
+- `--driver` is a package under `drivers/`; it must declare support for the
+  target's provider in its `package.json`.
+- `--count` is attempts per task. `--task` narrows to named tasks.
+- `--harbor_env daytona` runs in Daytona sandboxes instead of local Docker
+  (needs `DAYTONA_API_KEY`).
+
+Prerequisites: Docker running, uv, Python 3.12, provider keys in `.env`, and
+the harbor fork, which the first run clones into `.harbor/repo`. Toolathlon
+tasks that need credentials read `secrets/toolathlon_auth_configs.zip` when
+present.
+
+Output lands in `.temp/suites/<suite_id>/` (`results.json`, `results.txt`,
+`logs/suite.log`, and every trial's artifacts) and in Postgres: `suite`,
+`job`, `trial`, and `model_call` rows.

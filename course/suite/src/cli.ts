@@ -2,6 +2,7 @@ import "@context-cup/shared/load_env.js";
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import readline from "node:readline/promises";
 import {
   closeDb,
   getCurrentTransaction,
@@ -14,7 +15,6 @@ import { eq } from "drizzle-orm";
 import pino from "pino";
 import yargs from "yargs";
 import {
-  dropUnsupported,
   expandSuite,
   interleave,
   type Selection,
@@ -32,14 +32,17 @@ import {
 import { newId } from "./ids.ts";
 import { ingestJob, insertJob, markJobStarted, parseJob } from "./ingest.ts";
 import { listSuiteKeys, loadSuiteFile } from "./keys.ts";
-import { driverProviders } from "./packages.ts";
+import { resolveLaunch, type Asker, type Choice } from "./launch.ts";
+import { workspacePackages } from "./packages.ts";
 import {
+  resultsHeader,
   resultsTable,
   summarizeCell,
   writeResults,
   type CellResult,
 } from "./results.ts";
 import { dockerJobCap, processQueue, type QueueEntry } from "./scheduler.ts";
+import { describeTarget, loadTargets } from "./targets.ts";
 
 function gitSha(): string | null {
   try {
@@ -58,7 +61,7 @@ function list(value: unknown): string[] | undefined {
   return items.length > 0 ? items : undefined;
 }
 
-/** Concurrent trials inside one harbor job: as many as the cell allows. */
+/** Concurrent trials inside one harbor job: as many as the task allows. */
 export function jobConcurrency(
   run: SuiteRun,
   suite_concurrency: number
@@ -74,29 +77,65 @@ export function jobConcurrency(
   );
 }
 
+/** Numbered choices on the terminal; the answer is a number or a name. */
+function terminalAsker(): Asker | null {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return null;
+  return async (question: string, choices: Choice[]) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    try {
+      console.log(`\n${question}:`);
+      const width = Math.max(...choices.map((c) => c.name.length));
+      choices.forEach((c, i) => {
+        const detail = c.detail ? `  ${c.detail}` : "";
+        console.log(
+          `  ${String(i + 1).padStart(2)}. ${c.name.padEnd(width)}${detail}`
+        );
+      });
+      for (;;) {
+        const answer = (
+          await rl.question(`${question} [1-${choices.length}]: `)
+        ).trim();
+        const index = /^\d+$/.test(answer)
+          ? Number(answer) - 1
+          : choices.findIndex((c) => c.name === answer);
+        if (index >= 0 && index < choices.length) return index;
+        console.log(`  pick 1-${choices.length} or a name from the list`);
+      }
+    } finally {
+      rl.close();
+    }
+  };
+}
+
 async function main(): Promise<void> {
   const argv = yargs(process.argv.slice(2))
     .scriptName("bin/suite")
     .usage(
-      `Usage: $0 <suite_key> [options]\n\nRun a suite: every task × driver × target in suites/<suite_key>.json.\nAvailable keys: ${listSuiteKeys().join(", ") || "(none)"}`
+      `Usage: $0 <suite_key> --driver <name> --target <name> [options]\n\nRun the tasks of suites/<suite_key>.json with one driver against one target.\nOmit --driver or --target on a terminal to pick from a list.\nAvailable keys: ${listSuiteKeys().join(", ") || "(none)"}`
     )
     .command("$0 <suite_key>", "Run a suite", (y) =>
       y.positional("suite_key", { type: "string", demandOption: true })
     )
-    .option("task", {
-      type: "string",
-      array: true,
-      describe: "Only these tasks",
-    })
     .option("driver", {
       type: "string",
-      array: true,
-      describe: "Only these drivers",
+      describe: "The driver package under drivers/, by short name",
     })
     .option("target", {
       type: "string",
+      describe: "A target name from targets.json",
+    })
+    .option("count", {
+      type: "number",
+      default: 1,
+      describe: "Trials per task (harbor --n-attempts)",
+    })
+    .option("task", {
+      type: "string",
       array: true,
-      describe: "Only these targets",
+      describe: "Only these tasks (includes explicit_only ones)",
     })
     .option("harbor_env", {
       choices: ["docker", "daytona"] as const,
@@ -125,27 +164,21 @@ async function main(): Promise<void> {
   const suite_key = argv.suite_key as string;
   const harbor_env = argv.harbor_env as HarborEnv;
   const { path: key_file, file } = loadSuiteFile(suite_key);
-  const selection: Selection = {
-    task: list(argv.task),
-    driver: list(argv.driver),
-    target: list(argv.target),
-  };
-  const expanded = dropUnsupported(expandSuite(file, selection), (name) =>
-    driverProviders(name)
-  );
-  for (const s of expanded.skipped) {
-    console.log(
-      `skipping ${s.driver_name} × ${s.target_name}: the driver does not support provider ${s.provider}`
-    );
+  const count = argv.count;
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error("--count must be a positive integer");
   }
-  const runs = interleave(expanded.runs);
-  if (runs.length === 0) {
-    throw new Error(
-      expanded.skipped.length > 0
-        ? "The selection expands to no jobs: every driver × target pair is unsupported."
-        : "The selection expands to no jobs."
-    );
-  }
+  const launch = await resolveLaunch({
+    driver: argv.driver,
+    target: argv.target,
+    targets: loadTargets(),
+    packages: workspacePackages(),
+    ask: terminalAsker(),
+  });
+  const spec = { ...launch, count };
+  const selection: Selection = { task: list(argv.task) };
+  const runs = interleave(expandSuite(file, spec, selection));
+  if (runs.length === 0) throw new Error("The selection expands to no jobs.");
 
   const suite_id = newId("s");
   const suite_dir = path.resolve(
@@ -190,7 +223,7 @@ async function main(): Promise<void> {
 
   if (argv.dry_run) {
     console.log(
-      `suite ${file.suite_name} (${key_file}): ${entries.length} job(s), harbor_env ${harbor_env}, docker cap ${docker_jobs || "none"}`
+      `suite ${file.suite_name} (${key_file}): ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}), count ${count}, harbor_env ${harbor_env}, docker cap ${docker_jobs || "none"}`
     );
     if (!harborProvisioned()) {
       console.log(
@@ -200,7 +233,7 @@ async function main(): Promise<void> {
     for (const w of warnings) console.log(`warning: ${w}`);
     for (const e of entries) {
       console.log(
-        `\n# ${e.job_id}: ${e.run.task_name} × ${e.run.driver_name} × ${e.run.target_name} (count ${e.run.count}, concurrency ${e.concurrency_use})`
+        `\n# ${e.job_id}: ${e.run.task_name} (count ${e.run.count}, concurrency ${e.concurrency_use})`
       );
       console.log(`# env: ${e.command.env_names.join(" ")}`);
       console.log(e.command.shell);
@@ -217,7 +250,7 @@ async function main(): Promise<void> {
     logger.info({ event: "report", line });
   };
   report(
-    `suite ${suite_id}: ${file.suite_name}, ${entries.length} job(s) → ${path.relative(process.cwd(), suite_dir)}`
+    `suite ${suite_id}: ${file.suite_name}, ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}) → ${path.relative(process.cwd(), suite_dir)}`
   );
 
   prepareHarbor(report);
@@ -229,6 +262,12 @@ async function main(): Promise<void> {
         id: suite_id,
         name: file.suite_name,
         keyFile: path.relative(REPO_ROOT, key_file),
+        driverName: spec.driver_name,
+        targetName: spec.target_name,
+        provider: spec.target.provider,
+        model: spec.target.model,
+        reasoningEffort: spec.target.reasoning_effort ?? null,
+        count,
         gitSha: gitSha(),
         harborEnv: harbor_env,
         logDir: suite_dir,
@@ -251,11 +290,12 @@ async function main(): Promise<void> {
     suite_id,
     key_file,
     harbor_env,
+    driver: spec.driver_name,
+    target: spec.target_name,
+    count,
     jobs: entries.map((e) => ({
       job_id: e.job_id,
       task: e.run.task_name,
-      driver: e.run.driver_name,
-      target: e.run.target_name,
       command: e.command.shell,
     })),
   });
@@ -322,27 +362,25 @@ async function main(): Promise<void> {
     .update(suiteTable)
     .set({ finishedAt: finished_at })
     .where(eq(suiteTable.id, suite_id));
-  cells.sort(
-    (a, b) =>
-      a.task_name.localeCompare(b.task_name) ||
-      a.driver_name.localeCompare(b.driver_name) ||
-      a.target_name.localeCompare(b.target_name)
-  );
-  writeResults(path.join(suite_dir, "results.json"), {
+  cells.sort((a, b) => a.task_name.localeCompare(b.task_name));
+  const results_out = {
     suite_id,
     suite_name: file.suite_name,
+    driver_name: spec.driver_name,
+    target_name: spec.target_name,
+    target: spec.target,
+    count,
     started_at: started_at.toISOString(),
     finished_at: finished_at.toISOString(),
     git_sha: gitSha(),
     harbor_env,
     jobs: results.map((r) => ({ job_id: r.job_id, ok: r.ok, error: r.error })),
     cells,
-  });
-  writeFileSync(
-    path.join(suite_dir, "results.txt"),
-    resultsTable(cells) + "\n"
-  );
-  console.log("\n" + resultsTable(cells));
+  };
+  writeResults(path.join(suite_dir, "results.json"), results_out);
+  const table = `${resultsHeader(results_out)}\n${resultsTable(cells)}`;
+  writeFileSync(path.join(suite_dir, "results.txt"), table + "\n");
+  console.log("\n" + table);
   console.log(
     `\nresults: ${path.relative(process.cwd(), path.join(suite_dir, "results.json"))}`
   );

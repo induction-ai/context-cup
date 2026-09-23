@@ -141,11 +141,13 @@ export async function processQueue(
   let free = options.suite_concurrency;
   let docker_free = options.docker_jobs;
   const budget_free: Budgets = new Map();
+  // Every cap a job counts against, merged from wherever it was declared:
+  // the task in the suite file, the target in targets.json. The suite's own
+  // concurrency is `free` above.
   const budgets = (entry: QueueEntry): Array<[string, number]> => {
     const { run } = entry;
     return [
       [`task:${run.task_name}`, run.task.concurrency ?? Infinity],
-      [`driver:${run.driver_name}`, Infinity],
       [`target:${run.target_name}`, run.target.concurrency ?? Infinity],
     ];
   };

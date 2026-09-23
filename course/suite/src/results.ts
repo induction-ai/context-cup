@@ -1,11 +1,10 @@
 import { writeFileSync } from "node:fs";
 import type { SuiteRun } from "./expand.ts";
 import type { ParsedTrial } from "./ingest.ts";
+import { describeTarget, type Target } from "./targets.ts";
 
 export type CellResult = {
   task_name: string;
-  driver_name: string;
-  target_name: string;
   /** Trials harbor produced. */
   n: number;
   /** Trials with a reward. */
@@ -22,6 +21,11 @@ export type CellResult = {
 export type SuiteResults = {
   suite_id: string;
   suite_name: string;
+  driver_name: string;
+  target_name: string;
+  target: Target;
+  /** Trials per task. */
+  count: number;
   started_at: string;
   finished_at: string;
   git_sha: string | null;
@@ -46,8 +50,6 @@ export function summarizeCell(
   const turns = trials.flatMap((t) => (t.turns === null ? [] : [t.turns]));
   return {
     task_name: run.task_name,
-    driver_name: run.driver_name,
-    target_name: run.target_name,
     n: trials.length,
     scored: rewards.length,
     errors: trials.filter((t) => t.error !== null).length,
@@ -67,23 +69,21 @@ function fmt(value: number | null, digits: number): string {
   return value === null ? "-" : value.toFixed(digits);
 }
 
-/** A fixed-width table: one line per cell, then one per driver × target. */
+/** The one line above the table saying what the whole run drove. */
+export function resultsHeader(
+  results: Pick<
+    SuiteResults,
+    "driver_name" | "target_name" | "target" | "count"
+  >
+): string {
+  return `driver: ${results.driver_name}  target: ${results.target_name} (${describeTarget(results.target)})  count: ${results.count}`;
+}
+
+/** A fixed-width table: one line per task, then one for all of them. */
 export function resultsTable(cells: CellResult[]): string {
-  const header = [
-    "task",
-    "driver",
-    "target",
-    "n",
-    "scored",
-    "err",
-    "reward",
-    "cost¢",
-    "turns",
-  ];
+  const header = ["task", "n", "scored", "err", "reward", "cost¢", "turns"];
   const rows = cells.map((c) => [
     c.task_name,
-    c.driver_name,
-    c.target_name,
     String(c.n),
     String(c.scored),
     String(c.errors),
@@ -91,29 +91,21 @@ export function resultsTable(cells: CellResult[]): string {
     fmt(c.mean_cost_cents, 1),
     fmt(c.mean_turns, 1),
   ]);
-  const rollup = new Map<string, CellResult[]>();
-  for (const c of cells) {
-    const key = `${c.driver_name}\u0000${c.target_name}`;
-    rollup.set(key, [...(rollup.get(key) ?? []), c]);
-  }
-  for (const group of rollup.values()) {
-    const first = group[0]!;
-    const scored = group.reduce((s, c) => s + c.scored, 0);
+  if (cells.length > 0) {
+    const scored = cells.reduce((s, c) => s + c.scored, 0);
     const reward =
       scored === 0
         ? null
-        : group.reduce((s, c) => s + (c.mean_reward ?? 0) * c.scored, 0) /
+        : cells.reduce((s, c) => s + (c.mean_reward ?? 0) * c.scored, 0) /
           scored;
-    const priced = group.filter((c) => c.mean_cost_cents !== null);
+    const priced = cells.filter((c) => c.mean_cost_cents !== null);
     const cost =
       priced.length === 0 ? null : mean(priced.map((c) => c.mean_cost_cents!));
     rows.push([
       "ALL",
-      first.driver_name,
-      first.target_name,
-      String(group.reduce((s, c) => s + c.n, 0)),
+      String(cells.reduce((s, c) => s + c.n, 0)),
       String(scored),
-      String(group.reduce((s, c) => s + c.errors, 0)),
+      String(cells.reduce((s, c) => s + c.errors, 0)),
       fmt(reward, 3),
       fmt(cost, 1),
       "",
@@ -124,7 +116,7 @@ export function resultsTable(cells: CellResult[]): string {
   );
   const line = (cols: string[]) =>
     cols
-      .map((c, i) => (i < 3 ? c.padEnd(widths[i]!) : c.padStart(widths[i]!)))
+      .map((c, i) => (i === 0 ? c.padEnd(widths[i]!) : c.padStart(widths[i]!)))
       .join("  ");
   return [line(header), ...rows.map(line)].join("\n");
 }

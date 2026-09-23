@@ -64,8 +64,8 @@ engines/python/
 }
 ```
 
-- `kind` is `driver` or `engine`. Suite files name drivers by the part of
-  the package name after `@context-cup-drivers/`. Engines and course packages
+- `kind` is `driver` or `engine`. `bin/suite --driver` names a driver by the
+  part of the package name after `@context-cup-drivers/`. Engines and course packages
   stay under `@context-cup/`.
 - `extends` is the package name of the parent, resolved through the pnpm
   workspace (`course/*`, `engines/*`, `drivers/*`). Absent for a root

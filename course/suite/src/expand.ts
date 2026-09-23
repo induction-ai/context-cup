@@ -1,123 +1,65 @@
-import type {
-  Provider,
-  RunnerName,
-  SuiteDriver,
-  SuiteFile,
-  SuiteTarget,
-  SuiteTask,
-} from "./keys.ts";
+import type { RunnerName, SuiteFile, SuiteTask } from "./keys.ts";
+import type { Target } from "./targets.ts";
 
-/** The three axes of the suite matrix. */
-export type Axis = "task" | "driver" | "target";
+/** What a run drives: the one driver and one target chosen at launch. */
+export type RunSpec = {
+  driver_name: string;
+  target_name: string;
+  target: Target;
+  /** Trials per task (harbor `--n-attempts`). */
+  count: number;
+};
 
-/** One cell of the matrix: a harbor job to run. */
-export type SuiteRun = {
+/** One task of the suite: a harbor job to run. */
+export type SuiteRun = RunSpec & {
   task_name: string;
   task: SuiteTask;
   runner: RunnerName;
-  driver_name: string;
-  driver: SuiteDriver;
-  target_name: string;
-  target: SuiteTarget;
-  /** Trials for this cell (harbor `--n-attempts`). */
-  count: number;
   /** Minutes the agent gets per trial. */
   timeout_minutes: number;
 };
 
-/** CLI filters per axis. Naming an axis on the command line selects only
- *  those entries and lifts their `explicit_only`. */
-export type Selection = Partial<Record<Axis, string[]>>;
+/** Task filter from the command line. Naming tasks selects only those and
+ *  lifts their `explicit_only`. */
+export type Selection = { task?: string[] };
 
-function chosen<T extends { explicit_only?: boolean }>(
-  entries: Record<string, T>,
-  axis: Axis,
+function chosenTasks(
+  file: SuiteFile,
   selection: Selection
-): Array<[string, T]> {
-  const names = selection[axis];
+): Array<[string, SuiteTask]> {
+  const names = selection.task;
   if (names && names.length > 0) {
     return names.map((name) => {
-      const entry = entries[name];
-      if (!entry) {
+      const task = file.tasks[name];
+      if (!task) {
         throw new Error(
-          `Unknown ${axis} "${name}". Available: ${Object.keys(entries).join(", ")}`
+          `Unknown task "${name}". Available: ${Object.keys(file.tasks).join(", ")}`
         );
       }
-      return [name, entry];
+      return [name, task];
     });
   }
-  return Object.entries(entries).filter(([, entry]) => !entry.explicit_only);
+  return Object.entries(file.tasks).filter(([, t]) => !t.explicit_only);
 }
 
-/** tasks × drivers × targets, minus explicit-only entries not named on the
- *  command line. Grouped by task; see {@link interleave} for queue order. */
+/** One run per task, minus explicit-only tasks not named on the command
+ *  line. See {@link interleave} for queue order. */
 export function expandSuite(
   file: SuiteFile,
+  spec: RunSpec,
   selection: Selection = {}
 ): SuiteRun[] {
-  const tasks = chosen(file.tasks, "task", selection);
-  const drivers = chosen(file.drivers, "driver", selection);
-  const targets = chosen(file.targets, "target", selection);
-  const runs: SuiteRun[] = [];
-  for (const [task_name, task] of tasks) {
-    for (const [driver_name, driver] of drivers) {
-      for (const [target_name, target] of targets) {
-        runs.push({
-          task_name,
-          task,
-          runner: task.runner,
-          driver_name,
-          driver,
-          target_name,
-          target,
-          count: driver.count,
-          timeout_minutes: task.timeout_minutes ?? file.timeout_minutes,
-        });
-      }
-    }
-  }
-  return runs;
+  return chosenTasks(file, selection).map(([task_name, task]) => ({
+    ...spec,
+    task_name,
+    task,
+    runner: task.runner,
+    timeout_minutes: task.timeout_minutes ?? file.timeout_minutes,
+  }));
 }
 
-export type SkippedRun = {
-  driver_name: string;
-  target_name: string;
-  provider: Provider;
-};
-
-/** Drop cells whose driver does not support the target's provider.
- *  `providersOf` resolves a driver's supported providers (see
- *  `driverProviders` in packages.ts); unsupported cells come back in
- *  `skipped` so the caller can say so. */
-export function dropUnsupported(
-  runs: SuiteRun[],
-  providersOf: (driver_name: string) => readonly Provider[]
-): { runs: SuiteRun[]; skipped: SkippedRun[] } {
-  const kept: SuiteRun[] = [];
-  const skipped: SkippedRun[] = [];
-  const seen = new Set<string>();
-  for (const run of runs) {
-    if (providersOf(run.driver_name).includes(run.target.provider)) {
-      kept.push(run);
-      continue;
-    }
-    const key = `${run.driver_name}|${run.target_name}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      skipped.push({
-        driver_name: run.driver_name,
-        target_name: run.target_name,
-        provider: run.target.provider,
-      });
-    }
-  }
-  return { runs: kept, skipped };
-}
-
-/** Reorder so consecutive entries are different tasks and a task's
- *  driver/target cells come out in random order. The scheduler admits the
- *  first pending entries that fit, so expanded order would start one task
- *  against every driver and target at once. */
+/** Reorder so consecutive entries are different tasks, drawing at random
+ *  within a task. With one run per task this is a shuffle across tasks. */
 export function interleave(
   runs: readonly SuiteRun[],
   random: () => number = Math.random

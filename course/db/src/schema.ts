@@ -14,10 +14,19 @@ import {
 } from "drizzle-orm/pg-core";
 
 /** One `bin/suite` invocation. */
+/** One `bin/suite` run: a suite file's tasks, driven by one driver against
+ *  one target. */
 export const suite = pgTable("suite", {
   id: text().primaryKey(),
   name: text().notNull(),
   keyFile: text().notNull(),
+  driverName: text().notNull(),
+  targetName: text().notNull(),
+  provider: text().notNull().$type<Provider>(),
+  model: text().notNull(),
+  reasoningEffort: text(),
+  /** Trials per task (harbor `--n-attempts`). */
+  count: integer().notNull(),
   gitSha: text(),
   harborEnv: text().notNull(),
   logDir: text().notNull(),
