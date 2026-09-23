@@ -3,7 +3,7 @@
     python -m context_cup_runner.loop
 
 Settings arrive as CC_* environment variables (see README.md). The loop
-writes turns/, usage.json, trajectory.json, summary.json, and the final
+writes turns/, trajectory.json, summary.json, and the final
 original_payload.json and context_payload.json under CC_AGENT_DIR, which
 harbor copies out of the container.
 """
@@ -16,6 +16,8 @@ import json
 import os
 import sys
 import traceback
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,17 +29,16 @@ from .chain import DriverChain, run_script, run_turn_script
 from .clipping import clip_tool_output
 from .environment import Environment, StepResult
 from .protocol import (
-    PROVIDER_CLIENTS,
-    PROVIDER_KEY_VARS,
-    REDACTED,
+    PLACEHOLDER_KEY,
     Dirs,
     ProviderInfo,
     Target,
     TargetSpec,
     TurnInput,
     TurnOutput,
-    Usage,
     new_turn_id,
+    proxy_client,
+    proxy_env,
     validate_output,
 )
 from .providers import Extracted, Payload, ProviderAdapter, ToolCallRef, adapter_for
@@ -52,12 +53,22 @@ class TrialError(RuntimeError):
     """The trial cannot continue; harbor records the message."""
 
 
-def api_key_from_env(provider: str, env: dict[str, str]) -> str:
-    for name in PROVIDER_KEY_VARS.get(provider, ()):  # type: ignore[call-overload]
-        value = env.get(name)
-        if value:
-            return value
-    return ""
+def announce_turn(proxy_url: str, trial_id: str, turn_id: str) -> None:
+    """Tell the proxy which turn is starting so it tags the calls that
+    follow. Best effort: a proxy that cannot be reached is logged, and the
+    turn still runs (its calls then carry no turn id)."""
+    body = json.dumps({"turn_id": turn_id}).encode()
+    request = urllib.request.Request(
+        f"{proxy_url.rstrip('/')}/t/{trial_id}/turn",
+        data=body,
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5):
+            pass
+    except (urllib.error.URLError, OSError) as exc:
+        print(f"[runner] could not announce {turn_id} to the proxy: {exc}", flush=True)
 
 
 @dataclass
@@ -66,7 +77,7 @@ class Settings:
     agent_dir: Path
     chain: DriverChain
     target: Target
-    api_key: str = ""
+    proxy_url: str = ""
     turn_retries: int = DEFAULT_TURN_RETRIES
     max_steps: int = DEFAULT_MAX_STEPS
     max_tool_output_chars: int = DEFAULT_MAX_TOOL_OUTPUT_CHARS
@@ -88,7 +99,7 @@ class Settings:
             agent_dir=Path(env.get("CC_AGENT_DIR") or "/logs/agent"),
             chain=DriverChain.from_env_value(need("CC_DRIVER_CHAIN")),
             target=target,
-            api_key=api_key_from_env(target.provider, env),
+            proxy_url=need("CC_PROXY_URL"),
             turn_retries=int(env.get("CC_TURN_RETRIES") or DEFAULT_TURN_RETRIES),
             max_steps=int(env.get("CC_MAX_STEPS") or default_max_steps),
             max_tool_output_chars=int(
@@ -102,9 +113,13 @@ class Settings:
     def provider_info(self) -> ProviderInfo:
         return ProviderInfo(
             name=self.target.provider,
-            api_key=self.api_key,
-            client=PROVIDER_CLIENTS[self.target.provider],
+            api_key=PLACEHOLDER_KEY,
+            client=proxy_client(self.proxy_url, self.trial_id, self.target.provider),
         )
+
+    def script_env(self) -> dict[str, str]:
+        """Base URLs and placeholder keys for whatever client a driver uses."""
+        return proxy_env(self.proxy_url, self.trial_id)
 
 
 @dataclass
@@ -112,8 +127,6 @@ class TrialResult:
     stop_reason: str
     turns: int
     env_tool_calls: int
-    usage: Usage
-    calls: list[dict[str, Any]]
     errors: list[dict[str, Any]] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -139,8 +152,6 @@ class Trial:
         self.tools: list[dict[str, Any]] = []
         self.workspace_dir: str | None = None
         self.turn_records: list[TurnRecord] = []
-        self.calls: list[dict[str, Any]] = []
-        self.totals = Usage()
         self.errors: list[dict[str, Any]] = []
         self.turn_counter = 0
         self.env_tool_calls = 0
@@ -194,30 +205,21 @@ class Trial:
             payload.model_dump_json(exclude_none=True, indent=2), encoding="utf-8"
         )
 
-    @staticmethod
-    def _redact_input(turn_dir: Path, payload: TurnInput) -> None:
-        """The turn directory is copied out as an artifact: once the driver
-        has run, the persisted input.json must not carry the key."""
-        redacted = payload.model_copy(deep=True)
-        redacted.provider.api_key = REDACTED
-        Trial._write_input(turn_dir, redacted)
-
     def _run_once(
         self, turn_index: int
     ) -> tuple[str, TurnOutput | None, Extracted | None, str | None]:
         turn_id, turn_dir = self._next_turn_dir()
         payload = self._turn_input(turn_id, turn_dir, turn_index)
         self._write_input(turn_dir, payload)
-        try:
-            run = run_turn_script(
-                self.chain,
-                turn_dir,
-                trial_id=self.settings.trial_id,
-                state_dir=self.state_dir,
-                timeout_sec=self.settings.turn_timeout_sec,
-            )
-        finally:
-            self._redact_input(turn_dir, payload)
+        announce_turn(self.settings.proxy_url, self.settings.trial_id, turn_id)
+        run = run_turn_script(
+            self.chain,
+            turn_dir,
+            trial_id=self.settings.trial_id,
+            state_dir=self.state_dir,
+            timeout_sec=self.settings.turn_timeout_sec,
+            extra_env=self.settings.script_env(),
+        )
         if run.returncode != 0:
             tail = run.stderr.strip().splitlines()[-5:]
             return (
@@ -272,12 +274,7 @@ class Trial:
             self.state = output.state
         self.adapter.append_response(self.original, output.response)
         self.adapter.append_response(self.context, copy.deepcopy(output.response))
-        self.turn_records.append(TurnRecord(output.turn_id, output.calls))
-        for call in output.calls:
-            self.totals.add(call.usage)
-            entry = call.model_dump(mode="json")
-            entry["turn_id"] = output.turn_id
-            self.calls.append(entry)
+        self.turn_records.append(TurnRecord(output.turn_id))
 
     # -- the loop ---------------------------------------------------------
 
@@ -357,8 +354,6 @@ class Trial:
             stop_reason,
             turns,
             self.env_tool_calls,
-            self.totals,
-            self.calls,
             self.errors,
             extra,
         )
@@ -392,10 +387,6 @@ class Trial:
     def write_artifacts(
         self, stop_reason: str, turns: int, extra: dict[str, Any]
     ) -> None:
-        _write_json(
-            self.agent_dir / "usage.json",
-            {"calls": self.calls, "totals": self.totals.model_dump()},
-        )
         _write_json(self.agent_dir / "original_payload.json", self.original)
         _write_json(self.agent_dir / "context_payload.json", self.context)
         trajectory = build_trajectory(
@@ -404,7 +395,6 @@ class Trial:
             turns=self.turn_records,
             target=self.settings.target,
             tools=self.tools,
-            totals=self.totals,
             runner_version=__version__,
             driver=self.driver_info(),
         )
@@ -421,7 +411,6 @@ class Trial:
                 "provider": self.settings.target.provider,
                 "target": self.settings.target.model_dump(mode="json"),
                 "benchmark": self.environment.name,
-                "usage": self.totals.model_dump(),
                 "started_at": self.started_at,
                 "finished_at": _now(),
                 "extra": extra,
@@ -458,11 +447,7 @@ async def async_main(env: dict[str, str]) -> int:
         f"{settings.target.provider}:{settings.target.model}",
         flush=True,
     )
-    if not settings.api_key:
-        print(
-            f"[runner] no API key for {settings.target.provider} in the environment",
-            flush=True,
-        )
+    print(f"[runner] model calls go through {settings.proxy_url}", flush=True)
     try:
         result = await trial.run()
     except TrialError as exc:
@@ -473,7 +458,7 @@ async def async_main(env: dict[str, str]) -> int:
         return 3
     print(
         f"[runner] done: stop_reason={result.stop_reason} turns={result.turns} "
-        f"tokens in/out={result.usage.input}/{result.usage.output}",
+        f"tool_calls={result.env_tool_calls}",
         flush=True,
     )
     return 0

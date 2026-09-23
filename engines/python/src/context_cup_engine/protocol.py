@@ -8,9 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 PROTOCOL_VERSION = 2
 
-# Mirrors PROVIDERS and WIRES in course/shared/src/provider.ts.
+# Mirrors PROVIDERS in course/shared/src/provider.ts.
 Provider = Literal["openai", "anthropic", "gemini"]
-Wire = Literal["responses", "completions", "anthropic", "gemini"]
 
 # A provider request body or response object: JSON, shape owned by the provider.
 Payload = dict[str, Any]
@@ -62,42 +61,6 @@ class TurnInput(BaseModel):
     dirs: Dirs
 
 
-class Usage(BaseModel):
-    input: int = 0
-    cached_input: int = 0
-    cache_write_input: int = 0
-    output: int = 0
-    reasoning_output: int = 0
-
-    def add(self, other: Usage) -> Usage:
-        return Usage(
-            input=self.input + other.input,
-            cached_input=self.cached_input + other.cached_input,
-            cache_write_input=self.cache_write_input + other.cache_write_input,
-            output=self.output + other.output,
-            reasoning_output=self.reasoning_output + other.reasoning_output,
-        )
-
-
-class ModelCall(BaseModel):
-    # The provider family the call is billed under. When the host is not a
-    # known provider endpoint, the wire decides: an OpenAI-shaped call to a
-    # gateway is still an OpenAI call.
-    provider: Provider
-    # The endpoint host the call went to.
-    host: str = ""
-    model: str = Field(min_length=1)
-    wire: Wire
-    purpose: str = "turn"
-    usage: Usage | None = None
-    duration_ms: int = 0
-    service_tier: str | None = None
-    status: int | None = None
-    request_bytes: int = 0
-    response_bytes: int = 0
-    streamed: bool = False
-
-
 class DriverInfo(BaseModel):
     name: str
     engine: str
@@ -110,5 +73,4 @@ class TurnOutput(BaseModel):
     response: Payload
     context_payload: Payload | None = None
     state: JsonValue = None
-    calls: list[ModelCall] = Field(default_factory=list)
     driver: DriverInfo

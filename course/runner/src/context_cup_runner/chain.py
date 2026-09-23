@@ -108,9 +108,16 @@ class DriverChain:
         }
 
     def script_env(
-        self, package: Package, *, trial_id: str, state_dir: Path
+        self,
+        package: Package,
+        *,
+        trial_id: str,
+        state_dir: Path,
+        extra: dict[str, str] | None = None,
     ) -> dict[str, str]:
         env = dict(os.environ)
+        if extra:
+            env.update(extra)
         env.update(
             {
                 "CC_DRIVER_DIR": str(self.leaf.dir),
@@ -165,11 +172,14 @@ def run_turn_script(
     trial_id: str,
     state_dir: Path,
     timeout_sec: float | None,
+    extra_env: dict[str, str] | None = None,
 ) -> ScriptRun:
     """Run the chain's run.sh for one turn, capturing stdout and stderr into
     the turn directory."""
     package, script = chain.run_script()
-    env = chain.script_env(package, trial_id=trial_id, state_dir=state_dir)
+    env = chain.script_env(
+        package, trial_id=trial_id, state_dir=state_dir, extra=extra_env
+    )
     env["CC_TURN_DIR"] = str(turn_dir)
     run = run_script(
         script,

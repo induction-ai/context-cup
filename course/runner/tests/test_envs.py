@@ -107,7 +107,7 @@ def test_host_agent_env_and_tau3_seed(monkeypatch, tmp_path: Path):
     extra = {
         "CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "m"}),
         "CC_HOST_DRIVER_CHAIN": f"{engine}:{leaf}",
-        "OPENAI_API_KEY": "k",
+        "CC_PROXY_URL": "http://host.docker.internal:6123",
         "CC_MAX_STEPS": "5",
     }
     agent = Tau3Agent(logs, extra_env=extra, mcp_servers=[server])
@@ -116,7 +116,8 @@ def test_host_agent_env_and_tau3_seed(monkeypatch, tmp_path: Path):
     assert env["CC_BENCHMARK"] == "tau3"
     assert env["CC_TRIAL_ID"] == "tau3-banking-1__abc123"
     assert env["CC_TAU3_MCP_URL"] == server.url
-    assert env["OPENAI_API_KEY"] == "k" and env["CC_MAX_STEPS"] == "5"
+    assert env["CC_PROXY_URL"] == "http://host.docker.internal:6123"
+    assert "OPENAI_API_KEY" not in env and env["CC_MAX_STEPS"] == "5"
     assert (
         env["CC_DRIVER_CHAIN"]
         == "/installed-agent/chain/00_python:/installed-agent/chain/01_base_x"
@@ -152,6 +153,7 @@ def test_toolathlon_agent_settings(monkeypatch, tmp_path: Path):
     (tmp_path / "leaf").mkdir()
     extra = {
         "CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "m"}),
+        "CC_PROXY_URL": "http://host.docker.internal:6123",
         "CC_HOST_DRIVER_CHAIN": str(tmp_path / "leaf"),
     }
     agent = ToolathlonAgent(

@@ -1,7 +1,7 @@
 """`python3 -m context_cup_engine --driver DIR --input in.json --output out.json`
 
 Runs one turn: loads the driver, hands it the context, and writes what the
-model answered plus every call that happened along the way.
+model answered. Accounting happens in the run's proxy, not here.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from typing import Any
 from .drivers import DriverSpec, load_driver_module
 from .engine import TurnContext
 from .protocol import DriverInfo, Payload, TurnInput, TurnOutput
-from .recorder import global_recorder
 
 __version__ = "0.2.0"
 
@@ -40,13 +39,10 @@ def _as_payload(value: Any) -> Payload:
 def run_turn(driver_dir: Path, turn: TurnInput) -> TurnOutput:
     spec = DriverSpec.load(driver_dir)
     module = load_driver_module(spec)
-    recorder = global_recorder()
-    recorder.install()
     Path(turn.dirs.state).mkdir(parents=True, exist_ok=True)
     ctx = TurnContext(
         turn=turn,
         config=spec.config,
-        recorder=recorder,
         context_payload=copy.deepcopy(turn.context_payload),
         state=copy.deepcopy(turn.state),
     )
@@ -56,7 +52,6 @@ def run_turn(driver_dir: Path, turn: TurnInput) -> TurnOutput:
         response=response,
         context_payload=ctx.context_payload,
         state=ctx.state,
-        calls=ctx.calls(),
         driver=DriverInfo(name=spec.name, engine=spec.engine, version=spec.version),
     )
 

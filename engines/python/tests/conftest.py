@@ -12,8 +12,10 @@ from context_cup_engine.protocol import (
 
 OPENAI = ProviderInfo(
     name="openai",
-    api_key="sk-test",
-    client=ProviderClient(base_url="https://api.openai.com/v1", api="responses"),
+    api_key="cc-proxy",
+    client=ProviderClient(
+        base_url="http://proxy.test:1/t/trial-1/openai/v1", api="responses"
+    ),
 )
 
 

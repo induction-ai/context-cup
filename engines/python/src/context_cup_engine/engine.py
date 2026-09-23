@@ -9,24 +9,20 @@ from typing import Any
 from . import client
 from .protocol import (
     Dirs,
-    ModelCall,
     Payload,
     Provider,
     ProviderInfo,
     Target,
     TurnInput,
 )
-from .recorder import Recorder
 
 
 @dataclass
 class TurnContext:
-    """The parsed input plus the two things a driver needs to do: call a
-    model and record what it did."""
+    """The parsed input plus a way to call the model."""
 
     turn: TurnInput
     config: dict[str, Any]
-    recorder: Recorder
     context_payload: Payload
     state: Any
 
@@ -74,13 +70,8 @@ class TurnContext:
         purpose: str = "turn",
         provider: ProviderInfo | None = None,
     ) -> Payload:
-        """POST a native request body to the provider and return its response
-        object. `purpose` labels the call in `output.json`."""
-        self.recorder.purpose = purpose
-        try:
-            return client.call(provider or self.provider_info, payload)
-        finally:
-            self.recorder.purpose = "turn"
-
-    def calls(self) -> list[ModelCall]:
-        return list(self.recorder.calls)
+        """POST a native request body through the proxy and return the
+        provider's response object. `purpose` labels the call in the run's
+        accounting (`x-cc-purpose`); `turn` is the call whose reply becomes
+        the turn's response."""
+        return client.call(provider or self.provider_info, payload, purpose=purpose)

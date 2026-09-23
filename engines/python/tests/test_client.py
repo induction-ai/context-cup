@@ -23,8 +23,8 @@ GEMINI = ProviderInfo(
 
 def test_request_shapes_per_api():
     url, headers, body = request_for(OPENAI, {"model": "gpt-5.5", "input": []})
-    assert url == "https://api.openai.com/v1/responses"
-    assert headers["authorization"] == "Bearer sk-test" and body["model"] == "gpt-5.5"
+    assert url == "http://proxy.test:1/t/trial-1/openai/v1/responses"
+    assert headers["authorization"] == "Bearer cc-proxy" and body["model"] == "gpt-5.5"
 
     url, headers, body = request_for(ANTHROPIC, {"model": "claude", "messages": []})
     assert url == "https://api.anthropic.com/v1/messages"
@@ -40,9 +40,11 @@ def test_request_shapes_per_api():
 
 def test_call_returns_the_response_object_and_retries_on_429():
     attempts = []
+    purposes = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         attempts.append(json.loads(request.content))
+        purposes.append(request.headers.get("x-cc-purpose"))
         if len(attempts) == 1:
             return httpx.Response(
                 429, headers={"retry-after": "0"}, json={"error": "slow down"}
@@ -57,6 +59,7 @@ def test_call_returns_the_response_object_and_retries_on_429():
             sleep=lambda _s: None,
         )
     assert response["id"] == "resp_1" and len(attempts) == 2
+    assert purposes == ["turn", "turn"]
 
 
 def test_call_raises_provider_error_on_4xx():

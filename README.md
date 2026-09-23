@@ -91,8 +91,15 @@ cost the mean over those trials' prices, and a suite's score and cost are the
 means of its jobs' values. Nothing is stored; every view computes it.
 
 Output lands in `.temp/suites/<suite_id>/` (`results.json`, `results.txt`,
-`logs/suite.log`, and every trial's artifacts) and in Postgres: `suite`,
-`job`, `trial`, and `model_call` rows. A run inside GitHub Actions needs
+`calls.jsonl`, `logs/suite.log`, and every trial's artifacts) and in
+Postgres: `suite`, `job`, `trial`, and `model_call` rows.
+
+Every model call a trial makes goes through a proxy `bin/suite` starts on
+the host (`course/proxy`): it holds the provider keys, forwards to the
+provider, and writes `calls.jsonl`, which is where tokens and cost come
+from. Containers never hold a key. Set `CC_SAVE_BODIES=1` to keep every
+request and response body under `bodies/`, and `CC_PROXY_HOST` when the
+containers reach the host by another name than `host.docker.internal`. A run inside GitHub Actions needs
 `DATABASE_URL` for a Postgres the runner can reach; its suite row records the
 workflow run id, attempt, and repository, and the results site links back to
 the run.

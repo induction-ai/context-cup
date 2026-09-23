@@ -230,6 +230,9 @@ export type CommandInputs = {
   cpus?: number;
   /** Driver and engine packages; defaults to the workspace scan. */
   packages?: ReadonlyMap<string, CupPackage>;
+  /** The run's proxy as the container reaches it, e.g.
+   *  `http://host.docker.internal:6123`. Every model call goes through it. */
+  proxy_url: string;
 };
 
 /** Stretch harbor's environment-build timeout on arm64, where the amd64
@@ -278,16 +281,16 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
   const target = targetJson(run);
   const keys = keyEnv(env);
 
-  // Secrets never appear in argv, the log, or the database: each key is a
-  // `$NAME` shell reference that expands from the process env at launch.
+  // No provider key reaches the agent: the proxy holds them all, so the
+  // only way for a driver to call a model is through it.
   const agentEnv: Record<string, string> = {
     // Host paths. harbor layers --agent-env over every exec the agent runs,
     // so the runner keeps a separate CC_DRIVER_CHAIN for the container copies.
     CC_HOST_DRIVER_CHAIN: chain.join(":"),
     CC_TARGET_JSON: JSON.stringify(target),
     CC_MAX_STEPS: String(run.task.runner === "tau3" ? 200 : 150),
+    CC_PROXY_URL: inputs.proxy_url,
   };
-  for (const name of Object.keys(keys)) agentEnv[name] = `$${name}`;
 
   const cpus = Math.min(inputs.cpus ?? availableParallelism() ?? 1, 8);
   const argv = [
@@ -354,7 +357,8 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
     PYTHONPATH: env.PYTHONPATH
       ? `${RUNNER_SRC}${path.delimiter}${env.PYTHONPATH}`
       : RUNNER_SRC,
-    // The tau3 user simulator and verifier run on the real OpenAI API.
+    // Job-level env for harbor itself: the tau3 user simulator and verifier
+    // run on the real OpenAI API. Agent processes never see these.
     OPENAI_BASE_URL: "https://api.openai.com/v1",
     ...keys,
   };

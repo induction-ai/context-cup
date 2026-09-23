@@ -10,6 +10,7 @@ import {
   withTransaction,
 } from "@context-cup/db/connection.js";
 import { suite as suiteTable } from "@context-cup/db/schema.js";
+import { startProxy, type RunningProxy } from "@context-cup/proxy/server.js";
 import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import { eq } from "drizzle-orm";
 import pino from "pino";
@@ -215,6 +216,24 @@ async function main(): Promise<void> {
   );
   const docker_jobs = harbor_env === "docker" ? dockerJobCap() : 0;
 
+  // One proxy per run: every model call from every trial goes through it,
+  // it holds the provider keys, and it writes the call log ingest reads.
+  const proxy_host = process.env.CC_PROXY_HOST || "host.docker.internal";
+  const calls_file = path.join(suite_dir, "calls.jsonl");
+  let proxy: RunningProxy | undefined;
+  if (!argv.dry_run) {
+    mkdirSync(suite_dir, { recursive: true });
+    proxy = await startProxy({
+      port: 0,
+      callsFile: calls_file,
+      bodiesDir:
+        process.env.CC_SAVE_BODIES === "1"
+          ? path.join(suite_dir, "bodies")
+          : undefined,
+    });
+  }
+  const proxy_url = `http://${proxy_host}:${proxy ? proxy.port : "<port>"}`;
+
   const warnings: string[] = [];
   const entries: QueueEntry[] = runs.map((run) => {
     try {
@@ -230,6 +249,7 @@ async function main(): Promise<void> {
       job_id,
       suite_dir,
       harbor_env,
+      proxy_url,
       concurrency,
     });
     return {
@@ -334,6 +354,7 @@ async function main(): Promise<void> {
   const stop = () => {
     report("stopping: waiting for running jobs to be killed");
     controller.abort();
+    void proxy?.close();
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
@@ -357,7 +378,11 @@ async function main(): Promise<void> {
       let trials: ReturnType<typeof parseJob> = [];
       let parse_error: string | undefined;
       try {
-        trials = parseJob(entry.command.jobs_dir, entry.command.job_name);
+        trials = parseJob(
+          entry.command.jobs_dir,
+          entry.command.job_name,
+          calls_file
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         parse_error = message;
@@ -394,6 +419,7 @@ async function main(): Promise<void> {
     },
   });
 
+  await proxy?.close();
   const finished_at = new Date();
   await getRawDatabase()
     .update(suiteTable)

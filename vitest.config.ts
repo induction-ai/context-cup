@@ -56,6 +56,15 @@ export default defineConfig({
       },
       {
         test: {
+          name: "proxy",
+          root: "course/proxy",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["node_modules", "dist"],
+        },
+      },
+      {
+        test: {
           name: "suite",
           root: "course/suite",
           environment: "node",

@@ -62,25 +62,24 @@ const zUsage = z.object({
   reasoning_output: z.number().default(0),
 });
 
+/** One line of the proxy's calls.jsonl (course/proxy, records.ts). */
 const zCall = z.object({
-  turn_id: z.string().optional(),
+  trial_id: z.string(),
+  turn_id: z.string().nullable(),
+  sequence: z.number().int(),
+  purpose: z.string().default("turn"),
   provider: zProvider,
-  model: z.string().min(1),
-  wire: zWire,
   host: z.string().default(""),
-  purpose: z.string().nullable().optional(),
-  usage: zUsage,
+  /** Null when neither request nor response named a model. */
+  model: z.string().nullable(),
+  wire: zWire,
+  usage: zUsage.nullable(),
   duration_ms: z.number().nullable().optional(),
-  // Providers that have no tiers report null; the engine writes it as such.
+  status: z.number().int().nullable().optional(),
   service_tier: z.string().nullable().optional(),
+  error: z.string().optional(),
 });
-export type ReportedCall = z.infer<typeof zCall>;
-
-const zUsageFile = z.object({ calls: z.array(zCall).default([]) });
-const zTurnOutput = z.object({
-  turn_id: z.string(),
-  calls: z.array(zCall).default([]),
-});
+export type CallRecord = z.infer<typeof zCall>;
 
 const zSummary = z.object({
   stop_reason: z.string().optional(),
@@ -107,8 +106,19 @@ const zJobResult = z.object({
     .optional(),
 });
 
-export type PricedCall = ReportedCall & {
+export type PricedCall = {
   sequence: number;
+  turn_id: string | null;
+  purpose: string;
+  provider: Provider;
+  host: string;
+  /** `?` when the proxy could not name the model. */
+  model: string;
+  wire: CallRecord["wire"];
+  usage: CallUsage & { reasoning_output: number };
+  duration_ms: number | null;
+  service_tier: string | null;
+  /** Null when the model is unknown to the pricing table or unnamed. */
   cost_cents: number | null;
 };
 
@@ -132,22 +142,55 @@ function readJson(file: string): unknown {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
-function readCalls(agentDir: string): ReportedCall[] {
-  const usageFile = path.join(agentDir, "usage.json");
-  if (existsSync(usageFile)) return zUsageFile.parse(readJson(usageFile)).calls;
-  // No usage.json (the loop died early): gather what the turns recorded.
-  const turnsDir = path.join(agentDir, "turns");
-  if (!existsSync(turnsDir)) return [];
-  const calls: ReportedCall[] = [];
-  for (const turn of readdirSync(turnsDir).sort()) {
-    const out = path.join(turnsDir, turn, "output.json");
-    if (!existsSync(out)) continue;
-    const parsed = zTurnOutput.safeParse(readJson(out));
-    if (!parsed.success) continue;
-    for (const call of parsed.data.calls)
-      calls.push({ ...call, turn_id: parsed.data.turn_id });
+/** Every recorded call in a proxy log, grouped by trial id (the harbor
+ *  trial directory name). A missing file means no calls were made. */
+export function readCallLog(file: string): Map<string, CallRecord[]> {
+  const byTrial = new Map<string, CallRecord[]>();
+  if (!existsSync(file)) return byTrial;
+  const lines = readFileSync(file, "utf8").split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (!line.trim()) continue;
+    const parsed = zCall.safeParse(JSON.parse(line));
+    if (!parsed.success) {
+      throw new Error(
+        `${file}:${index + 1}: ${parsed.error.issues.map((i) => i.message).join("; ")}`
+      );
+    }
+    const list = byTrial.get(parsed.data.trial_id) ?? [];
+    list.push(parsed.data);
+    byTrial.set(parsed.data.trial_id, list);
   }
-  return calls;
+  for (const list of byTrial.values())
+    list.sort((a, b) => a.sequence - b.sequence);
+  return byTrial;
+}
+
+const ZERO_USAGE = {
+  input: 0,
+  cached_input: 0,
+  cache_write_input: 0,
+  output: 0,
+  reasoning_output: 0,
+};
+
+function priceCall(call: CallRecord): PricedCall {
+  const usage = call.usage ?? ZERO_USAGE;
+  return {
+    sequence: call.sequence,
+    turn_id: call.turn_id,
+    purpose: call.purpose,
+    provider: call.provider,
+    host: call.host,
+    model: call.model ?? "?",
+    wire: call.wire,
+    usage,
+    duration_ms: call.duration_ms ?? null,
+    service_tier: call.service_tier ?? null,
+    cost_cents:
+      call.model && call.usage
+        ? callCostCents(call.model, usage, call.service_tier)
+        : null,
+  };
 }
 
 function readReward(
@@ -172,8 +215,12 @@ function readScoreReason(trialDir: string): string | null {
   return details.at(-1)?.slice("DETAILS:".length).trim() ?? null;
 }
 
-/** Everything the suite records about one trial directory. */
-export function parseTrial(trialDir: string): ParsedTrial {
+/** Everything the suite records about one trial directory, given the calls
+ *  the proxy recorded for it. */
+export function parseTrial(
+  trialDir: string,
+  recorded: readonly CallRecord[] = []
+): ParsedTrial {
   const result = zTrialResult.parse(
     readJson(path.join(trialDir, "result.json"))
   );
@@ -182,13 +229,7 @@ export function parseTrial(trialDir: string): ParsedTrial {
   const summary = existsSync(summaryFile)
     ? zSummary.parse(readJson(summaryFile))
     : {};
-  const calls = readCalls(agentDir).map(
-    (call, i): PricedCall => ({
-      ...call,
-      sequence: i + 1,
-      cost_cents: callCostCents(call.model, call.usage, call.service_tier),
-    })
-  );
+  const calls = recorded.map(priceCall);
   const totals = {
     input: 0,
     cached_input: 0,
@@ -240,9 +281,14 @@ export function parseTrial(trialDir: string): ParsedTrial {
 /** Every trial of a harbor job, discovered from each trial's result.json.
  *  Trials that harbor listed in the job's exception stats but never wrote a
  *  result for come back as errored placeholders. */
-export function parseJob(jobsDir: string, jobName: string): ParsedTrial[] {
+export function parseJob(
+  jobsDir: string,
+  jobName: string,
+  callsFile: string
+): ParsedTrial[] {
   const jobDir = path.join(jobsDir, jobName);
   if (!existsSync(jobDir)) return [];
+  const callLog = readCallLog(callsFile);
   const trials: ParsedTrial[] = [];
   const seen = new Set<string>();
   for (const name of readdirSync(jobDir).sort()) {
@@ -252,7 +298,7 @@ export function parseJob(jobsDir: string, jobName: string): ParsedTrial[] {
       !existsSync(path.join(dir, "result.json"))
     )
       continue;
-    const parsed = parseTrial(dir);
+    const parsed = parseTrial(dir, callLog.get(name) ?? []);
     seen.add(parsed.trial_name);
     trials.push(parsed);
   }
@@ -402,14 +448,14 @@ export async function ingestJob(
             model: c.model,
             wire: c.wire,
             host: c.host,
-            purpose: c.purpose ?? null,
+            purpose: c.purpose,
             inputTokens: c.usage.input,
             cachedInputTokens: c.usage.cached_input,
             cacheWriteInputTokens: c.usage.cache_write_input,
             outputTokens: c.usage.output,
             reasoningOutputTokens: c.usage.reasoning_output,
-            durationMs: c.duration_ms ?? null,
-            serviceTier: c.service_tier ?? null,
+            durationMs: c.duration_ms,
+            serviceTier: c.service_tier,
             costCents: c.cost_cents,
           }))
         );

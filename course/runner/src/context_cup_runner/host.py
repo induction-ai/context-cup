@@ -60,16 +60,9 @@ UPLOAD_IGNORE = (
     "*.pyc",
 )
 
-PROVIDER_KEYS = (
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "GEMINI_API_KEY",
-    "GOOGLE_API_KEY",
-    "OPENROUTER_API_KEY",
-)
-
 # Settings the suite passes with --agent-env and the loop reads as-is.
 PASSTHROUGH_SETTINGS = (
+    "CC_PROXY_URL",
     "CC_TARGET_JSON",
     "CC_TURN_RETRIES",
     "CC_MAX_STEPS",
@@ -238,12 +231,13 @@ class CourseAgent(BaseInstalledAgent):
             "CC_DRIVER_CHAIN": self.remote_chain_value(self.host_chain()),
             "CC_INSTRUCTION_FILE": REMOTE_INSTRUCTION,
         }
-        for key in (*PROVIDER_KEYS, *PASSTHROUGH_SETTINGS):
+        for key in PASSTHROUGH_SETTINGS:
             value = self._get_env(key)
             if value:
                 env[key] = value
-        if "CC_TARGET_JSON" not in env:
-            raise ValueError("CC_TARGET_JSON is required")
+        for required in ("CC_TARGET_JSON", "CC_PROXY_URL"):
+            if required not in env:
+                raise ValueError(f"{required} is required")
         env.update(self.environment_settings(environment))
         return env
 
@@ -270,12 +264,8 @@ class CourseAgent(BaseInstalledAgent):
         )
 
     def populate_context_post_run(self, context: AgentContext) -> None:
-        usage = _read_json(self.logs_dir / "usage.json")
-        totals = usage.get("totals") if isinstance(usage, dict) else None
-        if isinstance(totals, dict):
-            context.n_input_tokens = _int(totals.get("input"))
-            context.n_cache_tokens = _int(totals.get("cached_input"))
-            context.n_output_tokens = _int(totals.get("output"))
+        # Token counts and cost come from the proxy log on the host; harbor's
+        # own record keeps only what the loop summarised.
         summary = _read_json(self.logs_dir / "summary.json")
         if isinstance(summary, dict):
             context.metadata = {

@@ -161,8 +161,11 @@ calls it made.
   "first": false,
   "provider": {
     "name": "openai",
-    "api_key": "sk-…",
-    "client": { "base_url": "https://api.openai.com/v1", "api": "responses" }
+    "api_key": "cc-proxy",
+    "client": {
+      "base_url": "http://host.docker.internal:6123/t/<trial_id>/openai/v1",
+      "api": "responses"
+    }
   },
   "target": { "model": "gpt-5.5", "reasoning_effort": "medium" },
   "context_payload": {
@@ -189,10 +192,13 @@ calls it made.
 - `first` is true on the first turn of a trial, the moment to inject
   anything that should be there from the start.
 - `provider` is everything needed to call the model: the family name, the
-  key, and the client settings (`base_url` and which API: `responses`,
-  `messages`, or `generate_content`). The key is real while the turn runs;
-  once the turn is over the runner rewrites the persisted `input.json` with
-  it redacted, so trial artifacts never carry credentials.
+  client settings (`base_url` and which API: `responses`, `messages`, or
+  `generate_content`), and a placeholder key. `base_url` points at the run's
+  proxy, which holds the real keys and forwards to the provider; see
+  Accounting. The same URLs are in the environment as `OPENAI_BASE_URL`,
+  `ANTHROPIC_BASE_URL`, and `GOOGLE_GEMINI_BASE_URL`, with the placeholder in
+  the matching `*_API_KEY` variables, so any SDK a driver uses lands on the
+  proxy without configuration.
 - `context_payload` is the driver's working copy. It starts equal to the
   original and carries the driver's edits from turn to turn: what the driver
   sent last turn, plus the response and tool results the course appended.
@@ -214,7 +220,6 @@ calls it made.
   "response": { …the provider's response object, verbatim… },
   "context_payload": { …the request the driver sent, if it differs from the input… },
   "state": { "summaries": 2 },
-  "calls": [ … ],
   "driver": { "name": "base_truncate", "engine": "python", "version": "0.1.0" }
 }
 ```
@@ -227,12 +232,6 @@ calls it made.
   it back as next turn's `context_payload`. When absent, the input's
   `context_payload` is taken as what was sent.
 - `state` replaces last turn's state wholesale; absent means unchanged.
-- `calls` lists every model call the driver made this turn, in order,
-  including calls that were not the main turn (summaries, reranking). The
-  engine records them at the HTTP layer; the driver reports nothing. Each
-  carries `provider`, `host`, `model`, `wire`, `purpose`, `usage`
-  (`input` including cached, `cached_input`, `cache_write_input`, `output`,
-  `reasoning_output`), `duration_ms`, `service_tier`, `status`.
 - Anything else a driver wants remembered, such as private tool round trips
   it answered itself, belongs in `state`.
 
@@ -269,8 +268,8 @@ Besides `turns/`, in the agent log directory:
 - `trajectory.json`: harbor ATIF, built from `original_payload`.
 - `summary.json`: `{ stop_reason, turns, env_tool_calls, errors, driver, target, started_at, finished_at }`.
 
-The suite ingests these plus harbor's `result.json` and the verifier's
-`reward.txt`.
+The suite ingests these, the proxy's call log, harbor's `result.json`, and
+the verifier's `reward.txt`.
 
 ## How the suite launches the runner
 
@@ -295,8 +294,9 @@ Settings reach the agent class through `--agent-env`:
 | `CC_TURN_RETRIES`      | optional, default 2                                                                                                                                                                                                                   |
 | `CC_MAX_STEPS`         | optional cap on turns, default per benchmark                                                                                                                                                                                          |
 
-Provider keys are forwarded the same way, and the tau3 user simulator and
-verifier keep the job-level `OPENAI_API_KEY`.
+No provider key is forwarded to the agent. The tau3 user simulator and
+verifier keep harbor's job-level `OPENAI_API_KEY`, which agent processes
+never see.
 
 ## Naming
 

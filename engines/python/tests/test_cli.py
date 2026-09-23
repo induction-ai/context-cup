@@ -13,7 +13,7 @@ DRIVERS = Path(__file__).resolve().parents[3] / "drivers"
 DRIVER_NO_NETWORK = """
 def run(ctx):
     assert ctx.first is True and ctx.provider == "openai"
-    assert ctx.provider_info.api_key == "sk-test"
+    assert ctx.provider_info.api_key == "cc-proxy"
     ctx.context_payload["input"].append({"role": "user", "content": "note to self"})
     ctx.state = {"turns_seen": (ctx.state or {}).get("turns_seen", 0) + 1}
     return {"id": "resp_1", "output": [{"type": "function_call", "call_id": "call_1",
@@ -44,7 +44,6 @@ def test_run_returns_response_edited_payload_and_state(
         and len(turn_input.context_payload["input"]) == 1
     ), "input is not mutated"
     assert out.state == {"turns_seen": 1}
-    assert out.calls == []
     assert out.driver.name == "d_test" and out.driver.engine == "python"
 
 

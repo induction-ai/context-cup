@@ -35,6 +35,7 @@ describe("buildHarborCommand", () => {
   it("builds a tau3 command", async () => {
     stub();
     const command = buildHarborCommand({
+      proxy_url: "http://host.docker.internal:6123",
       run: sampleRun(),
       job_id: "j_test",
       suite_dir: "/tmp/suite",
@@ -70,7 +71,7 @@ describe("buildHarborCommand", () => {
       "--agent-env",
       "CC_MAX_STEPS=200",
       "--agent-env",
-      "OPENAI_API_KEY=$OPENAI_API_KEY",
+      "CC_PROXY_URL=http://host.docker.internal:6123",
       "--n-attempts",
       "2",
       "--n-concurrent",
@@ -99,6 +100,7 @@ describe("buildHarborCommand", () => {
     stub();
     const file = sampleSuite();
     const command = buildHarborCommand({
+      proxy_url: "http://host.docker.internal:6123",
       run: sampleRun({
         task_name: "sales_accounting",
         task: file.tasks.sales_accounting!,

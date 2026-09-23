@@ -6,6 +6,7 @@ import { zTargetsFile, type TargetsFile } from "../src/targets.ts";
 
 export const FIXTURES = path.join(import.meta.dirname, "fixtures");
 export const FIXTURE_JOBS_DIR = path.join(FIXTURES, "job");
+export const FIXTURE_CALLS = path.join(FIXTURES, "calls.jsonl");
 
 export function sampleSuite(overrides: Partial<SuiteFile> = {}): SuiteFile {
   return zSuiteFile.parse({

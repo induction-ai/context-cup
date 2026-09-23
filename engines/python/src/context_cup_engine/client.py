@@ -1,7 +1,9 @@
-"""Post a native request body to a provider and return its response object.
+"""Post a native request body through the proxy and return the provider's
+response object.
 
 This is the convenience behind `ctx.call`. A driver may use any client it
-likes instead; the recorder captures every call either way.
+likes instead: everything reaches the provider through the same proxy, which
+does the accounting.
 """
 
 from __future__ import annotations
@@ -62,6 +64,7 @@ def call(
     provider: ProviderInfo,
     payload: Payload,
     *,
+    purpose: str = "turn",
     timeout_sec: float = 600.0,
     client: httpx.Client | None = None,
     sleep: Any = time.sleep,
@@ -69,6 +72,7 @@ def call(
     """POST the payload and return the parsed response object, retrying
     transient failures with backoff."""
     url, headers, body = request_for(provider, payload)
+    headers = {**headers, "x-cc-purpose": purpose}
     own_client = client is None
     http = client or httpx.Client(timeout=timeout_sec)
     try:

@@ -29,7 +29,9 @@ script_path = Path(os.environ["CC_DRIVER_DIR"]) / "script.json"
 assert os.environ["CC_TURN_DIR"] == str(Path(input_path).parent)
 assert os.environ["CC_CHAIN"].split(":")[-1] == os.environ["CC_DRIVER_DIR"]
 Path(os.environ["CC_STATE_DIR"]).mkdir(parents=True, exist_ok=True)
-assert inp["provider"]["api_key"] == "sk-live-key", inp["provider"]
+assert inp["provider"]["api_key"] == "cc-proxy", inp["provider"]
+assert "/t/" in inp["provider"]["client"]["base_url"], inp["provider"]
+assert os.environ["OPENAI_BASE_URL"].endswith("/openai/v1"), os.environ.get("OPENAI_BASE_URL")
 assert inp["protocol"] == 2 and isinstance(inp["first"], bool)
 script = json.loads(script_path.read_text())
 step = script.pop(0) if script else {"text": "done"}
@@ -75,7 +77,6 @@ out = {
     "protocol": 2,
     "turn_id": inp["turn_id"],
     "response": response,
-    "calls": step.get("calls", [{"provider": provider, "wire": {"openai": "responses", "anthropic": "anthropic", "gemini": "gemini"}[provider], "model": inp["target"]["model"], "usage": {"input": 100, "cached_input": 20, "output": 10, "reasoning_output": 3}}]),
     "driver": {"name": "test", "engine": "fake"},
 }
 if "context_payload" in step:
@@ -143,7 +144,7 @@ def make_settings(
         "agent_dir": workspace["agent"],
         "chain": DriverChain.from_dirs([workspace["engine"], workspace["driver"]]),
         "target": Target(provider=provider, model="gpt-test", reasoning_effort="low"),
-        "api_key": "sk-live-key",
+        "proxy_url": "http://proxy.test:1",
         "turn_retries": 1,
         "max_steps": 10,
         "turn_timeout_sec": 30,
@@ -210,3 +211,18 @@ class MemoryEnvironment:
     async def close(self, stop_reason: str) -> dict[str, Any]:
         self.closed_with = stop_reason
         return {"closed": True}
+
+
+@pytest.fixture(autouse=True)
+def announced(monkeypatch):
+    """The loop tells the proxy about every turn; tests see the calls here
+    instead of needing a proxy."""
+    from context_cup_runner import loop as loop_module
+
+    seen: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        loop_module,
+        "announce_turn",
+        lambda url, trial, turn: seen.append((url, trial, turn)),
+    )
+    return seen

@@ -68,7 +68,7 @@ def test_two_turn_happy_path_openai(workspace):
     assert first["first"] is True and second["first"] is False
     assert first["provider"]["name"] == "openai"
     assert first["provider"]["client"] == {
-        "base_url": "https://api.openai.com/v1",
+        "base_url": "http://proxy.test:1/t/task-1__abc123/openai/v1",
         "api": "responses",
     }
     assert first["state"] == {} and second["state"] == {"n": 1}
@@ -102,19 +102,6 @@ def test_two_turn_happy_path_openai(workspace):
     original = json.loads((workspace["agent"] / "original_payload.json").read_text())
     assert original["input"][-1]["type"] == "message"
     assert (workspace["agent"] / "context_payload.json").exists()
-
-
-def test_persisted_input_never_keeps_the_api_key(workspace):
-    write_script(workspace["driver"], [{"crash": True}, {"text": "ok"}])
-    run(Trial(make_settings(workspace, turn_retries=1), MemoryEnvironment()))
-    for turn_dir in (workspace["agent"] / "turns").iterdir():
-        text = (turn_dir / "input.json").read_text()
-        assert "sk-live-key" not in text
-        assert json.loads(text)["provider"]["api_key"] == "<redacted>"
-    # The whole agent dir is what harbor copies out; nothing in it has the key.
-    for path in workspace["agent"].rglob("*"):
-        if path.is_file():
-            assert "sk-live-key" not in path.read_text(errors="ignore"), path
 
 
 def test_driver_context_payload_and_state_carry_over(workspace):
@@ -218,19 +205,9 @@ def test_usage_totals_and_files(workspace):
         [{"text": None, "tool_calls": [call("c1", "echo")]}, {"text": "bye"}],
     )
     trial = Trial(make_settings(workspace), MemoryEnvironment())
-    result = run(trial)
+    run(trial)
 
-    assert result.usage.model_dump() == {
-        "input": 200,
-        "cached_input": 40,
-        "cache_write_input": 0,
-        "output": 20,
-        "reasoning_output": 6,
-    }
-    usage = json.loads((workspace["agent"] / "usage.json").read_text())
-    assert len(usage["calls"]) == 2
-    assert all(TURN_ID.match(c["turn_id"]) for c in usage["calls"])
-    assert usage["totals"]["input"] == 200
+    assert not (workspace["agent"] / "usage.json").exists()
 
     summary = json.loads((workspace["agent"] / "summary.json").read_text())
     assert summary["stop_reason"] == "final_message"
@@ -277,10 +254,8 @@ def test_atif_trajectory_shape(workspace):
         "c1",
         "c2",
     ]
-    assert agent_step["metrics"]["prompt_tokens"] == 100
-    assert agent_step["llm_call_count"] == 1
     assert TURN_ID.match(agent_step["extra"]["turn_id"])
-    assert trajectory["final_metrics"]["total_prompt_tokens"] == 200
+    assert trajectory["final_metrics"]["total_steps"] == len(trajectory["steps"])
 
 
 def test_retry_then_success(workspace):
@@ -387,17 +362,23 @@ def test_settings_from_env(tmp_path: Path):
     env = {
         "CC_TRIAL_ID": "t__1",
         "CC_AGENT_DIR": str(tmp_path),
+        "CC_PROXY_URL": "http://proxy.test:1",
         "CC_DRIVER_CHAIN": f"{tmp_path / 'leaf'}",
         "CC_TARGET_JSON": json.dumps(
             {"provider": "gemini", "model": "m", "reasoning_effort": "low"}
         ),
         "CC_MAX_STEPS": "7",
-        "GOOGLE_API_KEY": "g-key",
     }
     settings = Settings.from_env(env, default_max_steps=99)
     assert settings.max_steps == 7 and settings.turn_retries == 2
     assert settings.target.reasoning_effort == "low"
-    assert settings.api_key == "g-key"
+    assert settings.proxy_url == "http://proxy.test:1"
+    info = settings.provider_info()
+    assert info.api_key == "cc-proxy"
+    assert info.client.base_url == "http://proxy.test:1/t/t__1/gemini/v1beta"
+    script_env = settings.script_env()
+    assert script_env["GOOGLE_GEMINI_BASE_URL"] == info.client.base_url
+    assert script_env["GEMINI_API_KEY"] == "cc-proxy"
     info = settings.provider_info()
     assert info.name == "gemini" and info.client.api == "generate_content"
     assert (
@@ -407,3 +388,18 @@ def test_settings_from_env(tmp_path: Path):
     assert Settings.from_env(env, default_max_steps=99).max_steps == 99
     with pytest.raises(TrialError, match="CC_TARGET_JSON"):
         Settings.from_env({k: v for k, v in env.items() if k != "CC_TARGET_JSON"})
+
+
+def test_every_turn_attempt_is_announced_to_the_proxy(workspace, announced):
+    write_script(
+        workspace["driver"],
+        [
+            {"crash": True},
+            {"text": None, "tool_calls": [call("c1", "echo")]},
+            {"text": "bye"},
+        ],
+    )
+    run(Trial(make_settings(workspace, turn_retries=1), MemoryEnvironment()))
+    assert [a[:2] for a in announced] == [("http://proxy.test:1", "task-1__abc123")] * 3
+    assert all(TURN_ID.match(a[2]) for a in announced)
+    assert len({a[2] for a in announced}) == 3, "a retry gets a fresh turn id"

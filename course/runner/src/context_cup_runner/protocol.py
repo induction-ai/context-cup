@@ -49,31 +49,50 @@ class ClientInfo(BaseModel):
 
 
 class ProviderInfo(BaseModel):
-    """The `provider` object in input.json. The persisted copy of input.json
-    has `api_key` redacted once the turn is over."""
+    """The `provider` object in input.json. `api_key` is a placeholder: every
+    call goes through the run's proxy, which holds the real keys."""
 
     name: Provider
     api_key: str
     client: ClientInfo
 
 
-PROVIDER_CLIENTS: dict[Provider, ClientInfo] = {
-    "openai": ClientInfo(base_url="https://api.openai.com/v1", api="responses"),
-    "anthropic": ClientInfo(base_url="https://api.anthropic.com/v1", api="messages"),
-    "gemini": ClientInfo(
-        base_url="https://generativelanguage.googleapis.com/v1beta",
-        api="generate_content",
-    ),
+PLACEHOLDER_KEY = "cc-proxy"
+
+# Where each provider's API lives behind the proxy: `<proxy>/t/<trial>/<provider><suffix>`.
+PROVIDER_API: dict[Provider, tuple[str, ClientApi]] = {
+    "openai": ("/v1", "responses"),
+    "anthropic": ("/v1", "messages"),
+    "gemini": ("/v1beta", "generate_content"),
 }
 
-# The env var the host agent forwards for each provider; the first present wins.
-PROVIDER_KEY_VARS: dict[Provider, tuple[str, ...]] = {
-    "openai": ("OPENAI_API_KEY",),
-    "anthropic": ("ANTHROPIC_API_KEY",),
-    "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
-}
 
-REDACTED = "<redacted>"
+def proxy_base_url(proxy_url: str, trial_id: str, provider: Provider) -> str:
+    suffix, _ = PROVIDER_API[provider]
+    return f"{proxy_url.rstrip('/')}/t/{trial_id}/{provider}{suffix}"
+
+
+def proxy_client(proxy_url: str, trial_id: str, provider: Provider) -> ClientInfo:
+    return ClientInfo(
+        base_url=proxy_base_url(proxy_url, trial_id, provider),
+        api=PROVIDER_API[provider][1],
+    )
+
+
+def proxy_env(proxy_url: str, trial_id: str) -> dict[str, str]:
+    """What a driver process needs so any SDK it uses talks to the proxy:
+    base URLs for every provider and placeholder keys, since SDKs refuse to
+    start without one. No real key exists in the container."""
+    return {
+        "OPENAI_BASE_URL": proxy_base_url(proxy_url, trial_id, "openai"),
+        "ANTHROPIC_BASE_URL": proxy_base_url(proxy_url, trial_id, "anthropic"),
+        "GOOGLE_GEMINI_BASE_URL": proxy_base_url(proxy_url, trial_id, "gemini"),
+        "GEMINI_API_BASE_URL": proxy_base_url(proxy_url, trial_id, "gemini"),
+        "OPENAI_API_KEY": PLACEHOLDER_KEY,
+        "ANTHROPIC_API_KEY": PLACEHOLDER_KEY,
+        "GEMINI_API_KEY": PLACEHOLDER_KEY,
+        "GOOGLE_API_KEY": PLACEHOLDER_KEY,
+    }
 
 
 class TargetSpec(BaseModel):
@@ -104,34 +123,6 @@ class TurnInput(BaseModel):
     dirs: Dirs
 
 
-class Usage(BaseModel):
-    input: int = 0
-    cached_input: int = 0
-    cache_write_input: int = 0
-    output: int = 0
-    reasoning_output: int = 0
-
-    def add(self, other: Usage) -> None:
-        self.input += other.input
-        self.cached_input += other.cached_input
-        self.cache_write_input += other.cache_write_input
-        self.output += other.output
-        self.reasoning_output += other.reasoning_output
-
-
-class Call(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    provider: Provider
-    host: str = ""
-    model: str
-    wire: Wire
-    purpose: str = "turn"
-    usage: Usage = Field(default_factory=Usage)
-    duration_ms: int | None = None
-    service_tier: str | None = None
-
-
 class DriverInfo(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -146,7 +137,6 @@ class TurnOutput(BaseModel):
     response: Payload
     context_payload: Payload | None = None
     state: Any = None
-    calls: list[Call] = Field(default_factory=list)
     driver: DriverInfo | None = None
 
     @property

@@ -38,8 +38,10 @@ def runner_input() -> dict:
         first=True,
         provider=runner_protocol.ProviderInfo(
             name="openai",
-            api_key="sk-test",
-            client=runner_protocol.PROVIDER_CLIENTS["openai"],
+            api_key=runner_protocol.PLACEHOLDER_KEY,
+            client=runner_protocol.proxy_client(
+                "http://proxy.test:1", "t__1", "openai"
+            ),
         ),
         target=runner_protocol.TargetSpec(model="gpt-5.5", reasoning_effort="low"),
         context_payload=payload,
@@ -83,15 +85,6 @@ def test_engine_output_validates_in_the_runner():
         },
         context_payload={"model": "gpt-5.5", "input": []},
         state={"n": 1},
-        calls=[
-            engine_protocol.ModelCall(
-                provider="openai",
-                host="api.openai.com",
-                model="gpt-5.5",
-                wire="responses",
-                usage=engine_protocol.Usage(input=10, output=2),
-            )
-        ],
         driver=engine_protocol.DriverInfo(name="base_passthrough", engine="python"),
     )
     raw = json.loads(output.model_dump_json(exclude_none=True))
@@ -100,16 +93,12 @@ def test_engine_output_validates_in_the_runner():
     )
     assert extracted.text == "hi" and not extracted.tool_calls
     assert parsed.state == {"n": 1}
-    assert (
-        parsed.calls[0].usage.input == 10 and parsed.calls[0].host == "api.openai.com"
-    )
 
 
 def test_both_sides_agree_on_provider_literals():
     assert set(engine_protocol.Provider.__args__) == set(
         runner_protocol.Provider.__args__
     )
-    assert set(engine_protocol.Wire.__args__) == set(runner_protocol.Wire.__args__)
 
 
 def test_shared_ts_provider_list_matches(tmp_path: Path):
