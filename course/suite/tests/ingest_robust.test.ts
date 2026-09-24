@@ -30,7 +30,7 @@ const CALL = {
   started_at: "2026-09-22T10:00:00.000Z",
 };
 
-function trialDir(
+function trial_dir(
   jobDir: string,
   name: string,
   result: Record<string, unknown>
@@ -58,7 +58,7 @@ describe("ingest robustness", () => {
   it("takes the only named reward, and the whole trial's span when the agent's is missing", async () => {
     const jobDir = mkdtempSync(path.join(tmpdir(), "cc-ingest-"));
     const t = parseTrial(
-      trialDir(jobDir, "t1", {
+      trial_dir(jobDir, "t1", {
         verifier_result: { rewards: { accuracy: 0.5 } },
         started_at: "2026-09-01T00:00:00Z",
         finished_at: "2026-09-01T00:01:30Z",
@@ -72,7 +72,7 @@ describe("ingest robustness", () => {
   it("leaves a negative or unparseable span unknown", async () => {
     const jobDir = mkdtempSync(path.join(tmpdir(), "cc-ingest-"));
     const t = parseTrial(
-      trialDir(jobDir, "t1", {
+      trial_dir(jobDir, "t1", {
         agent_execution: {
           started_at: "2026-09-01T00:01:00Z",
           finished_at: "2026-09-01T00:00:00Z",
@@ -97,8 +97,8 @@ describe("ingest robustness", () => {
   it("records a trial it can't read as that trial's error and keeps the rest", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "cc-ingest-"));
     const jobDir = path.join(root, "j_x");
-    trialDir(jobDir, "good", { verifier_result: { rewards: { reward: 1 } } });
-    const bad = trialDir(jobDir, "bad", {});
+    trial_dir(jobDir, "good", { verifier_result: { rewards: { reward: 1 } } });
+    const bad = trial_dir(jobDir, "bad", {});
     writeFileSync(path.join(bad, "result.json"), "{ not json");
     const trials = parseJob(root, "j_x");
     expect(
@@ -113,7 +113,7 @@ describe("ingest robustness", () => {
   it("gives every owed trial a row", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "cc-ingest-"));
     const jobDir = path.join(root, "j_x");
-    trialDir(jobDir, "good", { verifier_result: { rewards: { reward: 1 } } });
+    trial_dir(jobDir, "good", { verifier_result: { rewards: { reward: 1 } } });
     const padded = withMissingTrials(parseJob(root, "j_x"), 3, jobDir);
     expect(padded.map((t) => t.trial_name)).toEqual([
       "good",

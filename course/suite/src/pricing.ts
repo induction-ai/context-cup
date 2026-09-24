@@ -20,7 +20,7 @@ export function bareModel(model: string): string {
   return model.includes("/") ? model.slice(model.indexOf("/") + 1) : model;
 }
 
-function serviceTier(tier: string | null | undefined): CostServiceTier {
+function service_tier(tier: string | null | undefined): CostServiceTier {
   return tier === "priority" || tier === "fast" ? "priority" : "standard";
 }
 
@@ -58,7 +58,7 @@ export function callCostCents(
           ? { thinking: TokenCount.value(usage.reasoning_output) }
           : {}),
       },
-      serviceTier(tier)
+      service_tier(tier)
     );
   } catch {
     // The table has no rate for this tier (priority above the long-context

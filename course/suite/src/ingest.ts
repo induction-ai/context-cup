@@ -7,6 +7,7 @@ import {
 import {
   job,
   modelCall,
+  suite,
   trial,
   type JobStatus,
 } from "@context-cup/db/schema.js";
@@ -163,8 +164,8 @@ function readJson(file: string): unknown {
 }
 
 /** Where a trial's proxy, running in its container, wrote its calls. */
-export function trialCallLog(trialDir: string): string {
-  return path.join(trialDir, "agent", "calls.jsonl");
+export function trialCallLog(trial_dir: string): string {
+  return path.join(trial_dir, "agent", "calls.jsonl");
 }
 
 /** Every call a proxy log recorded, in order. Each trial has its own proxy,
@@ -232,10 +233,10 @@ function priceCall(call: CallRecord, discarded = false): PricedCall {
 }
 
 function readReward(
-  trialDir: string,
+  trial_dir: string,
   result: z.infer<typeof zTrialResult>
 ): number | null {
-  const rewardFile = path.join(trialDir, "verifier", "reward.txt");
+  const rewardFile = path.join(trial_dir, "verifier", "reward.txt");
   if (existsSync(rewardFile)) {
     const value = Number(readFileSync(rewardFile, "utf8").trim());
     if (Number.isFinite(value)) return value;
@@ -272,8 +273,8 @@ export function clipError(full: string): string {
   return `${full.slice(0, head)}…${full.slice(head - MAX_ERROR_LEN)}`;
 }
 
-function readScoreReason(trialDir: string): string | null {
-  const file = path.join(trialDir, "verifier", "eval-output.txt");
+function readScoreReason(trial_dir: string): string | null {
+  const file = path.join(trial_dir, "verifier", "eval-output.txt");
   if (!existsSync(file)) return null;
   const details = readFileSync(file, "utf8")
     .split("\n")
@@ -315,13 +316,13 @@ export function trajectoryCounts(file: string): {
 /** Everything the suite records about one trial directory, with the calls
  *  its proxy recorded in `agent/calls.jsonl`. */
 export function parseTrial(
-  trialDir: string,
-  recorded: readonly CallRecord[] = readCallLog(trialCallLog(trialDir))
+  trial_dir: string,
+  recorded: readonly CallRecord[] = readCallLog(trialCallLog(trial_dir))
 ): ParsedTrial {
   const result = zTrialResult.parse(
-    readJson(path.join(trialDir, "result.json"))
+    readJson(path.join(trial_dir, "result.json"))
   );
-  const agentDir = path.join(trialDir, "agent");
+  const agentDir = path.join(trial_dir, "agent");
   const summaryFile = path.join(agentDir, "summary.json");
   // Our loop writes summary.json. A whole agent (kind: agent) does not; then
   // harbor's ATIF trajectory of its session is the best source for turns.
@@ -366,9 +367,9 @@ export function parseTrial(
     ) ?? spanMs(result.started_at, result.finished_at);
   return {
     trial_name: result.trial_name,
-    trial_dir: trialDir,
-    reward: readReward(trialDir, result),
-    score_reason: readScoreReason(trialDir),
+    trial_dir: trial_dir,
+    reward: readReward(trial_dir, result),
+    score_reason: readScoreReason(trial_dir),
     error,
     stop_reason: summary.stop_reason ?? null,
     turns: summary.turns ?? null,
@@ -431,8 +432,8 @@ export function withMissingTrials(
 /** Every trial of a harbor job, discovered from each trial's result.json.
  *  Trials that harbor listed in the job's exception stats but never wrote a
  *  result for come back as errored placeholders. */
-export function parseJob(jobsDir: string, jobName: string): ParsedTrial[] {
-  const jobDir = path.join(jobsDir, jobName);
+export function parseJob(jobs_dir: string, jobName: string): ParsedTrial[] {
+  const jobDir = path.join(jobs_dir, jobName);
   if (!existsSync(jobDir)) return [];
   const trials: ParsedTrial[] = [];
   const seen = new Set<string>();
@@ -507,20 +508,20 @@ export async function insertJob(row: JobRow): Promise<void> {
     .insert(job)
     .values({
       id: row.job_id,
-      suiteId: row.suite_id,
-      taskName: row.run.task_name,
+      suite_id: row.suite_id,
+      task_name: row.run.task_name,
       runner: row.run.runner,
-      driverName: row.run.driver_name,
-      targetName: row.run.target_name,
+      driver_name: row.run.driver_name,
+      target_name: row.run.target_name,
       provider: row.target.provider,
       model: row.target.model,
-      reasoningEffort: row.target.reasoning_effort ?? null,
+      reasoning_effort: row.target.reasoning_effort ?? null,
       count: row.run.count,
       pass: row.pass ?? 0,
       concurrency: row.concurrency,
       command: row.command,
       status: "pending",
-      jobsDir: row.jobs_dir,
+      jobs_dir: row.jobs_dir,
     });
 }
 
@@ -530,7 +531,7 @@ export async function markJobStarted(
 ): Promise<void> {
   await getCurrentTransaction()
     .update(job)
-    .set({ status: "running", startedAt: started_at })
+    .set({ status: "running", started_at: started_at })
     .where(eq(job.id, job_id));
 }
 
@@ -554,55 +555,80 @@ export async function ingestJob(
       .set({
         status: jobStatus(result),
         error: result.error,
-        exitCode: result.exit_code,
-        startedAt: result.started_at,
-        finishedAt: result.finished_at,
+        exit_code: result.exit_code,
+        started_at: result.started_at,
+        finished_at: result.finished_at,
       })
       .where(eq(job.id, job_id));
+    // Every trial carries its job's and suite's facts (schema.ts: the trial
+    // table is fully denormalized).
+    const [facts] = await tx
+      .select({
+        suite_name: suite.name,
+        task_name: job.task_name,
+        runner: job.runner,
+        driver_name: job.driver_name,
+        target_name: job.target_name,
+        provider: job.provider,
+        model: job.model,
+        reasoning_effort: job.reasoning_effort,
+        pass: job.pass,
+        harbor_env: suite.harbor_env,
+        git_sha: suite.git_sha,
+        harbor_sha: suite.harbor_sha,
+        github_run_id: suite.github_run_id,
+        github_run_attempt: suite.github_run_attempt,
+        github_repository: suite.github_repository,
+      })
+      .from(job)
+      .innerJoin(suite, eq(suite.id, job.suite_id))
+      .where(eq(job.id, job_id));
+    if (!facts) throw new Error(`no job ${job_id} to store trials under`);
     for (const t of trials) {
       const trial_id = newId("t");
       await tx.insert(trial).values({
         id: trial_id,
-        suiteId: suite_id,
-        jobId: job_id,
-        trialName: t.trial_name,
+        suite_id: suite_id,
+        job_id: job_id,
+        ...facts,
+        trial_name: t.trial_name,
         reward: t.reward,
-        scoreReason: t.score_reason,
+        score_reason: t.score_reason,
         error: t.error,
-        stopReason: t.stop_reason,
+        stop_reason: t.stop_reason,
         turns: t.turns,
-        envToolCalls: t.env_tool_calls,
-        durationMs: t.duration_ms,
-        inputTokens: t.totals.input,
-        cachedInputTokens: t.totals.cached_input,
-        cacheWriteInputTokens: t.totals.cache_write_input,
-        outputTokens: t.totals.output,
-        reasoningOutputTokens: t.totals.reasoning_output,
-        modelCalls: t.calls.filter((c) => !c.discarded).length,
-        costCents: t.cost_cents,
-        trialDir: t.trial_dir,
+        env_tool_calls: t.env_tool_calls,
+        duration_ms: t.duration_ms,
+        input_tokens: t.totals.input,
+        cached_input_tokens: t.totals.cached_input,
+        cache_write_input_tokens: t.totals.cache_write_input,
+        output_tokens: t.totals.output,
+        reasoning_output_tokens: t.totals.reasoning_output,
+        model_calls: t.calls.filter((c) => !c.discarded).length,
+        cost_cents: t.cost_cents,
+        trial_dir: t.trial_dir,
       });
       if (t.calls.length > 0) {
         await tx.insert(modelCall).values(
           t.calls.map((c) => ({
-            suiteId: suite_id,
-            jobId: job_id,
-            trialId: trial_id,
-            turnId: c.turn_id ?? "",
+            suite_id: suite_id,
+            job_id: job_id,
+            trial_id: trial_id,
+            turn_id: c.turn_id ?? "",
             sequence: c.sequence,
             provider: c.provider,
             model: c.model,
             wire: c.wire,
             host: c.host,
             purpose: c.purpose,
-            inputTokens: c.usage.input,
-            cachedInputTokens: c.usage.cached_input,
-            cacheWriteInputTokens: c.usage.cache_write_input,
-            outputTokens: c.usage.output,
-            reasoningOutputTokens: c.usage.reasoning_output,
-            durationMs: c.duration_ms,
-            serviceTier: c.service_tier,
-            costCents: c.cost_cents,
+            input_tokens: c.usage.input,
+            cached_input_tokens: c.usage.cached_input,
+            cache_write_input_tokens: c.usage.cache_write_input,
+            output_tokens: c.usage.output,
+            reasoning_output_tokens: c.usage.reasoning_output,
+            duration_ms: c.duration_ms,
+            service_tier: c.service_tier,
+            cost_cents: c.cost_cents,
             discarded: c.discarded,
           }))
         );

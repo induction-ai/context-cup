@@ -18,7 +18,7 @@ export const DAYTONA_API = "https://app.daytona.io/api";
 const zSandbox = z.object({
   id: z.string(),
   state: z.string(),
-  createdAt: z.string(),
+  created_at: z.string(),
   cpu: z.number().nullish(),
   memory: z.number().nullish(),
   disk: z.number().nullish(),
@@ -128,7 +128,7 @@ export function olderThan(
   now = new Date()
 ): Sandbox[] {
   const cutoff = now.getTime() - hours * 3_600_000;
-  return sandboxes.filter((s) => Date.parse(s.createdAt) < cutoff);
+  return sandboxes.filter((s) => Date.parse(s.created_at) < cutoff);
 }
 
 /** What a set of sandboxes holds against the organization quota: vCPU, GB of

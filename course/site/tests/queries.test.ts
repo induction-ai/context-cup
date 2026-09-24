@@ -7,99 +7,118 @@ import {
 } from "@context-cup/shared/test_helpers/index.js";
 import { listSuites, loadSuite, loadTrial } from "../src/lib/queries.ts";
 
+/** What every trial row carries from its job and suite (the trial table is
+ *  denormalized). */
+function facts(task_name: string, pass = 0) {
+  return {
+    suite_name: "sample",
+    task_name,
+    runner: "tau3",
+    driver_name: "base_passthrough",
+    target_name: "gpt-5.5@medium",
+    provider: "openai" as const,
+    model: "gpt-5.5",
+    reasoning_effort: "medium",
+    pass,
+    harbor_env: "docker",
+  };
+}
+
 async function seed() {
   const db = getCurrentTransaction();
   await db.insert(suite).values({
     id: "s_site",
     name: "sample",
-    keyFile: "suites/x.json",
-    driverName: "base_passthrough",
-    targetName: "gpt-5.5@medium",
+    key_file: "suites/x.json",
+    driver_name: "base_passthrough",
+    target_name: "gpt-5.5@medium",
     provider: "openai",
     model: "gpt-5.5",
-    reasoningEffort: "medium",
+    reasoning_effort: "medium",
     count: 1,
-    gitSha: "abcdef0123",
-    githubRunId: "77",
-    githubRunAttempt: 1,
-    githubRepository: "o/r",
-    harborEnv: "docker",
-    logDir: "/tmp/s_site",
-    startedAt: new Date("2026-09-22T10:00:00Z"),
-    finishedAt: new Date("2026-09-22T10:05:00Z"),
+    git_sha: "abcdef0123",
+    github_run_id: "77",
+    github_run_attempt: 1,
+    github_repository: "o/r",
+    harbor_env: "docker",
+    log_dir: "/tmp/s_site",
+    started_at: new Date("2026-09-22T10:00:00Z"),
+    finished_at: new Date("2026-09-22T10:05:00Z"),
   });
   await db.insert(job).values({
     id: "j_site",
-    suiteId: "s_site",
-    taskName: "banking_001",
+    suite_id: "s_site",
+    task_name: "banking_001",
     runner: "tau3",
-    driverName: "base_passthrough",
-    targetName: "gpt-5.5@medium",
+    driver_name: "base_passthrough",
+    target_name: "gpt-5.5@medium",
     provider: "openai",
     model: "gpt-5.5",
-    reasoningEffort: "medium",
+    reasoning_effort: "medium",
     count: 1,
     concurrency: 1,
     command: "harbor run …",
     status: "done",
-    jobsDir: "/tmp/s_site/j_site/harbor",
+    jobs_dir: "/tmp/s_site/j_site/harbor",
   });
   await db.insert(trial).values([
     {
       id: "t_1",
-      suiteId: "s_site",
-      jobId: "j_site",
-      trialName: "banking-001__a",
+      ...facts("banking_001"),
+      suite_id: "s_site",
+      job_id: "j_site",
+      trial_name: "banking-001__a",
       reward: 1,
-      stopReason: "user_stop",
+      stop_reason: "user_stop",
       turns: 3,
-      envToolCalls: 2,
-      durationMs: 4000,
-      inputTokens: 1000,
-      cachedInputTokens: 400,
-      outputTokens: 50,
-      modelCalls: 2,
-      costCents: 4.5,
-      trialDir: "/tmp/t_1",
+      env_tool_calls: 2,
+      duration_ms: 4000,
+      input_tokens: 1000,
+      cached_input_tokens: 400,
+      output_tokens: 50,
+      model_calls: 2,
+      cost_cents: 4.5,
+      trial_dir: "/tmp/t_1",
     },
     {
       id: "t_2",
-      suiteId: "s_site",
-      jobId: "j_site",
-      trialName: "banking-001__b",
+      ...facts("banking_001"),
+      suite_id: "s_site",
+      job_id: "j_site",
+      trial_name: "banking-001__b",
       error: "boom",
-      trialDir: "/tmp/t_2",
+      trial_dir: "/tmp/t_2",
     },
   ]);
   await db.insert(modelCall).values([
     {
-      suiteId: "s_site",
-      jobId: "j_site",
-      trialId: "t_1",
-      turnId: "001_aaaaaa",
+      suite_id: "s_site",
+      job_id: "j_site",
+      trial_id: "t_1",
+      turn_id: "001_aaaaaa",
       sequence: 1,
       provider: "openai",
       model: "gpt-5.5",
       wire: "responses",
       purpose: "turn",
-      inputTokens: 400,
-      outputTokens: 20,
-      costCents: 2,
+      input_tokens: 400,
+      output_tokens: 20,
+      cost_cents: 2,
     },
     {
-      suiteId: "s_site",
-      jobId: "j_site",
-      trialId: "t_1",
-      turnId: "002_bbbbbb",
+      suite_id: "s_site",
+      job_id: "j_site",
+      trial_id: "t_1",
+      turn_id: "002_bbbbbb",
       sequence: 2,
       provider: "openai",
       model: "gpt-5.5",
       wire: "responses",
       purpose: "turn",
-      inputTokens: 600,
-      cachedInputTokens: 400,
-      outputTokens: 30,
-      costCents: 2.5,
+      input_tokens: 600,
+      cached_input_tokens: 400,
+      output_tokens: 30,
+      cost_cents: 2.5,
     },
   ]);
 }
@@ -120,47 +139,49 @@ describe("queries", () => {
     expect(s.errors).toBe(1);
     expect(s.mean_reward).toBe(1);
     expect(s.mean_cost_cents).toBeCloseTo(4.5, 6);
-    expect(s.githubRunId).toBe("77");
+    expect(s.github_run_id).toBe("77");
   });
 
   it("scores a retry pass into its task, not as another task", async () => {
     await seed();
     const db = getCurrentTransaction();
     const base = {
-      suiteId: "s_site",
+      suite_id: "s_site",
       runner: "tau3",
-      driverName: "base_passthrough",
-      targetName: "gpt-5.5@medium",
+      driver_name: "base_passthrough",
+      target_name: "gpt-5.5@medium",
       provider: "openai" as const,
       model: "gpt-5.5",
       count: 1,
       concurrency: 1,
       command: "harbor run …",
       status: "done" as const,
-      jobsDir: "/tmp/s_site/harbor",
+      jobs_dir: "/tmp/s_site/harbor",
     };
     await db.insert(job).values([
-      { ...base, id: "j_retry", taskName: "banking_001", pass: 1 },
-      { ...base, id: "j_other", taskName: "banking_002" },
+      { ...base, id: "j_retry", task_name: "banking_001", pass: 1 },
+      { ...base, id: "j_other", task_name: "banking_002" },
     ]);
     await db.insert(trial).values([
       {
         id: "t_retry",
-        suiteId: "s_site",
-        jobId: "j_retry",
-        trialName: "banking-001__c",
+        ...facts("banking_001", 1),
+        suite_id: "s_site",
+        job_id: "j_retry",
+        trial_name: "banking-001__c",
         reward: 0,
-        costCents: 1.5,
-        trialDir: "/tmp/t_retry",
+        cost_cents: 1.5,
+        trial_dir: "/tmp/t_retry",
       },
       {
         id: "t_other",
-        suiteId: "s_site",
-        jobId: "j_other",
-        trialName: "banking-002__a",
+        ...facts("banking_002"),
+        suite_id: "s_site",
+        job_id: "j_other",
+        trial_name: "banking-002__a",
         reward: 1,
-        costCents: 3,
-        trialDir: "/tmp/t_other",
+        cost_cents: 3,
+        trial_dir: "/tmp/t_other",
       },
     ]);
     const { rows } = await listSuites({
@@ -184,9 +205,9 @@ describe("queries", () => {
   it("loads a suite with its jobs and trials, and nothing for an unknown id", async () => {
     await seed();
     const data = await loadSuite("s_site");
-    expect(data?.suite.driverName).toBe("base_passthrough");
-    expect(data?.jobs.map((j) => j.taskName)).toEqual(["banking_001"]);
-    expect(data?.trials.map((t) => t.trialName)).toEqual([
+    expect(data?.suite.driver_name).toBe("base_passthrough");
+    expect(data?.jobs.map((j) => j.task_name)).toEqual(["banking_001"]);
+    expect(data?.trials.map((t) => t.trial_name)).toEqual([
       "banking-001__a",
       "banking-001__b",
     ]);
@@ -198,8 +219,8 @@ describe("queries", () => {
     const listed = await loadSuite("s_site");
     const first = listed!.trials[0]!;
     const data = await loadTrial(first.id);
-    expect(data?.trial.trialName).toBe("banking-001__a");
-    expect(data?.job.taskName).toBe("banking_001");
+    expect(data?.trial.trial_name).toBe("banking-001__a");
+    expect(data?.job.task_name).toBe("banking_001");
     expect(data?.suite.id).toBe("s_site");
     expect(data?.calls.map((c) => c.sequence)).toEqual(
       [...(data?.calls ?? [])].map((c) => c.sequence).sort((a, b) => a - b)
@@ -215,15 +236,15 @@ describe("listSuites paging and sorting", () => {
       await db.insert(suite).values({
         id: `s_page_${i}`,
         name: "smoke_tau",
-        keyFile: "suites/smoke_tau.json",
-        driverName: "base_passthrough",
-        targetName: "gpt-5.5@medium",
+        key_file: "suites/smoke_tau.json",
+        driver_name: "base_passthrough",
+        target_name: "gpt-5.5@medium",
         provider: "openai",
         model: "gpt-5.5",
         count: i + 1,
-        harborEnv: "docker",
-        logDir: `/tmp/s_page_${i}`,
-        startedAt: new Date(2026, 0, 1 + i),
+        harbor_env: "docker",
+        log_dir: `/tmp/s_page_${i}`,
+        started_at: new Date(2026, 0, 1 + i),
       });
     }
   }

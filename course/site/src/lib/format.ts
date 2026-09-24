@@ -58,21 +58,21 @@ export function when(value: Date | null | undefined): string {
 export function targetSpec(t: {
   provider: string;
   model: string;
-  reasoningEffort: string | null;
+  reasoning_effort: string | null;
 }): string {
-  return `${t.provider}/${t.model}${t.reasoningEffort ? `@${t.reasoningEffort}` : ""}`;
+  return `${t.provider}/${t.model}${t.reasoning_effort ? `@${t.reasoning_effort}` : ""}`;
 }
 
 /** The GitHub Actions run page for a suite started there, else null. */
 export function githubRunUrl(s: {
-  githubRepository: string | null;
-  githubRunId: string | null;
-  githubRunAttempt: number | null;
+  github_repository: string | null;
+  github_run_id: string | null;
+  github_run_attempt: number | null;
 }): string | null {
-  if (!s.githubRepository || !s.githubRunId) return null;
-  const base = `https://github.com/${s.githubRepository}/actions/runs/${s.githubRunId}`;
-  return s.githubRunAttempt && s.githubRunAttempt > 1
-    ? `${base}/attempts/${s.githubRunAttempt}`
+  if (!s.github_repository || !s.github_run_id) return null;
+  const base = `https://github.com/${s.github_repository}/actions/runs/${s.github_run_id}`;
+  return s.github_run_attempt && s.github_run_attempt > 1
+    ? `${base}/attempts/${s.github_run_attempt}`
     : base;
 }
 

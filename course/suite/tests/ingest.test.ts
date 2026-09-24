@@ -88,16 +88,16 @@ describe("ingestJob", () => {
     await db.insert(suite).values({
       id: "s_test",
       name: "sample",
-      keyFile: "suites/x.json",
-      driverName: "base_passthrough",
-      targetName: "gpt-5.5@medium",
+      key_file: "suites/x.json",
+      driver_name: "base_passthrough",
+      target_name: "gpt-5.5@medium",
       provider: "openai",
       model: "gpt-5.5",
-      reasoningEffort: "medium",
+      reasoning_effort: "medium",
       count: 2,
-      harborEnv: "docker",
-      logDir: "/tmp/s_test",
-      startedAt: new Date(),
+      harbor_env: "docker",
+      log_dir: "/tmp/s_test",
+      started_at: new Date(),
     });
     const run = sampleRun();
     await insertJob({
@@ -132,20 +132,36 @@ describe("ingestJob", () => {
 
     const jobs = await db.select().from(job).where(eq(job.id, "j_test"));
     expect(jobs[0]?.status).toBe("done");
-    expect(jobs[0]?.driverName).toBe("base_passthrough");
-    const rows = await db.select().from(trial).where(eq(trial.jobId, "j_test"));
+    expect(jobs[0]?.driver_name).toBe("base_passthrough");
+    const rows = await db
+      .select()
+      .from(trial)
+      .where(eq(trial.job_id, "j_test"));
     expect(rows).toHaveLength(3);
-    const scored = rows.find((r) => r.trialName === "banking-001__abc1234")!;
+    const scored = rows.find((r) => r.trial_name === "banking-001__abc1234")!;
     expect(scored.reward).toBe(1);
-    expect(scored.inputTokens).toBe(12000);
-    expect(scored.modelCalls).toBe(3);
-    expect(scored.costCents).toBeGreaterThan(0);
+    expect(scored.input_tokens).toBe(12000);
+    expect(scored.model_calls).toBe(3);
+    expect(scored.cost_cents).toBeGreaterThan(0);
+    // Denormalized: the trial answers for itself, with no join.
+    expect(scored).toMatchObject({
+      suite_name: "sample",
+      task_name: run.task_name,
+      runner: run.task.runner,
+      driver_name: "base_passthrough",
+      target_name: run.target_name,
+      provider: "openai",
+      model: "gpt-5.5",
+      reasoning_effort: "medium",
+      pass: 0,
+      harbor_env: "docker",
+    });
     const calls = await db
       .select()
       .from(modelCall)
-      .where(eq(modelCall.trialId, scored.id));
+      .where(eq(modelCall.trial_id, scored.id));
     expect(calls.map((c) => c.sequence)).toEqual([1, 2, 3]);
-    expect(calls[0]?.turnId).toBe("001_k3v9xq");
+    expect(calls[0]?.turn_id).toBe("001_k3v9xq");
 
     const cell = summarizeCell(run, trials);
     expect(cell).toMatchObject({ n: 3, scored: 1, errors: 2, mean_reward: 1 });
@@ -201,15 +217,15 @@ describe("discarded attempts", () => {
     await db.insert(suite).values({
       id: "s_disc",
       name: "smoke_tau",
-      keyFile: "suites/smoke_tau.json",
-      driverName: "base_passthrough",
-      targetName: "gpt-5.5@medium",
+      key_file: "suites/smoke_tau.json",
+      driver_name: "base_passthrough",
+      target_name: "gpt-5.5@medium",
       provider: "openai",
       model: "gpt-5.5",
       count: 1,
-      harborEnv: "docker",
-      logDir: "/tmp/s_disc",
-      startedAt: new Date("2026-09-22T10:00:00Z"),
+      harbor_env: "docker",
+      log_dir: "/tmp/s_disc",
+      started_at: new Date("2026-09-22T10:00:00Z"),
     });
     await insertJob({
       job_id: "j_disc",
@@ -239,13 +255,13 @@ describe("discarded attempts", () => {
     const [row] = await db
       .select()
       .from(trial)
-      .where(eq(trial.jobId, "j_disc"));
-    expect(row?.modelCalls).toBe(1);
-    expect(row?.inputTokens).toBe(5000);
+      .where(eq(trial.job_id, "j_disc"));
+    expect(row?.model_calls).toBe(1);
+    expect(row?.input_tokens).toBe(5000);
     const stored = await db
       .select()
       .from(modelCall)
-      .where(eq(modelCall.jobId, "j_disc"));
+      .where(eq(modelCall.job_id, "j_disc"));
     expect(stored.map((c) => c.discarded).sort()).toEqual([false, true]);
   });
 });

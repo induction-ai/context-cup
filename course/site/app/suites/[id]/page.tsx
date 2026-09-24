@@ -71,13 +71,13 @@ export default async function SuitePage({
   if (!data) notFound();
   const { suite, jobs, trials } = data;
 
-  const taskOf = new Map(jobs.map((j) => [j.id, j.taskName] as const));
+  const taskOf = new Map(jobs.map((j) => [j.id, j.task_name] as const));
   const cells = taskCells(
-    trials.map((t) => ({ ...t, task_name: taskOf.get(t.jobId) ?? t.jobId }))
+    trials.map((t) => ({ ...t, task_name: taskOf.get(t.job_id) ?? t.job_id }))
   );
   const sortedCells = sortRows(cells, sort, taskValue);
   const totals = suiteTotals(cells);
-  const trialsByJob = groupBy(trials, (t) => t.jobId);
+  const trialsByJob = groupBy(trials, (t) => t.job_id);
   const gh = githubRunUrl(suite);
 
   return (
@@ -106,7 +106,7 @@ export default async function SuitePage({
               driver
             </dt>
             <dd className="col-8 col-md-9 font-monospace">
-              {suite.driverName}
+              {suite.driver_name}
             </dd>
           </dl>
         </div>
@@ -116,7 +116,7 @@ export default async function SuitePage({
               target
             </dt>
             <dd className="col-8 col-md-9">
-              {suite.targetName}{" "}
+              {suite.target_name}{" "}
               <span className="text-body-secondary font-monospace">
                 {targetSpec(suite)}
               </span>
@@ -139,9 +139,9 @@ export default async function SuitePage({
               started
             </dt>
             <dd className="col-8 col-md-9 font-monospace">
-              {when(suite.startedAt)} ·{" "}
-              {suite.finishedAt
-                ? `finished in ${elapsed(suite.startedAt, suite.finishedAt)}`
+              {when(suite.started_at)} ·{" "}
+              {suite.finished_at
+                ? `finished in ${elapsed(suite.started_at, suite.finished_at)}`
                 : "running"}
             </dd>
           </dl>
@@ -152,8 +152,8 @@ export default async function SuitePage({
               harbor
             </dt>
             <dd className="col-8 col-md-9 font-monospace">
-              {suite.harborEnv}
-              {suite.harborSha ? ` @ ${shortSha(suite.harborSha)}` : ""}
+              {suite.harbor_env}
+              {suite.harbor_sha ? ` @ ${shortSha(suite.harbor_sha)}` : ""}
             </dd>
           </dl>
         </div>
@@ -163,7 +163,7 @@ export default async function SuitePage({
               git
             </dt>
             <dd className="col-8 col-md-9 font-monospace">
-              {shortSha(suite.gitSha)}
+              {shortSha(suite.git_sha)}
             </dd>
           </dl>
         </div>
@@ -175,9 +175,9 @@ export default async function SuitePage({
             <dd className="col-8 col-md-9">
               {gh ? (
                 <a href={gh}>
-                  {suite.githubRepository} run {suite.githubRunId}
-                  {suite.githubRunAttempt && suite.githubRunAttempt > 1
-                    ? ` attempt ${suite.githubRunAttempt}`
+                  {suite.github_repository} run {suite.github_run_id}
+                  {suite.github_run_attempt && suite.github_run_attempt > 1
+                    ? ` attempt ${suite.github_run_attempt}`
                     : ""}
                 </a>
               ) : (
@@ -191,7 +191,7 @@ export default async function SuitePage({
             <dt className="col-4 col-md-3 text-body-secondary fw-normal">
               suite file
             </dt>
-            <dd className="col-8 col-md-9 font-monospace">{suite.keyFile}</dd>
+            <dd className="col-8 col-md-9 font-monospace">{suite.key_file}</dd>
           </dl>
         </div>
         <div className="col">
@@ -199,7 +199,7 @@ export default async function SuitePage({
             <dt className="col-4 col-md-3 text-body-secondary fw-normal">
               log dir
             </dt>
-            <dd className="col-8 col-md-9 font-monospace">{suite.logDir}</dd>
+            <dd className="col-8 col-md-9 font-monospace">{suite.log_dir}</dd>
           </dl>
         </div>
       </dl>
@@ -256,11 +256,11 @@ export default async function SuitePage({
         <section
           className="card mb-3"
           key={j.id}
-          id={j.pass === 0 ? `task-${j.taskName}` : `job-${j.id}`}
+          id={j.pass === 0 ? `task-${j.task_name}` : `job-${j.id}`}
         >
           <div className="card-body">
             <h3 className="h5">
-              <span className="font-monospace">{j.taskName}</span>{" "}
+              <span className="font-monospace">{j.task_name}</span>{" "}
               <span className="text-body-secondary font-monospace">{j.id}</span>{" "}
               {j.pass > 0 ? (
                 <>
@@ -284,11 +284,11 @@ export default async function SuitePage({
             </h3>
             <p className="text-body-secondary font-monospace">
               {j.runner} · count {j.count} · concurrency {j.concurrency} ·{" "}
-              {j.startedAt
-                ? `${when(j.startedAt)} · ${elapsed(j.startedAt, j.finishedAt)}`
+              {j.started_at
+                ? `${when(j.started_at)} · ${elapsed(j.started_at, j.finished_at)}`
                 : "not started"}
-              {j.exitCode != null && j.exitCode !== 0
-                ? ` · exit ${j.exitCode}`
+              {j.exit_code != null && j.exit_code !== 0
+                ? ` · exit ${j.exit_code}`
                 : ""}
             </p>
             {j.error ? (
@@ -375,24 +375,24 @@ function TrialRow({ trial }: { trial: TrialRow }) {
   return (
     <tr>
       <td className="font-monospace">
-        <Link href={`/trials/${trial.id}`}>{trial.trialName}</Link>
+        <Link href={`/trials/${trial.id}`}>{trial.trial_name}</Link>
       </td>
       <td
         className={`text-end font-monospace${trial.reward === 1 ? " text-success" : trial.reward === 0 ? " text-danger" : ""}`}
       >
         {reward(trial.reward)}
       </td>
-      <td className="font-monospace">{trial.stopReason ?? "–"}</td>
+      <td className="font-monospace">{trial.stop_reason ?? "–"}</td>
       <td className="text-end font-monospace">{count(trial.turns)}</td>
-      <td className="text-end font-monospace">{count(trial.envToolCalls)}</td>
-      <td className="text-end font-monospace">{tokens(trial.inputTokens)}</td>
+      <td className="text-end font-monospace">{count(trial.env_tool_calls)}</td>
+      <td className="text-end font-monospace">{tokens(trial.input_tokens)}</td>
       <td className="text-end font-monospace">
-        {tokens(trial.cachedInputTokens)}
+        {tokens(trial.cached_input_tokens)}
       </td>
-      <td className="text-end font-monospace">{tokens(trial.outputTokens)}</td>
-      <td className="text-end font-monospace">{trial.modelCalls}</td>
-      <td className="text-end font-monospace">{cents(trial.costCents)}</td>
-      <td className="text-end font-monospace">{duration(trial.durationMs)}</td>
+      <td className="text-end font-monospace">{tokens(trial.output_tokens)}</td>
+      <td className="text-end font-monospace">{trial.model_calls}</td>
+      <td className="text-end font-monospace">{cents(trial.cost_cents)}</td>
+      <td className="text-end font-monospace">{duration(trial.duration_ms)}</td>
       <td className="error text-danger">{truncate(trial.error)}</td>
     </tr>
   );

@@ -35,10 +35,10 @@ function fakeFetch(responses: Response[]): {
   return { fetch: impl as typeof fetch, calls };
 }
 
-const sandbox = (id: string, createdAt = "2026-09-01T00:00:00Z"): Sandbox => ({
+const sandbox = (id: string, created_at = "2026-09-01T00:00:00Z"): Sandbox => ({
   id,
   state: "started",
-  createdAt,
+  created_at,
   labels: { [SUITE_LABEL]: "s_abc" },
 });
 

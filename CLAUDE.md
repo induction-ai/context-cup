@@ -61,5 +61,6 @@ Tests need a local Postgres. Each vitest worker gets its own database, created a
 
 - Python is 3.12 everywhere: `.python-version` on the host, and a uv-managed 3.12 provisioned into every trial container for the runner loop and the engines. Never depend on a task image's own interpreter.
 - ESM, TypeScript run directly by `tsx` and vitest (no build step). Relative imports carry the `.ts` extension; cross-package imports use the package's `./*.js` export map.
-- Schema properties are camelCase; columns are snake_case via drizzle's casing option.
+- Database columns are snake_case, and so is everything in code that names one: schema properties, query results, insert values. A row reads the same in TypeScript as in psql.
+- The `trial` table is fully denormalized: each row carries every fact about its trial (suite, task, benchmark, driver, target, pass, harbor env, commits, CI run), copied from its job and suite when stored, so no question about trials needs a join. A fact added to `job` or `suite` that describes the trial goes on `trial` too.
 - Prettier is the formatter; run `pnpm format` before finishing.

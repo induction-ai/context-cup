@@ -74,9 +74,9 @@ export default async function SuitesPage({
                       <Link href={`/suites/${s.id}`}>{s.id}</Link>
                     </td>
                     <td>{s.name}</td>
-                    <td className="font-monospace">{s.driverName}</td>
+                    <td className="font-monospace">{s.driver_name}</td>
                     <td>
-                      {s.targetName}
+                      {s.target_name}
                       <br />
                       <span className="text-body-secondary font-monospace">
                         {targetSpec(s)}
@@ -84,10 +84,10 @@ export default async function SuitesPage({
                     </td>
                     <td className="text-end font-monospace">{s.tasks}</td>
                     <td className="text-end font-monospace">{s.count}</td>
-                    <td className="font-monospace">{when(s.startedAt)}</td>
+                    <td className="font-monospace">{when(s.started_at)}</td>
                     <td className="text-end font-monospace">
-                      {s.finishedAt
-                        ? elapsed(s.startedAt, s.finishedAt)
+                      {s.finished_at
+                        ? elapsed(s.started_at, s.finished_at)
                         : "running"}
                     </td>
                     <td className="text-end font-monospace">{s.trials}</td>

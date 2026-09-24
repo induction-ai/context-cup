@@ -7,7 +7,7 @@
 export type TrialLike = {
   reward: number | null;
   error: string | null;
-  costCents: number | null;
+  cost_cents: number | null;
   turns: number | null;
 };
 
@@ -41,7 +41,7 @@ export function cellFor(task_name: string, trials: TrialLike[]): TaskCell {
     errors: trials.filter((t) => t.error).length,
     mean_reward: mean(scored.map((t) => t.reward!)),
     mean_cost_cents: mean(
-      scored.flatMap((t) => (t.costCents == null ? [] : [t.costCents]))
+      scored.flatMap((t) => (t.cost_cents == null ? [] : [t.cost_cents]))
     ),
     mean_turns: mean(scored.flatMap((t) => (t.turns == null ? [] : [t.turns]))),
   };

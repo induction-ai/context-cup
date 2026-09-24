@@ -8,13 +8,13 @@ import { suiteTotals, taskCells } from "../src/lib/aggregate.ts";
 const t = (
   task_name: string,
   reward: number | null,
-  costCents: number | null,
+  cost_cents: number | null,
   turns: number | null,
   error: string | null = null
 ) => ({
   task_name,
   reward,
-  costCents,
+  cost_cents,
   turns,
   error,
 });

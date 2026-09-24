@@ -41,20 +41,20 @@ export default async function TrialPage({
             <Link href={`/suites/${suite.id}`}>{suite.id}</Link>
           </li>
           <li className="breadcrumb-item font-monospace">
-            <a href={`/suites/${suite.id}#task-${job.taskName}`}>
-              {job.taskName}
+            <a href={`/suites/${suite.id}#task-${job.task_name}`}>
+              {job.task_name}
             </a>
           </li>
           <li
             className="breadcrumb-item active font-monospace"
             aria-current="page"
           >
-            {trial.trialName}
+            {trial.trial_name}
           </li>
         </ol>
       </nav>
       <h1 className="h3 mb-3">
-        {trial.trialName}{" "}
+        {trial.trial_name}{" "}
         <span className={`font-monospace ${rewardClass}`}>
           {reward(trial.reward)}
         </span>
@@ -67,56 +67,56 @@ export default async function TrialPage({
           </Link>
         </Fact>
         <Fact label="driver" mono>
-          {suite.driverName}
+          {suite.driver_name}
         </Fact>
         <Fact label="target">
-          {suite.targetName}{" "}
+          {suite.target_name}{" "}
           <span className="text-body-secondary font-monospace">
             {targetSpec(suite)}
           </span>
         </Fact>
         <Fact label="task" mono>
-          {job.taskName} · {job.runner}
+          {job.task_name} · {job.runner}
         </Fact>
         <Fact label="reward">
           <span className={`font-monospace ${rewardClass}`}>
             {reward(trial.reward)}
           </span>
-          {trial.scoreReason ? (
-            <span className="text-body-secondary"> · {trial.scoreReason}</span>
+          {trial.score_reason ? (
+            <span className="text-body-secondary"> · {trial.score_reason}</span>
           ) : null}
         </Fact>
         <Fact label="stop reason" mono>
-          {trial.stopReason ?? "–"}
+          {trial.stop_reason ?? "–"}
         </Fact>
         <Fact label="turns" mono>
-          {count(trial.turns)} turns · {count(trial.envToolCalls)} tool calls ·{" "}
-          {trial.modelCalls} model calls
+          {count(trial.turns)} turns · {count(trial.env_tool_calls)} tool calls
+          · {trial.model_calls} model calls
         </Fact>
         <Fact label="duration" mono>
-          {duration(trial.durationMs)}
+          {duration(trial.duration_ms)}
         </Fact>
         <Fact label="tokens" mono>
-          in {tokens(trial.inputTokens)} · cached{" "}
-          {tokens(trial.cachedInputTokens)} · cache write{" "}
-          {tokens(trial.cacheWriteInputTokens)} · out{" "}
-          {tokens(trial.outputTokens)} · reasoning{" "}
-          {tokens(trial.reasoningOutputTokens)}
+          in {tokens(trial.input_tokens)} · cached{" "}
+          {tokens(trial.cached_input_tokens)} · cache write{" "}
+          {tokens(trial.cache_write_input_tokens)} · out{" "}
+          {tokens(trial.output_tokens)} · reasoning{" "}
+          {tokens(trial.reasoning_output_tokens)}
         </Fact>
         <Fact label="cost" mono>
-          {cents(trial.costCents)}
+          {cents(trial.cost_cents)}
         </Fact>
         <Fact label="job" mono>
           <Link href={`/suites/${suite.id}`}>{job.id}</Link> · {job.status}
-          {job.startedAt
-            ? ` · ${when(job.startedAt)} · ${elapsed(job.startedAt, job.finishedAt)}`
+          {job.started_at
+            ? ` · ${when(job.started_at)} · ${elapsed(job.started_at, job.finished_at)}`
             : ""}
         </Fact>
         <Fact label="recorded" mono>
-          {when(trial.createdAt)}
+          {when(trial.created_at)}
         </Fact>
         <Fact label="trial dir" mono>
-          {trial.trialDir}
+          {trial.trial_dir}
         </Fact>
       </div>
 
@@ -173,7 +173,7 @@ function CallTable({ calls }: { calls: ModelCallRow[] }) {
     pick: (c: ModelCallRow) => number | null,
     of: ModelCallRow[] = counted
   ) => of.reduce((acc, c) => acc + (pick(c) ?? 0), 0);
-  const priced = counted.every((c) => c.costCents != null);
+  const priced = counted.every((c) => c.cost_cents != null);
   return (
     <div className="table-responsive">
       <table className="table table-sm table-striped table-hover align-middle mb-0">
@@ -202,7 +202,7 @@ function CallTable({ calls }: { calls: ModelCallRow[] }) {
               className={c.discarded ? "text-body-secondary" : undefined}
             >
               <td className="font-monospace">
-                {c.turnId}
+                {c.turn_id}
                 {c.discarded ? (
                   <span className="badge text-bg-secondary ms-2">
                     discarded
@@ -215,49 +215,49 @@ function CallTable({ calls }: { calls: ModelCallRow[] }) {
               <td className="font-monospace">{c.wire}</td>
               <td className="font-monospace">{c.host}</td>
               <td className="text-end font-monospace">
-                {tokens(c.inputTokens)}
+                {tokens(c.input_tokens)}
               </td>
               <td className="text-end font-monospace">
-                {tokens(c.cachedInputTokens)}
+                {tokens(c.cached_input_tokens)}
               </td>
               <td className="text-end font-monospace">
-                {tokens(c.cacheWriteInputTokens)}
+                {tokens(c.cache_write_input_tokens)}
               </td>
               <td className="text-end font-monospace">
-                {tokens(c.outputTokens)}
+                {tokens(c.output_tokens)}
               </td>
               <td className="text-end font-monospace">
-                {tokens(c.reasoningOutputTokens)}
+                {tokens(c.reasoning_output_tokens)}
               </td>
-              <td className="text-end font-monospace">{cents(c.costCents)}</td>
+              <td className="text-end font-monospace">{cents(c.cost_cents)}</td>
               <td className="text-end font-monospace">
-                {duration(c.durationMs)}
+                {duration(c.duration_ms)}
               </td>
-              <td className="font-monospace">{c.serviceTier ?? "–"}</td>
+              <td className="font-monospace">{c.service_tier ?? "–"}</td>
             </tr>
           ))}
           <tr className="table-active fw-semibold">
             <td colSpan={6}>ALL</td>
             <td className="text-end font-monospace">
-              {tokens(sum((c) => c.inputTokens))}
+              {tokens(sum((c) => c.input_tokens))}
             </td>
             <td className="text-end font-monospace">
-              {tokens(sum((c) => c.cachedInputTokens))}
+              {tokens(sum((c) => c.cached_input_tokens))}
             </td>
             <td className="text-end font-monospace">
-              {tokens(sum((c) => c.cacheWriteInputTokens))}
+              {tokens(sum((c) => c.cache_write_input_tokens))}
             </td>
             <td className="text-end font-monospace">
-              {tokens(sum((c) => c.outputTokens))}
+              {tokens(sum((c) => c.output_tokens))}
             </td>
             <td className="text-end font-monospace">
-              {tokens(sum((c) => c.reasoningOutputTokens))}
+              {tokens(sum((c) => c.reasoning_output_tokens))}
             </td>
             <td className="text-end font-monospace">
-              {priced ? cents(sum((c) => c.costCents)) : "–"}
+              {priced ? cents(sum((c) => c.cost_cents)) : "–"}
             </td>
             <td className="text-end font-monospace">
-              {duration(sum((c) => c.durationMs))}
+              {duration(sum((c) => c.duration_ms))}
             </td>
             <td />
           </tr>
@@ -268,8 +268,8 @@ function CallTable({ calls }: { calls: ModelCallRow[] }) {
           {discarded.length} call{discarded.length === 1 ? "" : "s"} from
           discarded attempts (empty replies re-asked) are not in the totals or
           the trial&rsquo;s cost; they spent{" "}
-          {discarded.every((c) => c.costCents != null)
-            ? cents(sum((c) => c.costCents, discarded))
+          {discarded.every((c) => c.cost_cents != null)
+            ? cents(sum((c) => c.cost_cents, discarded))
             : "an unpriced amount"}
           .
         </p>

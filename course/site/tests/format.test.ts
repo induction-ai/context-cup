@@ -36,33 +36,33 @@ describe("format", () => {
       targetSpec({
         provider: "openai",
         model: "gpt-5.5",
-        reasoningEffort: "medium",
+        reasoning_effort: "medium",
       })
     ).toBe("openai/gpt-5.5@medium");
     expect(
-      targetSpec({ provider: "gemini", model: "g", reasoningEffort: null })
+      targetSpec({ provider: "gemini", model: "g", reasoning_effort: null })
     ).toBe("gemini/g");
     expect(shortSha("e5040af1234567")).toBe("e5040af");
     expect(shortSha(null)).toBe("–");
     expect(
       githubRunUrl({
-        githubRepository: null,
-        githubRunId: null,
-        githubRunAttempt: null,
+        github_repository: null,
+        github_run_id: null,
+        github_run_attempt: null,
       })
     ).toBeNull();
     expect(
       githubRunUrl({
-        githubRepository: "o/r",
-        githubRunId: "42",
-        githubRunAttempt: 1,
+        github_repository: "o/r",
+        github_run_id: "42",
+        github_run_attempt: 1,
       })
     ).toBe("https://github.com/o/r/actions/runs/42");
     expect(
       githubRunUrl({
-        githubRepository: "o/r",
-        githubRunId: "42",
-        githubRunAttempt: 3,
+        github_repository: "o/r",
+        github_run_id: "42",
+        github_run_attempt: 3,
       })
     ).toBe("https://github.com/o/r/actions/runs/42/attempts/3");
     expect(truncate("x".repeat(200), 10)).toHaveLength(10);

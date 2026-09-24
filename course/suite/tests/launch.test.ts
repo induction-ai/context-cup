@@ -135,9 +135,9 @@ describe("run provenance", () => {
       "https://cup.example/suites/s_abc"
     );
     expect(githubRun({})).toEqual({
-      githubRunId: null,
-      githubRunAttempt: null,
-      githubRepository: null,
+      github_run_id: null,
+      github_run_attempt: null,
+      github_repository: null,
     });
     expect(
       githubRun({
@@ -146,9 +146,9 @@ describe("run provenance", () => {
         GITHUB_REPOSITORY: "example/context-cup",
       })
     ).toEqual({
-      githubRunId: "123",
-      githubRunAttempt: 2,
-      githubRepository: "example/context-cup",
+      github_run_id: "123",
+      github_run_attempt: 2,
+      github_repository: "example/context-cup",
     });
   });
 });

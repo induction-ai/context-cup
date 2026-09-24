@@ -84,26 +84,27 @@ export function suiteUrl(suite_id: string, env = process.env): string {
 
 /** The GitHub Actions run this suite belongs to, when there is one. */
 export function githubRun(env: Record<string, string | undefined>): {
-  githubRunId: string | null;
-  githubRunAttempt: number | null;
-  githubRepository: string | null;
+  github_run_id: string | null;
+  github_run_attempt: number | null;
+  github_repository: string | null;
 } {
   if (!env.GITHUB_RUN_ID) {
     return {
-      githubRunId: null,
-      githubRunAttempt: null,
-      githubRepository: null,
+      github_run_id: null,
+      github_run_attempt: null,
+      github_repository: null,
     };
   }
   const attempt = Number(env.GITHUB_RUN_ATTEMPT);
   return {
-    githubRunId: env.GITHUB_RUN_ID,
-    githubRunAttempt: Number.isInteger(attempt) && attempt > 0 ? attempt : null,
-    githubRepository: env.GITHUB_REPOSITORY ?? null,
+    github_run_id: env.GITHUB_RUN_ID,
+    github_run_attempt:
+      Number.isInteger(attempt) && attempt > 0 ? attempt : null,
+    github_repository: env.GITHUB_REPOSITORY ?? null,
   };
 }
 
-function gitSha(): string | null {
+function git_sha(): string | null {
   try {
     return execSync("git rev-parse HEAD", {
       cwd: REPO_ROOT,
@@ -340,19 +341,19 @@ async function main(): Promise<void> {
       .values({
         id: suite_id,
         name: suite_key,
-        keyFile: path.relative(REPO_ROOT, key_file),
-        driverName: spec.driver_name,
-        targetName: spec.target_name,
+        key_file: path.relative(REPO_ROOT, key_file),
+        driver_name: spec.driver_name,
+        target_name: spec.target_name,
         provider: spec.target.provider,
         model: spec.target.model,
-        reasoningEffort: spec.target.reasoning_effort ?? null,
+        reasoning_effort: spec.target.reasoning_effort ?? null,
         count,
-        gitSha: gitSha(),
-        harborSha: harbor_sha,
+        git_sha: git_sha(),
+        harbor_sha: harbor_sha,
         ...githubRun(process.env),
-        harborEnv: harbor_env,
-        logDir: suite_dir,
-        startedAt: started_at,
+        harbor_env: harbor_env,
+        log_dir: suite_dir,
+        started_at: started_at,
       });
     await insertJobs(entries, 0);
   });
@@ -573,7 +574,7 @@ async function main(): Promise<void> {
     count,
     started_at: started_at.toISOString(),
     finished_at: finished_at.toISOString(),
-    git_sha: gitSha(),
+    git_sha: git_sha(),
     harbor_sha,
     harbor_env,
     retry_errors,
@@ -590,7 +591,7 @@ async function main(): Promise<void> {
   try {
     await getRawDatabase()
       .update(suiteTable)
-      .set({ finishedAt: finished_at })
+      .set({ finished_at: finished_at })
       .where(eq(suiteTable.id, suite_id));
   } catch (err) {
     console.error(

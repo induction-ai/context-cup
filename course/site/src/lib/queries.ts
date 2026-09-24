@@ -48,7 +48,7 @@ export async function listSuites(options: {
   const db = getCurrentTransaction();
   const rollup = db
     .select({
-      suiteId: trial.suiteId,
+      suite_id: trial.suite_id,
       trials: sql<number>`count(*)::int`.as("trials"),
       scored:
         sql<number>`count(*) filter (where ${trial.reward} is not null and ${trial.error} is null)::int`.as(
@@ -60,29 +60,29 @@ export async function listSuites(options: {
         ),
     })
     .from(trial)
-    .groupBy(trial.suiteId)
+    .groupBy(trial.suite_id)
     .as("rollup");
   // A task's means over its done trials in all its jobs, then the suite's
   // mean over its tasks.
   const done = sql`${trial.reward} is not null and ${trial.error} is null`;
   const taskMeans = db
     .select({
-      suiteId: trial.suiteId,
-      taskName: job.taskName,
+      suite_id: trial.suite_id,
+      task_name: job.task_name,
       task_reward: sql<
         number | null
       >`avg(${trial.reward}) filter (where ${done})`.as("task_reward"),
       task_cost: sql<
         number | null
-      >`avg(${trial.costCents}) filter (where ${done})`.as("task_cost"),
+      >`avg(${trial.cost_cents}) filter (where ${done})`.as("task_cost"),
     })
     .from(trial)
-    .innerJoin(job, eq(job.id, trial.jobId))
-    .groupBy(trial.suiteId, job.taskName)
+    .innerJoin(job, eq(job.id, trial.job_id))
+    .groupBy(trial.suite_id, job.task_name)
     .as("task_means");
   const scores = db
     .select({
-      suiteId: taskMeans.suiteId,
+      suite_id: taskMeans.suite_id,
       mean_reward: sql<number | null>`avg(${taskMeans.task_reward})`.as(
         "mean_reward"
       ),
@@ -91,26 +91,26 @@ export async function listSuites(options: {
       ),
     })
     .from(taskMeans)
-    .groupBy(taskMeans.suiteId)
+    .groupBy(taskMeans.suite_id)
     .as("scores");
   const jobCounts = db
     .select({
-      suiteId: job.suiteId,
-      tasks: sql<number>`count(distinct ${job.taskName})::int`.as("tasks"),
+      suite_id: job.suite_id,
+      tasks: sql<number>`count(distinct ${job.task_name})::int`.as("tasks"),
     })
     .from(job)
-    .groupBy(job.suiteId)
+    .groupBy(job.suite_id)
     .as("job_counts");
 
   const sortExpr: Record<SuiteSortKey, SQL> = {
     suite: sql`${suite.id}`,
     name: sql`${suite.name}`,
-    driver: sql`${suite.driverName}`,
-    target: sql`${suite.targetName}`,
+    driver: sql`${suite.driver_name}`,
+    target: sql`${suite.target_name}`,
     tasks: sql`${jobCounts.tasks}`,
     count: sql`${suite.count}`,
-    started: sql`${suite.startedAt}`,
-    duration: sql`${suite.finishedAt} - ${suite.startedAt}`,
+    started: sql`${suite.started_at}`,
+    duration: sql`${suite.finished_at} - ${suite.started_at}`,
     trials: sql`${rollup.trials}`,
     done: sql`${rollup.scored}`,
     errors: sql`${rollup.errors}`,
@@ -135,10 +135,10 @@ export async function listSuites(options: {
         mean_cost_cents: scores.mean_cost_cents,
       })
       .from(suite)
-      .leftJoin(jobCounts, eq(jobCounts.suiteId, suite.id))
-      .leftJoin(rollup, eq(rollup.suiteId, suite.id))
-      .leftJoin(scores, eq(scores.suiteId, suite.id))
-      .orderBy(primary, desc(suite.startedAt), asc(suite.id))
+      .leftJoin(jobCounts, eq(jobCounts.suite_id, suite.id))
+      .leftJoin(rollup, eq(rollup.suite_id, suite.id))
+      .leftJoin(scores, eq(scores.suite_id, suite.id))
+      .orderBy(primary, desc(suite.started_at), asc(suite.id))
       .limit(page.per)
       .offset((page.page - 1) * page.per),
     db.select({ total: sql<number>`count(*)::int` }).from(suite),
@@ -171,16 +171,16 @@ export async function listJobs(suite_id: string): Promise<JobRow[]> {
   return getCurrentTransaction()
     .select()
     .from(job)
-    .where(eq(job.suiteId, suite_id))
-    .orderBy(asc(job.taskName), asc(job.pass), asc(job.id));
+    .where(eq(job.suite_id, suite_id))
+    .orderBy(asc(job.task_name), asc(job.pass), asc(job.id));
 }
 
 export async function listTrials(suite_id: string): Promise<TrialRow[]> {
   return getCurrentTransaction()
     .select()
     .from(trial)
-    .where(eq(trial.suiteId, suite_id))
-    .orderBy(asc(trial.jobId), asc(trial.trialName));
+    .where(eq(trial.suite_id, suite_id))
+    .orderBy(asc(trial.job_id), asc(trial.trial_name));
 }
 
 export async function listTrialCalls(
@@ -189,7 +189,7 @@ export async function listTrialCalls(
   return getCurrentTransaction()
     .select()
     .from(modelCall)
-    .where(eq(modelCall.trialId, trial_id))
+    .where(eq(modelCall.trial_id, trial_id))
     .orderBy(asc(modelCall.sequence));
 }
 
@@ -223,12 +223,12 @@ export async function loadTrial(
     getCurrentTransaction()
       .select()
       .from(job)
-      .where(eq(job.id, row.jobId))
+      .where(eq(job.id, row.job_id))
       .limit(1),
     getCurrentTransaction()
       .select()
       .from(suite)
-      .where(eq(suite.id, row.suiteId))
+      .where(eq(suite.id, row.suite_id))
       .limit(1),
     listTrialCalls(id),
   ]);
