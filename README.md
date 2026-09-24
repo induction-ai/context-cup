@@ -192,3 +192,17 @@ a run's tasks, jobs, trials, and each trial's model calls. `bin/suite` prints
 the link to its run at start and finish; `SITE_URL` sets the base for those
 links (default `http://localhost:3300`). Runs started in GitHub Actions show
 a link to the workflow run.
+
+## Deploying
+
+`render/render.yaml` is a Render Blueprint for the site and its Postgres
+database, in one environment. The site builds from the `production` branch;
+`bin/deploy` pushes `origin/main` there (`--commit <sha>` deploys an earlier
+commit of main, `--yes` skips the prompt). Each deploy applies pending
+migrations before it goes live (`pnpm prelaunch`). A package that deploys
+keeps its Render scripts in its own `render/` directory
+(`course/site/render/build.sh`).
+
+The database accepts connections from anywhere, since `bin/suite` writes to
+it from wherever it runs; set the GitHub `DATABASE_URL` secret to its external
+connection string, and the `SITE_URL` variable to the site's address.

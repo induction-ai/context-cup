@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Deploy by pushing origin/main to the production branch, which Render watches
+# (see render/render.yaml) and builds on push.
+#
+# Usage: bin/deploy [--yes] [--commit <sha>]
+#   --yes           skip the confirmation prompt (for CI)
+#   --commit <sha>  deploy this commit instead of the tip of origin/main
+#                   (must be a commit on origin/main)
+
+set -euo pipefail
+
+DEPLOY_BRANCH=production
+ASSUME_YES=0
+COMMIT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --yes) ASSUME_YES=1 ;;
+    --commit)
+      [ -n "${2:-}" ] || {
+        echo "--commit requires a sha" >&2
+        exit 1
+      }
+      COMMIT="$2"
+      shift
+      ;;
+    *)
+      echo "usage: bin/deploy [--yes] [--commit <sha>]" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+log() {
+  echo "==> [$DEPLOY_BRANCH] $*"
+}
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+log "fetching origin"
+git fetch origin --quiet
+
+SOURCE="origin/main"
+if [ -n "$COMMIT" ]; then
+  git merge-base --is-ancestor "$COMMIT" origin/main || {
+    echo "--commit $COMMIT is not a commit on origin/main" >&2
+    exit 1
+  }
+  SOURCE="$COMMIT"
+fi
+
+if git rev-parse --verify "origin/$DEPLOY_BRANCH" &>/dev/null; then
+  COMMITS=$(git log --oneline "origin/$DEPLOY_BRANCH..$SOURCE")
+  if [ -z "$COMMITS" ]; then
+    log "origin/$DEPLOY_BRANCH is already at $SOURCE; nothing to deploy"
+    exit 0
+  fi
+  echo
+  echo "Commits about to deploy to $DEPLOY_BRANCH:"
+  echo "$COMMITS"
+else
+  echo
+  log "first deploy to $DEPLOY_BRANCH. Deploying:"
+  git log --oneline -1 "$SOURCE"
+fi
+
+echo
+if [ "$ASSUME_YES" -eq 1 ]; then
+  log "pushing $SOURCE → $DEPLOY_BRANCH (--yes)"
+else
+  read -r -p "Push $SOURCE → $DEPLOY_BRANCH? [y/N] " confirm
+  [[ "$confirm" == "y" || "$confirm" == "Y" ]] || { echo "aborted"; exit 1; }
+fi
+
+git push origin "$SOURCE:refs/heads/$DEPLOY_BRANCH"
+
+echo
+log "pushed; Render builds the site from $DEPLOY_BRANCH (watch it in the Render dashboard)"

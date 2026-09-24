@@ -1,0 +1,59 @@
+# Render Blueprint for context-cup: a Blueprint instance pointing at this file
+# provisions and syncs these. One environment; the site builds on pushes to
+# the `production` branch (bin/deploy pushes origin/main there).
+#
+# The results database is written by `bin/suite` wherever it runs, including
+# the Suite workflow on GitHub's hosted runners, so it accepts connections from
+# anywhere; its password is the guard. Set the GitHub `DATABASE_URL` secret to
+# its external connection string.
+version: "1"
+projects:
+  - name: context-cup
+    environments:
+      - name: context_cup
+        services:
+          - type: web
+            name: site
+            runtime: node
+            repo: https://github.com/induction-ai/context-cup
+            branch: production
+            plan: starter
+            envVars:
+              - key: NODE_ENV
+                value: production
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: postgres
+                  property: connectionString
+            region: oregon
+            buildCommand: render/build.sh
+            # The site's scripts read SITE_PORT; bind it to the port Render
+            # injects and routes to.
+            startCommand: SITE_PORT=$PORT pnpm start
+            # The site is the only service, so its deploys apply migrations.
+            preDeployCommand: pnpm prelaunch
+            healthCheckPath: /
+            autoDeployTrigger: commit
+            buildFilter:
+              paths:
+                - course/site/**
+                - course/db/**
+                - course/shared/**
+                - package.json
+                - pnpm-lock.yaml
+                - pnpm-workspace.yaml
+                - bin/**
+                - render/render.yaml
+            rootDir: course/site
+
+        databases:
+          - name: postgres
+            databaseName: context_cup
+            user: context_cup
+            plan: basic-1gb
+            region: oregon
+            ipAllowList:
+              - source: 0.0.0.0/0
+                description: everywhere
+            postgresMajorVersion: "18"
+            diskSizeGB: 10

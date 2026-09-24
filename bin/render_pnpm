@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#
+# pnpm install for Render builds. Calling Corepack directly runs the
+# packageManager pin without writing shims to its read-only install directory.
+# Extra arguments go to `pnpm install` (e.g. a --filter limiting the install to
+# one package and its dependencies).
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+expected="$(node -p "require(process.argv[1]).packageManager.split('@')[1]" "$repo_root/package.json")"
+actual="$(corepack pnpm --version)"
+if [ "$actual" != "$expected" ]; then
+  echo "pnpm $actual is on PATH but package.json pins $expected" >&2
+  exit 1
+fi
+# Deployed services run with NODE_ENV=production, which makes pnpm skip
+# devDependencies; the build and the pre-deploy migration need them.
+corepack pnpm install --frozen-lockfile --prod=false "$@"

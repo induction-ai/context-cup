@@ -46,6 +46,7 @@ pnpm typecheck             tsc across every package
 pnpm lint / pnpm format    prettier
 bin/suite <key> --driver <d> --target <t> [--count N] [--dry_run]
                            run a suite file with one driver against one target (targets.json)
+bin/deploy [--yes]         push origin/main to the production branch, which Render deploys
 bin/daytona_sweep suite --suite_id <id> | errors [--dry_run]
                            delete Daytona sandboxes a run left behind
 bin/db generate            write a migration for schema.ts changes
