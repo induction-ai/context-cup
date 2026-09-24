@@ -25,10 +25,13 @@ drivers on score and cost.
 
 **How it reaches the model**: `CodexAgent` (`course/runner`) subclasses
 harbor's Codex agent. Before harbor installs Codex it sets `OPENAI_BASE_URL`
-to this trial's prefix on the run's proxy and `OPENAI_API_KEY` to the
+to this trial's prefix on the trial's proxy and `OPENAI_API_KEY` to the
 placeholder, so the container's Codex config points at the proxy and holds
-no real key. It also passes the target's reasoning effort to Codex.
+no real key; after, it starts that proxy in the container. It also passes
+the target's reasoning effort to Codex. Codex runs as root, as harbor
+installs it, so unlike a script driver it could read the proxy's keys.
 
 **Make your own**: another whole agent (Claude Code, Gemini CLI) is the same
-kind of package plus a small wrapper class like `CodexAgent` that points the
-agent's base-URL variable at the proxy.
+kind of package plus a small wrapper class like `CodexAgent` that starts the
+proxy (`context_cup_runner.container`) and points the agent's base-URL
+variable at it.

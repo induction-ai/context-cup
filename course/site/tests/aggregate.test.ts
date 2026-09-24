@@ -62,7 +62,7 @@ describe("aggregate", () => {
     });
   });
 
-  it("makes the ALL row the mean of the cells, job-weighted, and null when nothing scored", async () => {
+  it("makes the ALL row the mean of the cells, task-weighted, and null when nothing scored", async () => {
     // Task a has two done trials, task b one: the suite averages the two jobs
     // (1 and 0), not the three trials.
     expect(

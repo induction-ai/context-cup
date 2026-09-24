@@ -33,8 +33,12 @@ export type SuiteResults = {
   harbor_env: string;
   jobs: Array<{ job_id: string; ok: boolean; error: string | null }>;
   cells: CellResult[];
+  /** Trials the suite set out to run. With --retry_errors, the cells also
+   *  count the attempts retries made up for, so they can outnumber this. */
+  expected_trials: number;
+  retry_errors: number;
   /** The suite's score: the mean of the cells' mean rewards (one cell is one
-   *  job), job-weighted. See scoring.ts. */
+   *  task, over all its jobs), task-weighted. See scoring.ts. */
   score: number | null;
   /** The mean of the cells' mean costs, on the same terms. */
   mean_cost_cents: number | null;
@@ -58,7 +62,7 @@ export function summarizeCell(
   };
 }
 
-/** The suite's score and cost from its cells: the mean of the job means. */
+/** The suite's score and cost from its cells: the mean of the task means. */
 export function suiteTotals(cells: readonly CellResult[]): {
   score: number | null;
   mean_cost_cents: number | null;

@@ -5,6 +5,7 @@ import type { Provider, Wire } from "@context-cup/shared/provider.js";
 // Column names are derived from property names with casing: "snake_case"
 // (see drizzle.config.ts and connection.ts), so write camelCase properties.
 import {
+  boolean,
   doublePrecision,
   index,
   integer,
@@ -64,6 +65,9 @@ export const job = pgTable(
     reasoningEffort: text(),
     /** Trials harbor runs for this job (`--n-attempts`). */
     count: integer().notNull(),
+    /** 0 for the suite's first run of the task; n for the job the nth
+     *  `--retry_errors` pass added to make up trials that did not finish. */
+    pass: integer().notNull().default(0),
     concurrency: integer().notNull(),
     command: text().notNull(),
     status: text().notNull().$type<JobStatus>(),
@@ -141,6 +145,9 @@ export const modelCall = pgTable(
     durationMs: integer(),
     serviceTier: text(),
     costCents: doublePrecision(),
+    /** Made during a turn attempt the runner discarded (an empty reply);
+     *  kept for the record, left out of the trial's usage and cost. */
+    discarded: boolean().notNull().default(false),
   },
   (t) => [index().on(t.suiteId), index().on(t.jobId), index().on(t.trialId)]
 );

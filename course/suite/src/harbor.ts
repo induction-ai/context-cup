@@ -9,8 +9,10 @@ import {
 import { arch, availableParallelism } from "node:os";
 import path from "node:path";
 import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
+import { JOB_LABEL, SUITE_LABEL } from "./daytona.ts";
 import type { SuiteRun } from "./expand.ts";
 import type { Provider } from "./keys.ts";
+import { MCP_AUTH_DIR, MCP_LOGIN, mcpTokensFile } from "./mcp_auth.ts";
 import { driverChainDirs, findDriver, type CupPackage } from "./packages.ts";
 import {
   tau3TaskGlob,
@@ -19,6 +21,9 @@ import {
 } from "./tasks.ts";
 
 export type HarborEnv = "docker" | "daytona";
+
+/** Idle minutes before Daytona stops a sandbox on its own. */
+export const DAYTONA_AUTO_STOP_MINUTES = 120;
 
 // ---------------------------------------------------------------------------
 // Resolving the `harbor` CLI. By default a run uses the induction-ai fork,
@@ -35,7 +40,6 @@ export const TOOLATHLON_AUTH_ZIP = path.join(
   SECRETS_DIR,
   "toolathlon_auth_configs.zip"
 );
-export const MCP_AUTH_DIR = path.join(SECRETS_DIR, "mcp");
 
 export type Report = (message: string) => void;
 
@@ -232,9 +236,9 @@ export type CommandInputs = {
   cpus?: number;
   /** Driver and engine packages; defaults to the workspace scan. */
   packages?: ReadonlyMap<string, CupPackage>;
-  /** The run's proxy as the container reaches it, e.g.
-   *  `http://host.docker.internal:6123`. Every model call goes through it. */
-  proxy_url: string;
+  /** The bundled proxy (`course/proxy/dist/proxy.cjs`) the runner uploads
+   *  into each trial container; the runner's default when unset. */
+  proxy_bundle?: string;
 };
 
 /** Stretch harbor's environment-build timeout on arm64, where the amd64
@@ -261,16 +265,24 @@ function taskArgs(run: SuiteRun): string[] {
   return ["--path", path.join(toolathlonTasksDir(), dir)];
 }
 
-/** Fail fast on a notion task without OAuth state rather than letting its
- *  preprocess hang until harbor's timeout. */
-export function assertTaskRunnable(run: SuiteRun): void {
-  if (run.task.runner !== "toolathlon") return;
+/** Whether a run is a toolathlon task whose preprocess needs Notion. */
+export function needsNotionAuth(run: SuiteRun): boolean {
+  if (run.task.runner !== "toolathlon") return false;
   const dir = toolathlonTaskDir(run.task.toolathlon.task ?? run.task_name);
-  if (TOOLATHLON_NOTION_TASKS.has(dir) && !existsSync(MCP_AUTH_DIR)) {
-    throw new Error(
-      `${run.task_name} needs notion MCP OAuth state under ${path.relative(REPO_ROOT, MCP_AUTH_DIR)}; see README`
-    );
-  }
+  return TOOLATHLON_NOTION_TASKS.has(dir);
+}
+
+/** Fail fast on a notion task without OAuth state in `secrets/mcp` rather
+ *  than let its preprocess block on an interactive login until harbor's
+ *  timeout. */
+export function assertTaskRunnable(
+  run: SuiteRun,
+  mcp_dir: string = MCP_AUTH_DIR
+): void {
+  if (!needsNotionAuth(run) || mcpTokensFile(mcp_dir)) return;
+  throw new Error(
+    `${run.task_name} needs notion MCP OAuth state in ${path.relative(REPO_ROOT, mcp_dir)}; to log in, ${MCP_LOGIN}`
+  );
 }
 
 /** Build one `harbor run` invocation for a matrix cell. Pure apart from
@@ -283,7 +295,8 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
   const target = targetJson(run);
   const keys = keyEnv(env);
 
-  // No provider key reaches the agent: the proxy holds them all, so the
+  // No provider key reaches the agent's env: the runner starts the proxy in
+  // each trial container with the keys from harbor's own process env, so the
   // only way for a driver to call a model is through it.
   // A whole agent (kind: agent) is harbor's own agent class, wrapped by the
   // runner so its model calls go through the proxy; a turn-protocol driver
@@ -305,7 +318,7 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
         }),
     CC_TARGET_JSON: JSON.stringify(target),
     CC_MAX_STEPS: String(run.task.runner === "tau3" ? 200 : 150),
-    CC_PROXY_URL: inputs.proxy_url,
+    ...(env.CC_SAVE_BODIES === "1" ? { CC_SAVE_BODIES: "1" } : {}),
   };
 
   const cpus = Math.min(inputs.cpus ?? availableParallelism() ?? 1, 8);
@@ -353,7 +366,16 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
       "--environment-build-timeout-multiplier",
       "2",
       "--max-retries",
-      "1"
+      "1",
+      // A stuck sandbox stops itself instead of billing until someone notices.
+      "--ek",
+      `auto_stop_interval_mins=${DAYTONA_AUTO_STOP_MINUTES}`,
+      // Every sandbox names its run, so a leftover one can be traced and swept.
+      "--ek",
+      `labels=${JSON.stringify({
+        [SUITE_LABEL]: path.basename(inputs.suite_dir),
+        [JOB_LABEL]: job_id,
+      })}`
     );
   }
   // Tasks pin a 60 minute agent timeout; scale it to the suite's budget so a
@@ -374,8 +396,10 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
       .filter(Boolean)
       .join(path.delimiter),
     // Job-level env for harbor itself: the tau3 user simulator and verifier
-    // run on the real OpenAI API. Agent processes never see these.
+    // run on the real OpenAI API, and the runner hands the keys to each
+    // trial's proxy. No driver process sees these.
     OPENAI_BASE_URL: "https://api.openai.com/v1",
+    ...(inputs.proxy_bundle ? { CC_PROXY_BUNDLE: inputs.proxy_bundle } : {}),
     ...keys,
   };
 

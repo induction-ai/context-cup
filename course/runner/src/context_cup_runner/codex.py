@@ -2,10 +2,15 @@
 
 harbor's own Codex agent does the work: it installs the CLI in the trial
 container, writes its config with the task's MCP servers, runs `codex exec`,
-and turns the session into a trajectory. This wrapper only points it at the
-course's proxy, one prefix per trial, and forwards the target's reasoning
-effort. Codex owns its loop and its context; the course sees its calls
-through the proxy and scores it like any other driver.
+and turns the session into a trajectory. This wrapper starts the course's
+proxy in the container, points Codex at it with a placeholder key, and
+forwards the target's reasoning effort. Codex owns its loop and its context;
+the course sees its calls through the proxy and scores it like any other
+driver.
+
+Codex runs as root, as harbor installs it, so unlike a script driver it
+could read the proxy's keys from /proc. Agent drivers are trusted to the
+extent harbor's own agents are.
 """
 
 from __future__ import annotations
@@ -15,6 +20,15 @@ from typing import Any
 
 from harbor.agents.installed.codex import Codex
 from harbor.environments.base import BaseEnvironment
+from harbor.models.agent.context import AgentContext
+
+from .container import (
+    PROXY_URL,
+    probe_platform,
+    start_proxy,
+    stop_proxy,
+    wait_for_proxy,
+)
 
 PLACEHOLDER_KEY = "cc-proxy"
 
@@ -54,16 +68,27 @@ class CodexAgent(Codex):
         """Stamp this trial's proxy prefix into the env harbor resolves the
         model connection from. harbor reads OPENAI_BASE_URL and
         OPENAI_API_KEY through `_extra_env`, so the container's config.toml
-        ends up with the per-trial URL and no real key."""
-        proxy_url = self._extra_env.get("CC_PROXY_URL")
-        if not proxy_url:
-            raise RuntimeError(
-                "CC_PROXY_URL is required: the codex driver reaches the model "
-                "only through the course proxy"
-            )
-        self._extra_env["OPENAI_BASE_URL"] = proxy_base_url(proxy_url, self.trial_id())
+        ends up with the in-container proxy's URL and no real key."""
+        self._extra_env["OPENAI_BASE_URL"] = proxy_base_url(PROXY_URL, self.trial_id())
         self._extra_env["OPENAI_API_KEY"] = PLACEHOLDER_KEY
 
     async def install(self, environment: BaseEnvironment) -> None:
         self.route_through_proxy()
         await super().install(environment)
+        raw = self._extra_env.get("CC_TARGET_JSON")
+        await start_proxy(
+            self,
+            environment,
+            platform=await probe_platform(self, environment),
+            target=json.loads(raw) if raw else None,
+            save_bodies=self._extra_env.get("CC_SAVE_BODIES") == "1",
+        )
+
+    async def run(
+        self, instruction: str, environment: BaseEnvironment, context: AgentContext
+    ) -> None:
+        await wait_for_proxy(self, environment)
+        try:
+            await super().run(instruction, environment, context)
+        finally:
+            await stop_proxy(self, environment)

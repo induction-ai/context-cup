@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import pwd
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -130,6 +132,67 @@ class DriverChain:
         return env
 
 
+DROP_TOOLS = ("setpriv", "runuser", "su")
+"""Ways to run a command as another user, in the order the runner tries them
+when it sets a container up. Which one works depends on the image."""
+
+
+def drop_argv(tool: str, user: str, uid: int, gid: int, argv: list[str]) -> list[str]:
+    """`argv` run as `user` (uid, gid) through `tool`. Each keeps the
+    caller's environment apart from what the tool itself resets."""
+    if tool == "setpriv":
+        return [
+            "setpriv",
+            f"--reuid={uid}",
+            f"--regid={gid}",
+            "--clear-groups",
+            *argv,
+        ]
+    if tool == "runuser":
+        return ["runuser", "-u", user, "--", *argv]
+    if tool == "su":
+        return ["su", "-s", "/bin/sh", "-c", shlex.join(argv), user]
+    raise ValueError(f"unknown privilege drop tool {tool!r}")
+
+
+@dataclass(frozen=True)
+class RunAs:
+    """The unprivileged user driver scripts run as, and how to switch to it
+    (CC_DRIVER_USER and CC_DRIVER_DROP, set by the runner's host side)."""
+
+    user: str
+    tool: str
+    uid: int
+    gid: int
+    home: str
+
+    @classmethod
+    def from_env(cls, env: dict[str, str]) -> RunAs | None:
+        user = env.get("CC_DRIVER_USER")
+        if not user:
+            return None
+        tool = env.get("CC_DRIVER_DROP") or ""
+        if tool not in DROP_TOOLS:
+            raise ValueError(
+                f"CC_DRIVER_DROP must be one of {DROP_TOOLS}, not {tool!r}"
+            )
+        entry = pwd.getpwnam(user)
+        return cls(user, tool, entry.pw_uid, entry.pw_gid, entry.pw_dir)
+
+    def wrap(self, argv: list[str]) -> list[str]:
+        return drop_argv(self.tool, self.user, self.uid, self.gid, argv)
+
+    def env(self, env: dict[str, str]) -> dict[str, str]:
+        return {**env, "HOME": self.home, "USER": self.user, "LOGNAME": self.user}
+
+    def describe(self) -> str:
+        """Who a switched command really runs as, checked with `id -u`."""
+        uid = subprocess.run(
+            self.wrap(["id", "-u"]), capture_output=True, text=True, check=False
+        ).stdout.strip()
+        return f"{self.user} (uid {uid or '?'}) via {self.tool}"
+
+
 @dataclass(frozen=True)
 class ScriptRun:
     returncode: int
@@ -144,10 +207,16 @@ def run_script(
     cwd: Path,
     env: dict[str, str],
     timeout_sec: float | None,
+    run_as: RunAs | None = None,
 ) -> ScriptRun:
+    """`bash script args`, as `run_as` when given (driver code never runs as
+    root during the loop)."""
+    argv = ["bash", str(script), *args]
+    if run_as is not None:
+        argv, env = run_as.wrap(argv), run_as.env(env)
     try:
         completed = subprocess.run(
-            ["bash", str(script), *args],
+            argv,
             cwd=str(cwd),
             env=env,
             capture_output=True,
@@ -173,20 +242,25 @@ def run_turn_script(
     state_dir: Path,
     timeout_sec: float | None,
     extra_env: dict[str, str] | None = None,
+    run_as: RunAs | None = None,
 ) -> ScriptRun:
     """Run the chain's run.sh for one turn, capturing stdout and stderr into
-    the turn directory."""
+    the turn directory. Under `run_as` the turn directory is opened up so the
+    driver can write its output there."""
     package, script = chain.run_script()
     env = chain.script_env(
         package, trial_id=trial_id, state_dir=state_dir, extra=extra_env
     )
     env["CC_TURN_DIR"] = str(turn_dir)
+    if run_as is not None:
+        turn_dir.chmod(0o777)
     run = run_script(
         script,
         [str(turn_dir / "input.json"), str(turn_dir / "output.json")],
         cwd=package.dir,
         env=env,
         timeout_sec=timeout_sec,
+        run_as=run_as,
     )
     (turn_dir / "stdout.txt").write_text(run.stdout, encoding="utf-8")
     (turn_dir / "stderr.txt").write_text(run.stderr, encoding="utf-8")

@@ -8,6 +8,7 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
 from context_cup_runner.envs.tau3 import extract_policy, is_user_stop, system_prompt
 from context_cup_runner.envs.toolathlon import (
     bundle_stop_tools,
@@ -83,6 +84,7 @@ def _stub_harbor(monkeypatch):
         monkeypatch.setitem(sys.modules, name, module)
     for name in list(sys.modules):
         if name.startswith("context_cup_runner.host") or name in (
+            "context_cup_runner.container",
             "context_cup_runner.tau3",
             "context_cup_runner.toolathlon",
         ):
@@ -107,7 +109,6 @@ def test_host_agent_env_and_tau3_seed(monkeypatch, tmp_path: Path):
     extra = {
         "CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "m"}),
         "CC_HOST_DRIVER_CHAIN": f"{engine}:{leaf}",
-        "CC_PROXY_URL": "http://host.docker.internal:6123",
         "CC_MAX_STEPS": "5",
     }
     agent = Tau3Agent(logs, extra_env=extra, mcp_servers=[server])
@@ -116,8 +117,13 @@ def test_host_agent_env_and_tau3_seed(monkeypatch, tmp_path: Path):
     assert env["CC_BENCHMARK"] == "tau3"
     assert env["CC_TRIAL_ID"] == "tau3-banking-1__abc123"
     assert env["CC_TAU3_MCP_URL"] == server.url
-    assert env["CC_PROXY_URL"] == "http://host.docker.internal:6123"
+    # The proxy runs in the container; the loop never sees a key.
+    assert env["CC_PROXY_URL"] == "http://127.0.0.1:18080"
     assert "OPENAI_API_KEY" not in env and env["CC_MAX_STEPS"] == "5"
+    assert "CC_DRIVER_USER" not in env  # until install has made the user
+    agent._driver_drop = "setpriv"
+    env = agent._loop_env(None)
+    assert (env["CC_DRIVER_USER"], env["CC_DRIVER_DROP"]) == ("ccdriver", "setpriv")
     assert (
         env["CC_DRIVER_CHAIN"]
         == "/installed-agent/chain/00_python:/installed-agent/chain/01_base_x"
@@ -153,7 +159,6 @@ def test_toolathlon_agent_settings(monkeypatch, tmp_path: Path):
     (tmp_path / "leaf").mkdir()
     extra = {
         "CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "m"}),
-        "CC_PROXY_URL": "http://host.docker.internal:6123",
         "CC_HOST_DRIVER_CHAIN": str(tmp_path / "leaf"),
     }
     agent = ToolathlonAgent(
@@ -174,3 +179,76 @@ def test_uv_target_triple_maps_architectures():
 
     with pytest.raises(ValueError, match="riscv64"):
         uv_target_triple("riscv64", "gnu")
+
+
+def test_node_platform_maps_architectures_and_libc():
+    from context_cup_runner.node_bootstrap import node_platform, node_release_url
+
+    assert node_platform("x86_64", "gnu") == "linux-x64"
+    assert node_platform("aarch64", "gnu") == "linux-arm64"
+    assert node_platform("amd64", "musl") == "linux-x64-musl"
+    assert node_release_url("linux-arm64", "24.0.0") == (
+        "https://nodejs.org/dist/v24.0.0/node-v24.0.0-linux-arm64.tar.xz"
+    )
+    assert node_release_url("linux-x64-musl", "24.0.0").startswith(
+        "https://unofficial-builds.nodejs.org/download/release/v24.0.0/"
+    )
+    with pytest.raises(ValueError, match="riscv64"):
+        node_platform("riscv64", "gnu")
+
+
+def test_proxy_command_and_keys_file(monkeypatch):
+    _stub_harbor(monkeypatch)
+    from context_cup_runner.container import keys_file_text, proxy_command
+
+    argv = proxy_command(
+        target={"provider": "anthropic", "model": "claude-x"}, save_bodies=True
+    )
+    assert argv[:2] == [
+        "/installed-agent/.node/node",
+        "/installed-agent/.proxy/proxy.cjs",
+    ]
+    assert argv[argv.index("--port") + 1] == "18080"
+    assert argv[argv.index("--calls") + 1] == "/logs/agent/calls.jsonl"
+    assert argv[argv.index("--save-bodies") + 1] == "/logs/agent/bodies"
+    assert argv[-4:] == [
+        "--default-provider",
+        "anthropic",
+        "--default-model",
+        "claude-x",
+    ]
+    assert "--save-bodies" not in proxy_command(target=None, save_bodies=False)
+    # Values are quoted for `.`, so a key with shell characters survives.
+    assert keys_file_text({"OPENAI_API_KEY": "sk-a$b'c"}) == (
+        "OPENAI_API_KEY='sk-a$b'\"'\"'c'\n"
+    )
+
+
+def test_drop_argv_per_tool():
+    from context_cup_runner.chain import drop_argv
+
+    argv = ["bash", "/x/run.sh", "in.json"]
+    assert drop_argv("setpriv", "ccdriver", 999, 998, argv) == [
+        "setpriv",
+        "--reuid=999",
+        "--regid=998",
+        "--clear-groups",
+        *argv,
+    ]
+    assert drop_argv("runuser", "ccdriver", 999, 998, argv) == [
+        "runuser",
+        "-u",
+        "ccdriver",
+        "--",
+        *argv,
+    ]
+    assert drop_argv("su", "ccdriver", 999, 998, argv) == [
+        "su",
+        "-s",
+        "/bin/sh",
+        "-c",
+        "bash /x/run.sh in.json",
+        "ccdriver",
+    ]
+    with pytest.raises(ValueError, match="sudo"):
+        drop_argv("sudo", "ccdriver", 999, 998, argv)

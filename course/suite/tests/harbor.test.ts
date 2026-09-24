@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   afterEach,
   describe,
@@ -6,12 +9,15 @@ import {
   vi,
 } from "@context-cup/shared/test_helpers/index.js";
 import {
+  assertTaskRunnable,
   buildHarborCommand,
   envBuildTimeoutMultiplier,
   keyEnv,
   shellString,
   targetJson,
 } from "../src/harbor.ts";
+import { parseSuiteFile } from "../src/keys.ts";
+import { MCP_REMOTE_VERSION } from "../src/mcp_auth.ts";
 import {
   samplePackages,
   sampleRun,
@@ -35,7 +41,6 @@ describe("buildHarborCommand", () => {
   it("builds a tau3 command", async () => {
     stub();
     const command = buildHarborCommand({
-      proxy_url: "http://host.docker.internal:6123",
       run: sampleRun(),
       job_id: "j_test",
       suite_dir: "/tmp/suite",
@@ -70,8 +75,6 @@ describe("buildHarborCommand", () => {
       'CC_TARGET_JSON={"provider":"openai","model":"gpt-5.5","reasoning_effort":"medium"}',
       "--agent-env",
       "CC_MAX_STEPS=200",
-      "--agent-env",
-      "CC_PROXY_URL=http://host.docker.internal:6123",
       "--n-attempts",
       "2",
       "--n-concurrent",
@@ -102,7 +105,6 @@ describe("buildHarborCommand", () => {
     stub();
     const file = sampleSuite();
     const command = buildHarborCommand({
-      proxy_url: "http://host.docker.internal:6123",
       run: sampleRun({
         task_name: "sales_accounting",
         task: file.tasks.sales_accounting!,
@@ -132,6 +134,10 @@ describe("buildHarborCommand", () => {
     expect(command.argv).toContain("CC_MAX_STEPS=150");
     expect(command.argv.join(" ")).toContain(
       "--env daytona --environment-build-timeout-multiplier 2 --max-retries 1"
+    );
+    expect(command.argv).toContain("auto_stop_interval_mins=120");
+    expect(command.argv).toContain(
+      'labels={"context-cup-suite":"suite","context-cup-job":"j_tool"}'
     );
     expect(command.argv).not.toContain("--override-cpus");
     expect(command.argv).not.toContain("--extra-docker-compose");
@@ -184,7 +190,6 @@ describe("agent-kind drivers", () => {
       harbor_env: "docker",
       concurrency: 1,
       packages,
-      proxy_url: "http://host.docker.internal:6123",
     });
     const agentIndex = command.argv.indexOf("--agent");
     expect(command.argv[agentIndex + 1]).toBe(
@@ -193,10 +198,67 @@ describe("agent-kind drivers", () => {
     expect(
       command.argv.some((a) => a.startsWith("CC_HOST_DRIVER_CHAIN="))
     ).toBe(false);
-    expect(command.argv).toContain(
-      "CC_PROXY_URL=http://host.docker.internal:6123"
-    );
+    expect(command.argv.some((a) => a.startsWith("CC_PROXY_URL="))).toBe(false);
     expect(command.argv.some((a) => /_API_KEY=/.test(a))).toBe(false);
     expect(command.env.PYTHONPATH).toContain("course/runner/src");
+  });
+
+  it("hand the runner the proxy bundle and the save-bodies switch", async () => {
+    const command = buildHarborCommand({
+      run: sampleRun({ driver_name: "base_codex" }),
+      job_id: "j_codex",
+      suite_dir: "/tmp/suite",
+      harbor_env: "docker",
+      concurrency: 1,
+      packages,
+      env: { ...env, CC_SAVE_BODIES: "1" },
+      proxy_bundle: "/repo/course/proxy/dist/proxy.cjs",
+    });
+    // The bundle path is for harbor's process, which uploads it; the switch
+    // reaches the agent, which starts the trial's proxy with it.
+    expect(command.env.CC_PROXY_BUNDLE).toBe(
+      "/repo/course/proxy/dist/proxy.cjs"
+    );
+    expect(command.argv).toContain("CC_SAVE_BODIES=1");
+  });
+});
+
+describe("assertTaskRunnable", () => {
+  const toolathlon = (task_name: string) =>
+    sampleRun({
+      task_name,
+      task: parseSuiteFile({ tasks: { [task_name]: { runner: "toolathlon" } } })
+        .tasks[task_name]!,
+      runner: "toolathlon",
+    });
+
+  function mcpDir(loggedIn: boolean): string {
+    const dir = mkdtempSync(path.join(tmpdir(), "cc-mcp-"));
+    if (loggedIn) {
+      const state = path.join(dir, `mcp-remote-${MCP_REMOTE_VERSION}`);
+      mkdirSync(state);
+      writeFileSync(path.join(state, "abc_tokens.json"), "{}");
+    }
+    return dir;
+  }
+
+  it("runs a notion task once secrets/mcp holds a login", async () => {
+    expect(() =>
+      assertTaskRunnable(toolathlon("notion_hr"), mcpDir(true))
+    ).not.toThrow();
+  });
+
+  it("refuses a notion task without a login, saying how to log in", async () => {
+    expect(() =>
+      assertTaskRunnable(toolathlon("notion_hr"), mcpDir(false))
+    ).toThrow(/notion_hr needs notion MCP OAuth state in .*npx -y mcp-remote/s);
+  });
+
+  it("lets other tasks run without one", async () => {
+    const none = mcpDir(false);
+    expect(() =>
+      assertTaskRunnable(toolathlon("sales_accounting"), none)
+    ).not.toThrow();
+    expect(() => assertTaskRunnable(sampleRun(), none)).not.toThrow();
   });
 });

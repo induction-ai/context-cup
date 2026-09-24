@@ -11,10 +11,10 @@ export type TrialRow = typeof trial.$inferSelect;
 export type ModelCallRow = typeof modelCall.$inferSelect;
 
 /** What the suites index shows per run: the row, trial counts, and the
- *  suite's score and cost: the mean over its jobs of each job's mean over its
- *  done trials (see aggregate.ts). */
+ *  suite's score and cost: the mean over its tasks of each task's mean over
+ *  its done trials, across all of the task's jobs (see aggregate.ts). */
 export type SuiteSummary = SuiteRow & {
-  /** Jobs in the suite: one per task. */
+  /** Tasks in the suite; a `--retry_errors` pass adds jobs, not tasks. */
   tasks: number;
   trials: number;
   scored: number;
@@ -62,39 +62,41 @@ export async function listSuites(options: {
     .from(trial)
     .groupBy(trial.suiteId)
     .as("rollup");
-  // A job's means over its done trials, then the suite's mean over its jobs.
+  // A task's means over its done trials in all its jobs, then the suite's
+  // mean over its tasks.
   const done = sql`${trial.reward} is not null and ${trial.error} is null`;
-  const jobMeans = db
+  const taskMeans = db
     .select({
       suiteId: trial.suiteId,
-      jobId: trial.jobId,
-      job_reward: sql<
+      taskName: job.taskName,
+      task_reward: sql<
         number | null
-      >`avg(${trial.reward}) filter (where ${done})`.as("job_reward"),
-      job_cost: sql<
+      >`avg(${trial.reward}) filter (where ${done})`.as("task_reward"),
+      task_cost: sql<
         number | null
-      >`avg(${trial.costCents}) filter (where ${done})`.as("job_cost"),
+      >`avg(${trial.costCents}) filter (where ${done})`.as("task_cost"),
     })
     .from(trial)
-    .groupBy(trial.suiteId, trial.jobId)
-    .as("job_means");
+    .innerJoin(job, eq(job.id, trial.jobId))
+    .groupBy(trial.suiteId, job.taskName)
+    .as("task_means");
   const scores = db
     .select({
-      suiteId: jobMeans.suiteId,
-      mean_reward: sql<number | null>`avg(${jobMeans.job_reward})`.as(
+      suiteId: taskMeans.suiteId,
+      mean_reward: sql<number | null>`avg(${taskMeans.task_reward})`.as(
         "mean_reward"
       ),
-      mean_cost_cents: sql<number | null>`avg(${jobMeans.job_cost})`.as(
+      mean_cost_cents: sql<number | null>`avg(${taskMeans.task_cost})`.as(
         "mean_cost_cents"
       ),
     })
-    .from(jobMeans)
-    .groupBy(jobMeans.suiteId)
+    .from(taskMeans)
+    .groupBy(taskMeans.suiteId)
     .as("scores");
   const jobCounts = db
     .select({
       suiteId: job.suiteId,
-      tasks: sql<number>`count(*)::int`.as("tasks"),
+      tasks: sql<number>`count(distinct ${job.taskName})::int`.as("tasks"),
     })
     .from(job)
     .groupBy(job.suiteId)
@@ -170,7 +172,7 @@ export async function listJobs(suite_id: string): Promise<JobRow[]> {
     .select()
     .from(job)
     .where(eq(job.suiteId, suite_id))
-    .orderBy(asc(job.taskName), asc(job.id));
+    .orderBy(asc(job.taskName), asc(job.pass), asc(job.id));
 }
 
 export async function listTrials(suite_id: string): Promise<TrialRow[]> {

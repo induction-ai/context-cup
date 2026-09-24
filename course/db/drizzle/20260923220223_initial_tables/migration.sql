@@ -38,7 +38,8 @@ CREATE TABLE "model_call" (
 	"reasoning_output_tokens" integer DEFAULT 0 NOT NULL,
 	"duration_ms" integer,
 	"service_tier" text,
-	"cost_cents" double precision
+	"cost_cents" double precision,
+	"discarded" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "suite" (

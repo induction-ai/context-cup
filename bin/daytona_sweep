@@ -1,0 +1,4 @@
+#!/bin/bash
+# Delete Daytona sandboxes a suite run left behind (see course/suite/src/sweep.ts).
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" && exec node_modules/.bin/tsx course/suite/src/sweep.ts "$@"

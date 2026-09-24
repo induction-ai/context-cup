@@ -108,7 +108,12 @@ engines/python/
 | teardown | every `teardown.sh` in the chain, leaf first                |
 
 Scripts run inside the trial container with the working directory set to
-their own package directory, and see:
+their own package directory. `setup.sh` runs as root, so it can install
+what it needs. `run.sh` and `teardown.sh` run as `ccdriver`, an
+unprivileged user the runner creates in every container, with `HOME` set to
+its own directory: they can read everything setup left behind and write the
+turn and state directories, and nothing else of root's (see Accounting).
+Scripts see:
 
 | var               | meaning                                                                        |
 | ----------------- | ------------------------------------------------------------------------------ |
@@ -181,7 +186,7 @@ calls it made.
     "name": "openai",
     "api_key": "cc-proxy",
     "client": {
-      "base_url": "http://host.docker.internal:6123/t/<trial_id>/openai/v1",
+      "base_url": "http://127.0.0.1:18080/t/<trial_id>/openai/v1",
       "api": "responses"
     }
   },
@@ -211,8 +216,8 @@ calls it made.
   anything that should be there from the start.
 - `provider` is everything needed to call the model: the family name, the
   client settings (`base_url` and which API: `responses`, `messages`, or
-  `generate_content`), and a placeholder key. `base_url` points at the run's
-  proxy, which holds the real keys and forwards to the provider; see
+  `generate_content`), and a placeholder key. `base_url` points at the
+  trial's proxy, which holds the real keys and forwards to the provider; see
   Accounting. The same URLs are in the environment as `OPENAI_BASE_URL`,
   `ANTHROPIC_BASE_URL`, and `GOOGLE_GEMINI_BASE_URL`, with the placeholder in
   the matching `*_API_KEY` variables, so any SDK a driver uses lands on the
@@ -255,8 +260,13 @@ calls it made.
 
 A non-zero exit, a missing `output.json`, a missing `response`, or a reply
 with neither text nor tool calls fails the turn. The runner retries a failed turn up to
-`CC_TURN_RETRIES` times (default 2) with a fresh turn id, then ends the
-trial with an error that harbor records.
+`CC_TURN_RETRIES` times (default 3) with a fresh turn id, then ends the
+trial with an error that harbor records: the trial is unscored, not scored
+zero. Failed attempts are not turns. An empty reply is also discarded: its
+calls stay in the proxy's call log and in `model_call` (flagged
+`discarded`) but are left out of the trial's tokens and cost, since a
+blank response is a provider hiccup, not the driver's spend. Other failed
+attempts count toward cost.
 
 `target` is the model the course builds the initial payload for and labels
 the run with. A driver may call whatever models it likes, for the turn's
@@ -264,26 +274,41 @@ main call or for subagents, summaries, and reranking, and every call is
 recorded and priced under the model it actually named. Name `cc-model`, or
 omit the model, to get the run's target; the proxy fills it in. A model a
 driver names itself is forwarded unchanged and priced under that name. Only
-`response` is the turn's answer; every call is accounted for by the run's
-proxy (see Accounting), whichever process or language makes it.
+`response` is the turn's answer; every call is accounted for by the
+trial's proxy (see Accounting), whichever process or language makes it.
 
 ## Accounting
 
-Every model call goes through one proxy per run, started by `bin/suite` on
-the host. Containers hold no provider keys: a driver gets a placeholder key
-and base URLs of the form `<proxy>/t/<trial_id>/<provider>/…`, and the proxy
-injects the real key and forwards to the provider. A call that bypasses the
-proxy has no credential and fails with 401.
+Every model call goes through the course proxy (`course/proxy`), and every
+trial has its own: the runner uploads it, bundled into one file with a
+`node` binary, and starts it inside the trial container before the driver
+does anything, on `127.0.0.1:18080`. A driver gets a placeholder key and
+base URLs of the form `http://127.0.0.1:18080/t/<trial_id>/<provider>/…`,
+and the proxy injects the real key and forwards to the provider. A call that
+bypasses the proxy has no credential and fails with 401.
 
-The proxy writes one line per call to `calls.jsonl` in the suite directory:
+The proxy is the only process in the container with the provider keys. It
+runs as root; the keys reach it through a root-only file it deletes as it
+starts, never through the environment of the loop or of any script. Driver
+scripts run as `ccdriver`, which cannot read a root process's
+`/proc/<pid>/environ`; the runner proves this in every container before the
+first turn and records the result in `isolation.txt` in the agent log
+directory, failing the trial if it does not hold. Agent drivers (below) are
+the exception: harbor runs them as root, so they could read the keys.
+
+The proxy writes one line per call to `calls.jsonl` in the trial's agent log
+directory (`/logs/agent`, which harbor copies to `<trial>/agent/`):
 trial, turn, sequence, purpose, provider, host, model, wire, usage (input
 including cached, cached input, cache writes, output, reasoning output),
 duration, status, and service tier. The runner tells the proxy which turn is
 current before each attempt, so calls are attributed to turns; an agent
 driver's calls carry no turn. A driver labels an auxiliary call by sending
 the header `x-cc-purpose` with it (any SDK can add a header), and anything
-unlabelled counts as `turn`. The suite prices every
-call on the host and stores it as a `model_call` row.
+unlabelled counts as `turn`. The suite reads each trial's own
+`calls.jsonl`, prices every call on the host, and stores it as a
+`model_call` row: every call through a trial's proxy is that trial's cost.
+With `CC_SAVE_BODIES=1` the proxy also keeps every request and response
+body under `bodies/` beside it.
 
 ## Environment variables the runner sets for the driver process
 
@@ -299,8 +324,8 @@ call on the host and stores it as a `model_call` row.
 The process also inherits `run.sh`'s script variables above (`CC_DRIVER_DIR`,
 `CC_SELF_DIR`, `CC_CHAIN`, `CC_STATE_DIR`).
 
-Every provider endpoint a driver sees is the run's proxy; no real key is in
-the container.
+Every provider endpoint a driver sees is the trial's proxy; no real key is
+anywhere a driver can read.
 
 ## Files the runner writes per trial
 
@@ -309,9 +334,12 @@ Besides `turns/`, in the agent log directory:
 - `trajectory.json`: harbor ATIF, built from `original_payload`.
 - `summary.json`: `{ stop_reason, turns, env_tool_calls, errors, driver, target, started_at, finished_at }`.
 
-Usage is not among them: every call is in the proxy's call log (see
-Accounting). The suite ingests these, the proxy's call log, harbor's `result.json`, and
-the verifier's `reward.txt`.
+- `calls.jsonl`: the proxy's call log (see Accounting); `proxy.txt` is its
+  output.
+- `isolation.txt`: the check that `ccdriver` cannot read the proxy's keys.
+
+Usage is only in the call log. The suite ingests these, harbor's
+`result.json`, and the verifier's `reward.txt`.
 
 ## How the suite launches the runner
 
@@ -323,9 +351,13 @@ The harbor agent classes live in `course/runner` and are selected with
 
 The agent class runs on the host inside harbor's process. Its `setup` uploads
 the in-container loop and every package directory in `CC_HOST_DRIVER_CHAIN` into
-the trial container and runs each `setup.sh` root to leaf. Its `run` execs the loop
-inside the container and, when it finishes, reads `summary.json`
-back into harbor's `AgentContext`.
+the trial container and runs each `setup.sh` root to leaf. It then creates
+`ccdriver`, finds a way to switch to it that works in the image (`setpriv`,
+`runuser`, or `su`, in that order; the trial fails if the image has none, or
+cannot add a user), starts the proxy, and checks that `ccdriver` cannot read
+its keys. Its `run` waits for the proxy, execs the loop inside the
+container, stops the proxy, and reads `summary.json` back into harbor's
+`AgentContext`.
 
 Settings reach the agent class through `--agent-env`:
 
@@ -333,12 +365,15 @@ Settings reach the agent class through `--agent-env`:
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CC_HOST_DRIVER_CHAIN` | host paths of every package in the chain, root to leaf, colon separated (the suite resolves `extends`). harbor layers these values over every exec the agent runs, so the container-side list travels under `CC_DRIVER_CHAIN` instead |
 | `CC_TARGET_JSON`       | the `target` object from input.json, as JSON                                                                                                                                                                                          |
-| `CC_TURN_RETRIES`      | optional, default 2                                                                                                                                                                                                                   |
+| `CC_TURN_RETRIES`      | optional, default 3                                                                                                                                                                                                                   |
 | `CC_MAX_STEPS`         | optional cap on turns, default per benchmark                                                                                                                                                                                          |
+| `CC_SAVE_BODIES`       | optional; `1` has the proxy keep every request and response body                                                                                                                                                                      |
 
-No provider key is forwarded to the agent. The tau3 user simulator and
-verifier keep harbor's job-level `OPENAI_API_KEY`, which agent processes
-never see.
+No provider key is forwarded with `--agent-env`: harbor layers those values
+over every command the agent runs in the container, the loop's included.
+The keys stay in harbor's own process env, where the tau3 user simulator and
+verifier use them and the agent class reads them to hand to the trial's
+proxy.
 
 ## Naming
 
@@ -368,9 +403,12 @@ harbor runs it directly, so the package names the harbor agent class:
 
 The course's runner loop, `input.json`, and `output.json` do not apply. The
 agent reaches the model through the proxy like everything else: the wrapper
-class stamps `OPENAI_BASE_URL` (or the provider's equivalent) with the
-trial's prefix and hands the agent the placeholder key, so its own client
-goes through the proxy and a direct call would fail with 401.
+class starts the same in-container proxy, stamps `OPENAI_BASE_URL` (or the
+provider's equivalent) with the trial's prefix, and hands the agent the
+placeholder key, so its own client goes through the proxy and a direct call
+would fail with 401. harbor installs and runs these agents as root, so
+unlike a script driver an agent driver could read the proxy's keys from
+`/proc`; it is trusted as far as harbor's own agents are.
 
 What a run of an agent driver has: the verifier's reward, the proxy's call
 log (turn ids are null, calls are sequenced), cost, and, with body capture,

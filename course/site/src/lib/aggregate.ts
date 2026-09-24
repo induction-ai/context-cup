@@ -1,7 +1,8 @@
 /** Pure aggregation over trial rows, mirroring course/suite's scoring.ts:
- *  a job's score and cost are means over its done trials (a reward and no
- *  error), and a suite's are the means of its jobs' values, job-weighted.
- *  Nothing is stored; every page computes this from the rows it shows. */
+ *  a task's score and cost are means over its done trials (a reward and no
+ *  error) in all its jobs, and a suite's are the means of its tasks' values,
+ *  task-weighted. Nothing is stored; every page computes this from the rows
+ *  it shows. */
 
 export type TrialLike = {
   reward: number | null;
@@ -62,7 +63,7 @@ export function taskCells<T extends TrialLike>(
 }
 
 /** The ALL row: counts summed over the cells, means taken over the cells
- *  that have one (the suite is the mean of its jobs, not of its trials). */
+ *  that have one (the suite is the mean of its tasks, not of its trials). */
 export function suiteTotals(cells: TaskCell[]): TaskCell {
   const present = (pick: (c: TaskCell) => number | null) =>
     cells.flatMap((c) => {

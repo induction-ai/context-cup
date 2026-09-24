@@ -30,8 +30,9 @@ there needs a reason Bootstrap cannot cover; a new class name is a smell.
 - Sorting and paging are URL-driven (`?sort=&dir=&page=&per=`) and resolved
   in SQL (`src/lib/queries.ts`); pages stay server-rendered. Use `SortTh`
   for sortable headers and the helpers in `src/lib/sort.ts`.
-- Scores are computed, never stored: a job is the mean over its done trials,
-  a suite the mean over its jobs (`src/lib/aggregate.ts`, and the SQL in
+- Scores are computed, never stored: a task is the mean over its done
+  trials in all its jobs (a `--retry_errors` pass adds jobs to a task), a
+  suite the mean over its tasks (`src/lib/aggregate.ts`, and the SQL in
   `listSuites`).
 - Query functions return typed rows; aggregation and formatting are pure
   functions with tests under `tests/`.

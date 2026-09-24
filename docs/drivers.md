@@ -72,11 +72,18 @@ Python is never used.
 
 ## Models, keys, and accounting
 
-- **Every call goes through the run's proxy.** Your process has placeholder
-  keys (`cc-proxy`) and base URLs pointing at the proxy
-  (`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `GOOGLE_GEMINI_BASE_URL`, and
+- **Every call goes through the trial's proxy.** It runs inside your
+  container on `127.0.0.1:18080`. Your process has placeholder keys
+  (`cc-proxy`) and base URLs pointing at the proxy (`OPENAI_BASE_URL`,
+  `ANTHROPIC_BASE_URL`, `GOOGLE_GEMINI_BASE_URL`, and
   `ctx.provider.client.base_url`). SDKs read those without configuration. A
   call that goes around the proxy has no key and fails with 401.
+- **Your code runs unprivileged.** `setup.sh` runs as root, so install
+  whatever you need there. Each turn's `run.sh` (and `teardown.sh`) runs as
+  the user `ccdriver`, which can read everything setup installed and write
+  `ctx.dirs.turn`, `ctx.dirs.state`, and its own `HOME`, but cannot read the
+  proxy's keys. Anything a turn must write elsewhere, set up with the right
+  permissions in `setup.sh`.
 - **Every call is counted.** The proxy records each call's model, tokens,
   and timing; the suite prices it. Summaries, reranking, subagents: all of it
   is in your cost. Label auxiliary calls with the header
@@ -127,8 +134,13 @@ the trial's agent logs,
 | `stderr.txt`  | your traceback, and any provider error message           |
 | `stdout.txt`  | anything your driver printed                             |
 
-A failed turn is retried twice with a fresh turn id; three failures end the
-trial with the last error, which also shows on the trial's page. Beside
+A failed turn is retried three times with a fresh turn id; four failures end
+the trial with the last error, which also shows on the trial's page, and the
+trial is left unscored. A reply with neither text nor tool calls is
+discarded as well as retried: its calls show on the trial page marked
+"discarded" and stay out of the trial's tokens and cost. Any other failed
+attempt still counts toward cost. Beside
 `turns/`, `setup_<package>.txt` holds each `setup.sh`'s output, and
-`runner.txt` the loop's own log. Set `CC_SAVE_BODIES=1` to keep every request
-and response the proxy saw under `.temp/suites/<suite>/bodies/`.
+`runner.txt` the loop's own log, `calls.jsonl` every model call the proxy
+recorded, and `proxy.txt` the proxy's own output. Set `CC_SAVE_BODIES=1` to
+keep every request and response the proxy saw under `bodies/` there too.

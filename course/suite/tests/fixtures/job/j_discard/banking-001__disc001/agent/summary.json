@@ -1,0 +1,15 @@
+{
+  "stop_reason": "user_stop",
+  "turns": 1,
+  "env_tool_calls": 0,
+  "provider": "openai",
+  "errors": [
+    {
+      "turn_id": "001_empty1",
+      "turn_index": 1,
+      "attempt": 1,
+      "error": "empty reply: response has neither text nor tool calls",
+      "discarded": true
+    }
+  ]
+}

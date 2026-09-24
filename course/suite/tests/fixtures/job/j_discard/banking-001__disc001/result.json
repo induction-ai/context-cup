@@ -1,0 +1,15 @@
+{
+  "task_name": "tau3-banking_knowledge-task-001",
+  "trial_name": "banking-001__disc001",
+  "verifier_result": {
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  "agent_result": null,
+  "exception_info": null,
+  "agent_execution": {
+    "started_at": "2026-09-22T10:00:00Z",
+    "finished_at": "2026-09-22T10:01:00Z"
+  }
+}

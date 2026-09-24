@@ -42,7 +42,7 @@ describe("scoring", () => {
     expect(jobScore([done(1, 10), done(0, null)])).toBe(0.5);
   });
 
-  it("a suite is the mean of its jobs' scores, job-weighted, skipping jobs without one", async () => {
+  it("a suite is the mean of its tasks' scores, task-weighted, skipping tasks without one", async () => {
     expect(suiteMean([1, 0])).toBe(0.5);
     expect(suiteMean([1, null, 0.5])).toBe(0.75);
   });

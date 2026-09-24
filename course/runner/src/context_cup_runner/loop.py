@@ -33,7 +33,7 @@ from context_cup_protocol import (
 
 from . import __version__
 from .atif import TurnRecord, build_trajectory
-from .chain import DriverChain, run_script, run_turn_script
+from .chain import DriverChain, RunAs, run_script, run_turn_script
 from .clipping import clip_tool_output
 from .environment import Environment, StepResult
 from .protocol import (
@@ -90,6 +90,8 @@ class Settings:
     max_steps: int = DEFAULT_MAX_STEPS
     max_tool_output_chars: int = DEFAULT_MAX_TOOL_OUTPUT_CHARS
     turn_timeout_sec: float | None = DEFAULT_TURN_TIMEOUT_SEC
+    run_as: RunAs | None = None
+    """Who run.sh and teardown.sh run as; None runs them as the loop's user."""
 
     @classmethod
     def from_env(
@@ -116,6 +118,7 @@ class Settings:
             turn_timeout_sec=float(
                 env.get("CC_TURN_TIMEOUT_SEC") or DEFAULT_TURN_TIMEOUT_SEC
             ),
+            run_as=RunAs.from_env(env),
         )
 
     def provider_info(self) -> ProviderInfo:
@@ -229,6 +232,7 @@ class Trial:
             state_dir=self.state_dir,
             timeout_sec=self.settings.turn_timeout_sec,
             extra_env=self.settings.script_env(),
+            run_as=self.settings.run_as,
         )
         if run.returncode != 0:
             tail = run.stderr.strip().splitlines()[-5:]
@@ -396,6 +400,7 @@ class Trial:
                 cwd=package.dir,
                 env=env,
                 timeout_sec=self.settings.turn_timeout_sec,
+                run_as=self.settings.run_as,
             )
             log_dir = self.agent_dir / "scripts"
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -472,6 +477,10 @@ async def async_main(env: dict[str, str]) -> int:
         flush=True,
     )
     print(f"[runner] model calls go through {settings.proxy_url}", flush=True)
+    if settings.run_as is not None:
+        print(
+            f"[runner] driver scripts run as {settings.run_as.describe()}", flush=True
+        )
     try:
         result = await trial.run()
     except TrialError as exc:

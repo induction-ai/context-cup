@@ -1,0 +1,43 @@
+name: Daytona sweep
+
+# A sandbox whose build failed sits in `error` for good: auto-stop only acts
+# on sandboxes that reached a running state, and harbor does not delete it.
+# Each one holds its reservation against the organization quota until a
+# suite can no longer start. Only sandboxes with context-cup's suite label
+# are touched.
+on:
+  schedule:
+    # Hourly, off the hour to stay clear of the busier scheduled runs.
+    - cron: "37 * * * *"
+  workflow_dispatch:
+    inputs:
+      older_than_hours:
+        description: "Only delete sandboxes that failed longer ago than this"
+        required: false
+        type: string
+        default: "12"
+      dry_run:
+        description: "List what would be deleted; delete nothing"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup
+
+      - name: Delete errored sandboxes
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+          OLDER_THAN_HOURS: ${{ inputs.older_than_hours || '12' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=(errors --older_than_hours "$OLDER_THAN_HOURS")
+          [ "$DRY_RUN" = "true" ] && args+=(--dry_run)
+          bin/daytona_sweep "${args[@]}"

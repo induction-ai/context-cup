@@ -25,6 +25,7 @@ This is a pnpm workspace (TypeScript) with a uv workspace (Python) beside it. `c
 - `course/db` owns the Postgres schema (`src/schema.ts`), migrations under `drizzle/`, the connection, and the database test setup.
 - `course/suite` is `bin/suite`: expands a suite file into harbor jobs, schedules them, ingests results.
 - `course/runner` (Python) is the harbor agent that runs inside a trial: it owns the payloads and hands each turn to the driver.
+- `course/proxy` is the forwarding proxy every model call goes through. It runs inside each trial container (bundled to one file by `src/bundle.ts`, started by the runner as root) and is the only process there holding provider keys; driver scripts run as the unprivileged `ccdriver` and cannot read them. Never pass a key through harbor's `--agent-env`, which reaches every command in the container.
 - `course/protocol` (Python) is the protocol as a library: the `input.json`/`output.json` models, the provider adapters, the provider-neutral view, and `run_engine`, shared by the runner and every engine.
 - `engines/*` each define the `ctx` their drivers' `run(ctx)` receives: `engines/python` hands over the payloads (a driver brings its own SDK), `engines/pydantic` takes back Pydantic AI capabilities, `engines/litellm` hands over `ctx.llm` (a preconfigured litellm handle) and takes back its response.
 - `bin/` wrappers stay at the root and run their owning package; `.env` lives at the root and is loaded via `REPO_ROOT`, so run anything from any directory.
@@ -45,6 +46,8 @@ pnpm typecheck             tsc across every package
 pnpm lint / pnpm format    prettier
 bin/suite <key> --driver <d> --target <t> [--count N] [--dry_run]
                            run a suite file with one driver against one target (targets.json)
+bin/daytona_sweep suite --suite_id <id> | errors [--dry_run]
+                           delete Daytona sandboxes a run left behind
 bin/db generate            write a migration for schema.ts changes
 bin/db migrate             apply pending migrations
 bin/db check               verify migrations, snapshots, and schema.ts agree

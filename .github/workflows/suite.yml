@@ -1,0 +1,316 @@
+name: Suite
+run-name: >-
+  Suite ${{ inputs.suite }} driver=${{ inputs.driver }} target=${{
+  inputs.target }}${{ inputs.count > 1 && format(' count={0}', inputs.count) ||
+  '' }}${{ inputs.task && format(' task={0}', inputs.task) || '' }}
+
+# One bin/suite run: one suite file, one driver, one target. Results go to the
+# database in DATABASE_URL, and the suite row links back to this run.
+# The option lists mirror suites/, drivers/, and targets.json;
+# course/suite/tests/workflow.test.ts fails when they drift.
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Suite file to run (suites/<suite>.json)"
+        required: true
+        type: choice
+        default: "<choose a suite>"
+        options:
+          - "<choose a suite>"
+          - smoke_tau
+          - smoke_toolathlon
+          - tau_banking
+          - toolathlon
+          - toolathlon_local
+      driver:
+        description: "Driver (drivers/<driver>)"
+        required: true
+        type: choice
+        default: "<choose a driver>"
+        options:
+          - "<choose a driver>"
+          - base_codex
+          - base_litellm
+          - base_passthrough
+          - base_pydantic
+          - base_truncate
+      target:
+        description: "Target model (targets.json); the driver must support its provider"
+        required: true
+        type: choice
+        default: gpt-5.5@medium
+        options:
+          - claude-sonnet-4-6
+          - gemini-3.1-pro-preview
+          - gpt-5.5@low
+          - gpt-5.5@medium
+      count:
+        description: "Trials per task"
+        required: false
+        type: number
+        default: 1
+      task:
+        description: "Optional: only these tasks (space-separated). Blank = all in the suite."
+        required: false
+        type: string
+        default: ""
+      retry_errors:
+        description: "After the suite finishes, rerun the trials that failed, up to this many more passes (0 = off). Skipped when more than half the trials failed."
+        required: false
+        type: number
+        default: 1
+      harbor_env:
+        description: "Where harbor tasks run their environment"
+        required: false
+        type: choice
+        default: daytona
+        options:
+          - daytona
+          - docker
+
+concurrency:
+  # Serialize any run that may touch the single, rotating
+  # TOOLATHLON_MCP_AUTH_B64 grant into one shared group, so two runs can't
+  # both restore and refresh it and invalidate each other's token.
+  group: >-
+    ${{ (inputs.suite == 'toolathlon' || inputs.suite == 'smoke_toolathlon')
+    && format('{0}-notion-grant', github.workflow)
+    || format('{0}-{1}', github.workflow, github.run_id) }}
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    # GitHub's ceiling for a hosted runner.
+    timeout-minutes: 360
+    permissions:
+      contents: read
+
+    steps:
+      # A choice input can't be empty and required: true is always satisfied,
+      # so the defaults are sentinels and the run fails fast here instead of
+      # benchmarking a suite or driver nobody picked.
+      - name: Require an explicit suite and driver
+        if: inputs.suite == '<choose a suite>' || inputs.driver == '<choose a driver>'
+        env:
+          SUITE: ${{ inputs.suite }}
+          DRIVER: ${{ inputs.driver }}
+        run: |
+          [ "$SUITE" = "<choose a suite>" ] && echo "::error::No suite selected; re-run and pick a suite from the dropdown."
+          [ "$DRIVER" = "<choose a driver>" ] && echo "::error::No driver selected; re-run and pick a driver from the dropdown."
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # Whether the run has toolathlon tasks, which decides the auth steps.
+      - name: Detect toolathlon suite
+        id: suite_kind
+        env:
+          SUITE: ${{ inputs.suite }}
+        run: |
+          case "$SUITE" in
+            toolathlon|smoke_toolathlon|toolathlon_local)
+              echo "Suite '$SUITE' runs toolathlon tasks; will restore toolathlon auth."
+              echo "toolathlon=true" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "Suite '$SUITE' has no toolathlon tasks; skipping toolathlon auth."
+              echo "toolathlon=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # Real toolathlon MCP credentials, base64-encoded into a repo secret
+      # (the zip is gitignored, so it's never in the checkout). Decoded into
+      # secrets/toolathlon_auth_configs.zip where bin/suite expects it; without
+      # the secret, toolathlon tasks fall back to placeholder configs.
+      - name: Restore toolathlon auth configs
+        if: steps.suite_kind.outputs.toolathlon == 'true'
+        env:
+          AUTH_B64: ${{ secrets.TOOLATHLON_AUTH_CONFIGS_B64 }}
+        run: |
+          if [ -z "$AUTH_B64" ]; then
+            echo "TOOLATHLON_AUTH_CONFIGS_B64 not set; toolathlon uses placeholder configs."
+            exit 0
+          fi
+          mkdir -p secrets
+          printf '%s' "$AUTH_B64" | base64 -d > secrets/toolathlon_auth_configs.zip
+
+      - name: Restore notion MCP auth state
+        if: steps.suite_kind.outputs.toolathlon == 'true'
+        env:
+          MCP_AUTH_B64: ${{ secrets.TOOLATHLON_MCP_AUTH_B64 }}
+        run: |
+          if [ -z "$MCP_AUTH_B64" ]; then
+            echo "TOOLATHLON_MCP_AUTH_B64 not set; notion toolathlon tasks refuse to launch."
+            exit 0
+          fi
+          mkdir -p secrets/mcp
+          printf '%s' "$MCP_AUTH_B64" | base64 -d | tar xzf - -C secrets/mcp
+          # Snapshot the restored refresh token so the write-back step can tell
+          # whether this run rotated it.
+          sha256sum secrets/mcp/*/*_tokens.json > secrets/mcp/.restored-sums 2>/dev/null || true
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Migrate database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: bin/db migrate
+
+      - name: Free disk space
+        run: |
+          echo "Disk before cleanup:"; df -h /
+          # The toolathlon harbor image is ~2.5GB+; ubuntu-latest only has
+          # ~14GB free on /. Remove preinstalled toolchains we don't use to
+          # make room before the docker build (avoids "no space left on device").
+          # Do NOT delete $AGENT_TOOLSDIRECTORY (/opt/hostedtoolcache): setup-uv
+          # installs uv and the Python interpreter there, and harbor needs uv.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          sudo docker image prune -af || true
+          echo "Disk after cleanup:"; df -h /
+
+      - name: Run suite
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          SUITE: ${{ inputs.suite }}
+          DRIVER: ${{ inputs.driver }}
+          TARGET: ${{ inputs.target }}
+          COUNT: ${{ inputs.count }}
+          TASK: ${{ inputs.task }}
+          HARBOR_ENV: ${{ inputs.harbor_env || 'daytona' }}
+          RETRY_ERRORS: ${{ inputs.retry_errors }}
+        run: |
+          args=("$SUITE" --driver "$DRIVER" --target "$TARGET" --count "${COUNT:-1}" --harbor_env "$HARBOR_ENV" --log_dir ".temp/suites")
+          # Unquoted expansion is intentional: each blank-free token becomes a
+          # separate value for the repeatable --task flag.
+          [ -n "$TASK" ] && args+=(--task $TASK)
+          args+=(--retry_errors "${RETRY_ERRORS:-1}")
+          bin/suite "${args[@]}"
+
+      - name: Upload suite summaries
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: suite-summary
+          include-hidden-files: true
+          path: |
+            .temp/suites/*/results.json
+            .temp/suites/*/results.txt
+            .temp/suites/*/logs/suite.log
+          if-no-files-found: ignore
+
+      # Sandboxes are deleted by the harbor process that created them, and a
+      # cancelled job SIGKILLs that process, so a cancel strands every sandbox
+      # the run had open, each holding its CPU/memory/disk reservation against
+      # the organization quota until its auto-stop interval expires. Sandboxes
+      # whose build failed are never reclaimed at all. Both carry this run's
+      # suite id as a label, which is what makes them findable here.
+      # Runs before the log steps so the quota comes back as early as possible.
+      - name: Delete this run's Daytona sandboxes
+        # Same default as the run step: a blank input means daytona.
+        if: always() && (inputs.harbor_env || 'daytona') == 'daytona'
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        run: |
+          # bin/suite generates its own suite id and logs under that name, so
+          # the id is read back from the directory it created.
+          shopt -s nullglob
+          for dir in .temp/suites/*/; do
+            bin/daytona_sweep suite --suite_id "$(basename "$dir")"
+          done
+
+      # Mint a short-lived installation token for the induction-bot app
+      - name: Generate bot token for grant write-back
+        id: grant-token
+        if: always() && steps.suite_kind.outputs.toolathlon == 'true'
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.INDUCTION_BOT_APP_ID }}
+          private-key: ${{ secrets.INDUCTION_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-secrets: write
+
+      # Notion rotates the refresh token on every refresh and kills the previous
+      # one. A suite sometimes refreshes, so if the last one isn't pushed back,
+      # the next suite restores a spent token and fails.
+      - name: Persist rotated notion MCP grant
+        if: always() && steps.suite_kind.outputs.toolathlon == 'true'
+        env:
+          GH_TOKEN: ${{ steps.grant-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          # Detect rotation first: only a rotated token must be persisted, so
+          # runs that didn't rotate stay green without needing a token at all.
+          if ! ls secrets/mcp/*/*_tokens.json >/dev/null 2>&1; then
+            echo "No notion grant on disk (no notion tasks / no restore); nothing to persist."
+            exit 0
+          fi
+          if sha256sum -c --status secrets/mcp/.restored-sums 2>/dev/null; then
+            echo "Notion refresh token unchanged since restore; no rotation to persist."
+            exit 0
+          fi
+          # Rotation happened: the stored secret now holds a spent token.
+          # Persist the new one or fail loudly; a silent skip breaks the next run.
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::notion grant rotated but no bot token to persist it (induction-bot missing secrets:write here?); next run would restore a dead grant."
+            exit 1
+          fi
+          echo "Notion refresh token rotated this run; writing it back to TOOLATHLON_MCP_AUTH_B64."
+          # Encode to a temp file (not straight into the pipe) so a tar/base64
+          # failure can't hand gh a truncated body that it stores as success.
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          tar czf - -C secrets/mcp --exclude=.restored-sums . | base64 -w0 > "$tmp"
+          if [ ! -s "$tmp" ]; then
+            echo "::error::encoded notion grant is empty; refusing to overwrite the secret."
+            exit 1
+          fi
+          gh secret set TOOLATHLON_MCP_AUTH_B64 --repo "$GITHUB_REPOSITORY" < "$tmp"
+
+      - name: Upload suite logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: suite-logs
+          include-hidden-files: true
+          path: .temp/suites/
+          if-no-files-found: ignore
+
+      - name: Suite summary
+        if: always()
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          shopt -s nullglob
+          {
+            echo "## Suite run"
+            echo ""
+            echo "- **Suite:** \`${{ inputs.suite }}\`"
+            echo "- **Driver:** \`${{ inputs.driver }}\`"
+            echo "- **Target:** \`${{ inputs.target }}\`"
+            for dir in .temp/suites/*/; do
+              id=$(basename "$dir")
+              echo "- **Suite id:** \`$id\`${SITE_URL:+ (${SITE_URL%/}/suites/$id)}"
+              if [ -f "$dir/results.txt" ]; then
+                echo ""
+                echo '```'
+                cat "$dir/results.txt"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The suite run leaves multi-GB harbor images and build cache on disk.
+      - name: Reclaim disk
+        if: always()
+        run: |
+          docker system prune -af || true
+          df -h /

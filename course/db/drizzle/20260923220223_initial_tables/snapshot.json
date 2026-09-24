@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "e2ea641c-4832-47be-a586-23c5549cc286",
+  "id": "48ffd30b-99d4-42fa-9a6c-a4fbed59b370",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -516,6 +516,19 @@
       "generated": null,
       "identity": null,
       "name": "cost_cents",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "model_call"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "discarded",
       "entityType": "columns",
       "schema": "public",
       "table": "model_call"

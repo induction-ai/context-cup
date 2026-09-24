@@ -86,31 +86,98 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
   run by harbor and compared on score and cost only.
 - `--count` is attempts per task. `--task` narrows to named tasks.
 - `--harbor_env daytona` runs in Daytona sandboxes instead of local Docker
-  (needs `DAYTONA_API_KEY`).
+  (needs `DAYTONA_API_KEY`). Each sandbox is labelled with its suite and job
+  ids and stops itself after two hours.
+  `bin/daytona_sweep suite --suite_id <id>` deletes the sandboxes an interrupted
+  run left behind; `bin/daytona_sweep errors` deletes ones whose build
+  failed, which nothing else reclaims.
 
 Prerequisites: Docker running, uv, Python 3.12, provider keys in `.env`, and
 the harbor fork, which the first run clones into `.harbor/repo`. Toolathlon
 tasks that need credentials read `secrets/toolathlon_auth_configs.zip` when
-present.
+present; every task image unzips it into its configs, on Docker and Daytona
+alike.
 
-A job's score is the mean reward over its done trials (a verdict and no
+The notion toolathlon tasks also need a Notion MCP login in `secrets/mcp`,
+and refuse to launch without one:
+
+```
+MCP_REMOTE_CONFIG_DIR=secrets/mcp npx -y mcp-remote@0.1.16 https://mcp.notion.com/mcp
+# approve in the browser, then Ctrl-C once it prints "Proxy established successfully"
+```
+
+Its refresh token rotates on every use. Docker trials mount `secrets/mcp`
+live. Daytona sandboxes cannot mount a host path, so before each notion job
+`bin/suite` refreshes a token with under an hour left and bakes a snapshot
+into the notion tasks' `configs.zip` (`course/suite/src/mcp_auth.ts`).
+
+A task's score is the mean reward over its done trials (a verdict and no
 error; errored or unfinished trials are left out, not counted as zero), its
 cost the mean over those trials' prices, and a suite's score and cost are the
-means of its jobs' values. Nothing is stored; every view computes it.
+means of its tasks' values. Nothing is stored; every view computes it.
+
+`--retry_errors N` reruns, after the suite finishes, the trials that did not
+finish, up to N more passes. Each pass adds a job per task still short
+(`job.pass` numbers it), and a task's score covers the done trials of all its
+jobs; every attempt is kept. Passes are skipped when more than half the
+trials failed, since that points at something a retry would only repeat. The
+run exits non-zero only when a task is still short after the retries.
 
 Output lands in `.temp/suites/<suite_id>/` (`results.json`, `results.txt`,
-`calls.jsonl`, `logs/suite.log`, and every trial's artifacts) and in
-Postgres: `suite`, `job`, `trial`, and `model_call` rows.
+`logs/suite.log`, and every trial's artifacts) and in Postgres: `suite`,
+`job`, `trial`, and `model_call` rows.
 
-Every model call a trial makes goes through a proxy `bin/suite` starts on
-the host (`course/proxy`): it holds the provider keys, forwards to the
-provider, and writes `calls.jsonl`, which is where tokens and cost come
-from. Containers never hold a key. Set `CC_SAVE_BODIES=1` to keep every
-request and response body under `bodies/`, and `CC_PROXY_HOST` when the
-containers reach the host by another name than `host.docker.internal`. A run inside GitHub Actions needs
-`DATABASE_URL` for a Postgres the runner can reach; its suite row records the
+Every model call a trial makes goes through a proxy (`course/proxy`) that
+runs inside that trial's container: `bin/suite` bundles it into one file,
+and the runner uploads it with a `node` binary and starts it as root with
+the provider keys. It forwards to the provider and writes the trial's
+`agent/calls.jsonl`, which is where tokens and cost come from. Driver code
+runs as an unprivileged user that cannot read the keys; each trial's
+`agent/isolation.txt` records the check. Set `CC_SAVE_BODIES=1` to keep
+every request and response body under the trial's `agent/bodies/`.
+
+## Running in GitHub Actions
+
+The **Suite** workflow (`.github/workflows/suite.yml`, run from the Actions
+tab) is `bin/suite` on a hosted runner: pick the suite, driver, and target
+(the suite and driver have no default),
+and optionally a count and tasks. It runs on Daytona by default. It migrates
+the database, runs the suite, deletes the run's Daytona sandboxes (including
+after a cancel), writes the results table to the run summary, and uploads
+two artifacts: `suite-summary` (results and the suite log) and `suite-logs`
+(all of `.temp/suites/`). Toolathlon runs take turns, restore the notion
+login, and write it back when it rotated. The suite row records the
 workflow run id, attempt, and repository, and the results site links back to
-the run.
+the run. The option lists mirror `suites/`, `drivers/`, and `targets.json`,
+and a test fails when they drift.
+
+**Daytona sweep** runs hourly and deletes context-cup sandboxes
+whose build failed more than 12 hours earlier.
+
+Repository secrets:
+
+| secret                                                  | for                                                                                                            |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                          | the production Postgres; the runner must be able to reach it                                                   |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` | the providers the chosen target and driver call                                                                |
+| `DAYTONA_API_KEY`                                       | Daytona runs and the sweep                                                                                     |
+| `TOOLATHLON_AUTH_CONFIGS_B64`                           | optional: `base64 < secrets/toolathlon_auth_configs.zip \| gh secret set TOOLATHLON_AUTH_CONFIGS_B64`          |
+| `TOOLATHLON_MCP_AUTH_B64`                               | the notion tasks' login; see below                                                                             |
+| `INDUCTION_BOT_APP_ID`, `INDUCTION_BOT_PRIVATE_KEY`     | the induction-bot GitHub App, installed on this repository with Secrets write, to store a rotated notion login |
+
+The repository variable `SITE_URL` points printed links at the deployed
+results site.
+
+CI gets its own Notion login, since a refresh from either copy would spend
+the other's token. To set it:
+
+```
+mkdir /tmp/ci-grant
+MCP_REMOTE_CONFIG_DIR=/tmp/ci-grant npx -y mcp-remote@0.1.16 https://mcp.notion.com/mcp
+# approve, then Ctrl-C once it prints "Proxy established successfully"
+COPYFILE_DISABLE=1 tar czf - -C /tmp/ci-grant . | base64 | gh secret set TOOLATHLON_MCP_AUTH_B64
+rm -rf /tmp/ci-grant
+```
 
 ## Results site
 

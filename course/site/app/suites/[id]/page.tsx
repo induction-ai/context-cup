@@ -250,11 +250,22 @@ export default async function SuitePage({
 
       <h2 className="h4 mt-4">Jobs</h2>
       {jobs.map((j) => (
-        <section className="card mb-3" key={j.id} id={`task-${j.taskName}`}>
+        <section
+          className="card mb-3"
+          key={j.id}
+          id={j.pass === 0 ? `task-${j.taskName}` : `job-${j.id}`}
+        >
           <div className="card-body">
             <h3 className="h5">
               <span className="font-monospace">{j.taskName}</span>{" "}
               <span className="text-body-secondary font-monospace">{j.id}</span>{" "}
+              {j.pass > 0 ? (
+                <>
+                  <span className="badge text-bg-warning">
+                    retry {j.pass}
+                  </span>{" "}
+                </>
+              ) : null}
               <span
                 className={
                   j.status === "done"

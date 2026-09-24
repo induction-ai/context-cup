@@ -1,0 +1,1 @@
+{"trial_id": "banking-001__zzz0000", "turn_id": null, "sequence": 1, "purpose": "turn", "provider": "openai", "host": "api.openai.com", "model": null, "wire": "responses", "usage": null, "duration_ms": 5, "status": 200, "service_tier": null, "request_bytes": 10, "response_bytes": 20, "streamed": false, "started_at": "2026-09-22T10:00:00.000Z", "error": "no model"}

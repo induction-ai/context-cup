@@ -6,7 +6,7 @@ else. See engines/pydantic/README.md for what the engine owns."""
 
 def run(ctx):
     # Return the capabilities for this turn's agent. The engine builds the
-    # Agent around them, connects it to the target through the run's proxy,
+    # Agent around them, connects it to the target through the trial's proxy,
     # hands the course's tools over as external tools (the course runs them),
     # and loads the agent's own history from ctx.dirs.state.
     #

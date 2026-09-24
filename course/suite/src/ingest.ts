@@ -89,6 +89,22 @@ const zSummary = z.object({
   errors: z.union([z.number().int(), z.array(z.unknown())]).optional(),
 });
 
+/** Turn ids of attempts the runner discarded (empty replies). */
+function discardedTurns(errors: unknown): Set<string> {
+  const out = new Set<string>();
+  if (!Array.isArray(errors)) return out;
+  for (const e of errors) {
+    if (e && typeof e === "object") {
+      const { turn_id, discarded } = e as {
+        turn_id?: unknown;
+        discarded?: unknown;
+      };
+      if (discarded === true && typeof turn_id === "string") out.add(turn_id);
+    }
+  }
+  return out;
+}
+
 const zJobResult = z.object({
   stats: z
     .object({
@@ -120,6 +136,8 @@ export type PricedCall = {
   service_tier: string | null;
   /** Null when the model is unknown to the pricing table or unnamed. */
   cost_cents: number | null;
+  /** From a discarded attempt: stored, but outside the trial's usage and cost. */
+  discarded: boolean;
 };
 
 export type ParsedTrial = {
@@ -134,7 +152,7 @@ export type ParsedTrial = {
   duration_ms: number | null;
   totals: CallUsage & { reasoning_output: number };
   calls: PricedCall[];
-  /** Null when any call's model is unpriced. */
+  /** Null when any counted call's model is unpriced. */
   cost_cents: number | null;
 };
 
@@ -142,11 +160,17 @@ function readJson(file: string): unknown {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
-/** Every recorded call in a proxy log, grouped by trial id (the harbor
- *  trial directory name). A missing file means no calls were made. */
-export function readCallLog(file: string): Map<string, CallRecord[]> {
-  const byTrial = new Map<string, CallRecord[]>();
-  if (!existsSync(file)) return byTrial;
+/** Where a trial's proxy, running in its container, wrote its calls. */
+export function trialCallLog(trialDir: string): string {
+  return path.join(trialDir, "agent", "calls.jsonl");
+}
+
+/** Every call a proxy log recorded, in order. Each trial has its own proxy,
+ *  so every call in the file is that trial's to pay for, whatever trial id
+ *  its URL carried. A missing file means no calls were made. */
+export function readCallLog(file: string): CallRecord[] {
+  if (!existsSync(file)) return [];
+  const calls: CallRecord[] = [];
   const lines = readFileSync(file, "utf8").split("\n");
   for (const [index, line] of lines.entries()) {
     if (!line.trim()) continue;
@@ -156,13 +180,9 @@ export function readCallLog(file: string): Map<string, CallRecord[]> {
         `${file}:${index + 1}: ${parsed.error.issues.map((i) => i.message).join("; ")}`
       );
     }
-    const list = byTrial.get(parsed.data.trial_id) ?? [];
-    list.push(parsed.data);
-    byTrial.set(parsed.data.trial_id, list);
+    calls.push(parsed.data);
   }
-  for (const list of byTrial.values())
-    list.sort((a, b) => a.sequence - b.sequence);
-  return byTrial;
+  return calls.sort((a, b) => a.sequence - b.sequence);
 }
 
 const ZERO_USAGE = {
@@ -173,7 +193,7 @@ const ZERO_USAGE = {
   reasoning_output: 0,
 };
 
-function priceCall(call: CallRecord): PricedCall {
+function priceCall(call: CallRecord, discarded = false): PricedCall {
   const usage = call.usage ?? ZERO_USAGE;
   return {
     sequence: call.sequence,
@@ -195,6 +215,7 @@ function priceCall(call: CallRecord): PricedCall {
         : call.model && call.usage
           ? callCostCents(call.model, usage, call.service_tier)
           : null,
+    discarded,
   };
 }
 
@@ -251,11 +272,11 @@ export function trajectoryCounts(file: string): {
   };
 }
 
-/** Everything the suite records about one trial directory, given the calls
- *  the proxy recorded for it. */
+/** Everything the suite records about one trial directory, with the calls
+ *  its proxy recorded in `agent/calls.jsonl`. */
 export function parseTrial(
   trialDir: string,
-  recorded: readonly CallRecord[] = []
+  recorded: readonly CallRecord[] = readCallLog(trialCallLog(trialDir))
 ): ParsedTrial {
   const result = zTrialResult.parse(
     readJson(path.join(trialDir, "result.json"))
@@ -267,7 +288,13 @@ export function parseTrial(
   const summary = existsSync(summaryFile)
     ? zSummary.parse(readJson(summaryFile))
     : trajectoryCounts(path.join(agentDir, "trajectory.json"));
-  const calls = recorded.map(priceCall);
+  const discarded = discardedTurns(
+    "errors" in summary ? summary.errors : undefined
+  );
+  const calls = recorded.map((c) =>
+    priceCall(c, c.turn_id !== null && discarded.has(c.turn_id))
+  );
+  const counted = calls.filter((c) => !c.discarded);
   const totals = {
     input: 0,
     cached_input: 0,
@@ -275,18 +302,18 @@ export function parseTrial(
     output: 0,
     reasoning_output: 0,
   };
-  for (const call of calls) {
+  for (const call of counted) {
     totals.input += call.usage.input;
     totals.cached_input += call.usage.cached_input;
     totals.cache_write_input += call.usage.cache_write_input;
     totals.output += call.usage.output;
     totals.reasoning_output += call.usage.reasoning_output;
   }
-  const unpriced = calls.some((c) => c.cost_cents === null);
+  const unpriced = counted.some((c) => c.cost_cents === null);
   const cost_cents =
-    unpriced || calls.length === 0
+    unpriced || counted.length === 0
       ? null
-      : calls.reduce((sum, c) => sum + (c.cost_cents ?? 0), 0);
+      : counted.reduce((sum, c) => sum + (c.cost_cents ?? 0), 0);
   const exception = result.exception_info;
   const error = exception
     ? `${exception.exception_type}: ${exception.exception_message}`.slice(
@@ -319,14 +346,9 @@ export function parseTrial(
 /** Every trial of a harbor job, discovered from each trial's result.json.
  *  Trials that harbor listed in the job's exception stats but never wrote a
  *  result for come back as errored placeholders. */
-export function parseJob(
-  jobsDir: string,
-  jobName: string,
-  callsFile: string
-): ParsedTrial[] {
+export function parseJob(jobsDir: string, jobName: string): ParsedTrial[] {
   const jobDir = path.join(jobsDir, jobName);
   if (!existsSync(jobDir)) return [];
-  const callLog = readCallLog(callsFile);
   const trials: ParsedTrial[] = [];
   const seen = new Set<string>();
   for (const name of readdirSync(jobDir).sort()) {
@@ -336,7 +358,7 @@ export function parseJob(
       !existsSync(path.join(dir, "result.json"))
     )
       continue;
-    const parsed = parseTrial(dir, callLog.get(name) ?? []);
+    const parsed = parseTrial(dir);
     seen.add(parsed.trial_name);
     trials.push(parsed);
   }
@@ -393,6 +415,8 @@ export type JobRow = {
   concurrency: number;
   command: string;
   jobs_dir: string;
+  /** See the job table's `pass`. */
+  pass?: number;
 };
 
 export async function insertJob(row: JobRow): Promise<void> {
@@ -409,6 +433,7 @@ export async function insertJob(row: JobRow): Promise<void> {
       model: row.target.model,
       reasoningEffort: row.target.reasoning_effort ?? null,
       count: row.run.count,
+      pass: row.pass ?? 0,
       concurrency: row.concurrency,
       command: row.command,
       status: "pending",
@@ -470,7 +495,7 @@ export async function ingestJob(
         cacheWriteInputTokens: t.totals.cache_write_input,
         outputTokens: t.totals.output,
         reasoningOutputTokens: t.totals.reasoning_output,
-        modelCalls: t.calls.length,
+        modelCalls: t.calls.filter((c) => !c.discarded).length,
         costCents: t.cost_cents,
         trialDir: t.trial_dir,
       });
@@ -495,6 +520,7 @@ export async function ingestJob(
             durationMs: c.duration_ms,
             serviceTier: c.service_tier,
             costCents: c.cost_cents,
+            discarded: c.discarded,
           }))
         );
       }

@@ -1,0 +1,30 @@
+name: Setup
+description: Node, pnpm, uv with Python 3.12, and the workspace's node modules.
+
+runs:
+  using: composite
+  steps:
+    # corepack reads the pnpm version from the root package.json
+    # "packageManager" field, so CI runs the same pnpm as every developer.
+    - name: Enable pnpm via corepack
+      run: corepack enable
+      shell: bash
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+
+    # bin/suite runs harbor as a uv project on Python 3.12.
+    - name: Setup uv + Python
+      uses: astral-sh/setup-uv@v6
+      with:
+        python-version: "3.12"
+        # Harbor syncs inside .harbor at runtime; a cache here only fails the
+        # post step.
+        enable-cache: false
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+      shell: bash

@@ -15,13 +15,12 @@ import {
   readCallLog,
 } from "../src/ingest.ts";
 import { resultsTable, suiteTotals, summarizeCell } from "../src/results.ts";
-import { FIXTURE_CALLS, FIXTURE_JOBS_DIR, sampleRun } from "./helpers.ts";
+import { FIXTURE_JOBS_DIR, FIXTURES, sampleRun } from "./helpers.ts";
 
 describe("parseTrial", () => {
-  it("reads reward, usage, summary, and prices the calls", async () => {
+  it("reads reward, usage, summary, and prices the calls from the trial's own log", async () => {
     const t = parseTrial(
-      path.join(FIXTURE_JOBS_DIR, "j_fixture", "banking-001__abc1234"),
-      readCallLog(FIXTURE_CALLS).get("banking-001__abc1234")
+      path.join(FIXTURE_JOBS_DIR, "j_fixture", "banking-001__abc1234")
     );
     expect(t.reward).toBe(1);
     expect(t.score_reason).toBe("all 3 actions matched");
@@ -46,7 +45,7 @@ describe("parseTrial", () => {
   });
 
   it("prices an unnamed model as unknown and counts the call", async () => {
-    const calls = readCallLog(FIXTURE_CALLS).get("banking-001__zzz0000")!;
+    const calls = readCallLog(path.join(FIXTURES, "calls_unpriced.jsonl"));
     const t = parseTrial(
       path.join(FIXTURE_JOBS_DIR, "j_fixture", "banking-001__abc1234"),
       calls
@@ -70,7 +69,7 @@ describe("parseTrial", () => {
 
 describe("parseJob", () => {
   it("discovers trials from result.json and adds placeholders from the job's exception stats", async () => {
-    const trials = parseJob(FIXTURE_JOBS_DIR, "j_fixture", FIXTURE_CALLS);
+    const trials = parseJob(FIXTURE_JOBS_DIR, "j_fixture");
     expect(trials.map((t) => t.trial_name)).toEqual([
       "banking-001__abc1234",
       "banking-001__def5678",
@@ -79,7 +78,7 @@ describe("parseJob", () => {
     expect(trials[2]?.error).toBe(
       "EnvironmentStartTimeoutError: no trial result written"
     );
-    expect(parseJob(FIXTURE_JOBS_DIR, "missing", FIXTURE_CALLS)).toEqual([]);
+    expect(parseJob(FIXTURE_JOBS_DIR, "missing")).toEqual([]);
   });
 });
 
@@ -114,7 +113,7 @@ describe("ingestJob", () => {
       command: "harbor run …",
       jobs_dir: "/tmp/s_test/j_test/harbor",
     });
-    const trials = parseJob(FIXTURE_JOBS_DIR, "j_fixture", FIXTURE_CALLS);
+    const trials = parseJob(FIXTURE_JOBS_DIR, "j_fixture");
     const started_at = new Date("2026-09-22T10:00:00Z");
     await ingestJob(
       "s_test",
@@ -171,11 +170,7 @@ describe("ingestJob", () => {
 
 describe("agent-kind trials", () => {
   it("take turns and tool calls from harbor's trajectory and tokens from the proxy log", async () => {
-    const trials = parseJob(
-      FIXTURE_JOBS_DIR,
-      "j_agent",
-      path.join(FIXTURE_JOBS_DIR, "..", "calls_agent.jsonl")
-    );
+    const trials = parseJob(FIXTURE_JOBS_DIR, "j_agent");
     expect(trials).toHaveLength(1);
     const t = trials[0]!;
     expect(t.reward).toBe(1);
@@ -187,5 +182,70 @@ describe("agent-kind trials", () => {
     // The rejected probe (401, no body) billed nothing: cost 0, not unpriced.
     expect(t.calls[2]?.cost_cents).toBe(0);
     expect(t.cost_cents).not.toBeNull();
+  });
+});
+
+describe("discarded attempts", () => {
+  const dir = path.join(FIXTURE_JOBS_DIR, "j_discard", "banking-001__disc001");
+
+  it("keep the empty reply's call but leave it out of usage and cost", async () => {
+    const t = parseTrial(dir);
+    expect(t.calls.map((c) => c.discarded)).toEqual([true, false]);
+    expect(t.totals.input).toBe(5000);
+    expect(t.totals.output).toBe(100);
+    expect(t.cost_cents).toBeCloseTo(((5000 * 5 + 100 * 30) / 1e6) * 100, 6);
+  });
+
+  it("store the call flagged and count only the rest", async () => {
+    const db = getCurrentTransaction();
+    await db.insert(suite).values({
+      id: "s_disc",
+      name: "smoke_tau",
+      keyFile: "suites/smoke_tau.json",
+      driverName: "base_passthrough",
+      targetName: "gpt-5.5@medium",
+      provider: "openai",
+      model: "gpt-5.5",
+      count: 1,
+      harborEnv: "docker",
+      logDir: "/tmp/s_disc",
+      startedAt: new Date("2026-09-22T10:00:00Z"),
+    });
+    await insertJob({
+      job_id: "j_disc",
+      suite_id: "s_disc",
+      run: sampleRun(),
+      target: { provider: "openai", model: "gpt-5.5" },
+      concurrency: 1,
+      command: "harbor run …",
+      jobs_dir: "/tmp/s_disc/j_disc/harbor",
+    });
+    const t = parseTrial(dir);
+    const now = new Date("2026-09-22T10:01:00Z");
+    await ingestJob(
+      "s_disc",
+      "j_disc",
+      {
+        job_id: "j_disc",
+        exit_code: 0,
+        ok: true,
+        error: null,
+        started_at: now,
+        finished_at: now,
+        log_file: "/tmp/x.log",
+      },
+      [t]
+    );
+    const [row] = await db
+      .select()
+      .from(trial)
+      .where(eq(trial.jobId, "j_disc"));
+    expect(row?.modelCalls).toBe(1);
+    expect(row?.inputTokens).toBe(5000);
+    const stored = await db
+      .select()
+      .from(modelCall)
+      .where(eq(modelCall.jobId, "j_disc"));
+    expect(stored.map((c) => c.discarded).sort()).toEqual([false, true]);
   });
 });

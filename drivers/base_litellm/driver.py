@@ -48,6 +48,6 @@ def run(ctx):
         )
     )
     # With no arguments, ctx.llm sends ctx.context_messages and ctx.tools to
-    # the target through the run's proxy. The engine emits the raw provider
+    # the target through the trial's proxy. The engine emits the raw provider
     # body behind this response as the turn's answer.
     return ctx.llm.completion()

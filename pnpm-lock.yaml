@@ -39,6 +39,9 @@ catalogs:
     drizzle-orm:
       specifier: 1.0.0-beta.9-e89174b
       version: 1.0.0-beta.9-e89174b
+    esbuild:
+      specifier: ^0.28.2
+      version: 0.28.2
     execa:
       specifier: ^9.6.1
       version: 9.6.1
@@ -184,12 +187,12 @@ importers:
       '@context-cup/shared':
         specifier: workspace:*
         version: link:../shared
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
       express:
         specifier: 'catalog:'
         version: 5.2.1
-      yargs:
-        specifier: 'catalog:'
-        version: 18.2.0
       zod:
         specifier: 'catalog:'
         version: 4.6.5
@@ -203,9 +206,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.6
-      '@types/yargs':
-        specifier: 'catalog:'
-        version: 17.0.35
       prettier:
         specifier: 'catalog:'
         version: 3.6.2

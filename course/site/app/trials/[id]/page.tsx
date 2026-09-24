@@ -165,9 +165,15 @@ function Fact({
 }
 
 function CallTable({ calls }: { calls: ModelCallRow[] }) {
-  const sum = (pick: (c: ModelCallRow) => number | null) =>
-    calls.reduce((acc, c) => acc + (pick(c) ?? 0), 0);
-  const priced = calls.every((c) => c.costCents != null);
+  // Calls from a discarded attempt (an empty reply the runner re-asked) are
+  // shown but left out of the totals, as they are out of the trial's cost.
+  const counted = calls.filter((c) => !c.discarded);
+  const discarded = calls.filter((c) => c.discarded);
+  const sum = (
+    pick: (c: ModelCallRow) => number | null,
+    of: ModelCallRow[] = counted
+  ) => of.reduce((acc, c) => acc + (pick(c) ?? 0), 0);
+  const priced = counted.every((c) => c.costCents != null);
   return (
     <div className="table-responsive">
       <table className="table table-sm table-striped table-hover align-middle mb-0">
@@ -191,8 +197,18 @@ function CallTable({ calls }: { calls: ModelCallRow[] }) {
         </thead>
         <tbody>
           {calls.map((c) => (
-            <tr key={c.id}>
-              <td className="font-monospace">{c.turnId}</td>
+            <tr
+              key={c.id}
+              className={c.discarded ? "text-body-secondary" : undefined}
+            >
+              <td className="font-monospace">
+                {c.turnId}
+                {c.discarded ? (
+                  <span className="badge text-bg-secondary ms-2">
+                    discarded
+                  </span>
+                ) : null}
+              </td>
               <td className="text-end font-monospace">{c.sequence}</td>
               <td>{c.purpose ?? "turn"}</td>
               <td className="font-monospace">{c.model}</td>
@@ -247,6 +263,17 @@ function CallTable({ calls }: { calls: ModelCallRow[] }) {
           </tr>
         </tbody>
       </table>
+      {discarded.length > 0 ? (
+        <p className="text-body-secondary small mt-2 mb-0">
+          {discarded.length} call{discarded.length === 1 ? "" : "s"} from
+          discarded attempts (empty replies re-asked) are not in the totals or
+          the trial&rsquo;s cost; they spent{" "}
+          {discarded.every((c) => c.costCents != null)
+            ? cents(sum((c) => c.costCents, discarded))
+            : "an unpriced amount"}
+          .
+        </p>
+      ) : null}
     </div>
   );
 }

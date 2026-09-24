@@ -14,7 +14,7 @@ def run(ctx: PythonContext):
     # strategy would edit it here; the baseline sends it as it is.
     #
     # OpenAI() needs no configuration: the runner set OPENAI_BASE_URL to this
-    # trial's prefix on the run's proxy and OPENAI_API_KEY to a placeholder.
+    # trial's prefix on the trial's proxy and OPENAI_API_KEY to a placeholder.
     # The proxy adds the real key and records the call's tokens and cost.
     #
     # Return the SDK's response object as it is: the engine writes the fields

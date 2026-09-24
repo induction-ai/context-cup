@@ -123,6 +123,64 @@ describe("queries", () => {
     expect(s.githubRunId).toBe("77");
   });
 
+  it("scores a retry pass into its task, not as another task", async () => {
+    await seed();
+    const db = getCurrentTransaction();
+    const base = {
+      suiteId: "s_site",
+      runner: "tau3",
+      driverName: "base_passthrough",
+      targetName: "gpt-5.5@medium",
+      provider: "openai" as const,
+      model: "gpt-5.5",
+      count: 1,
+      concurrency: 1,
+      command: "harbor run …",
+      status: "done" as const,
+      jobsDir: "/tmp/s_site/harbor",
+    };
+    await db.insert(job).values([
+      { ...base, id: "j_retry", taskName: "banking_001", pass: 1 },
+      { ...base, id: "j_other", taskName: "banking_002" },
+    ]);
+    await db.insert(trial).values([
+      {
+        id: "t_retry",
+        suiteId: "s_site",
+        jobId: "j_retry",
+        trialName: "banking-001__c",
+        reward: 0,
+        costCents: 1.5,
+        trialDir: "/tmp/t_retry",
+      },
+      {
+        id: "t_other",
+        suiteId: "s_site",
+        jobId: "j_other",
+        trialName: "banking-002__a",
+        reward: 1,
+        costCents: 3,
+        trialDir: "/tmp/t_other",
+      },
+    ]);
+    const { rows } = await listSuites({
+      sort: { key: "started", dir: "desc" },
+      page: { page: 1, per: 50 },
+    });
+    const s = rows.find((r) => r.id === "s_site")!;
+    expect(s.tasks).toBe(2);
+    // banking_001 is (1 + 0) / 2 over both its jobs, banking_002 is 1; a
+    // job-weighted mean would be 2/3.
+    expect(s.mean_reward).toBeCloseTo(0.75, 6);
+    expect(s.mean_cost_cents).toBeCloseTo((3 + 3) / 2, 6);
+    const data = await loadSuite("s_site");
+    expect(data?.jobs.map((j) => [j.id, j.pass])).toEqual([
+      ["j_site", 0],
+      ["j_retry", 1],
+      ["j_other", 0],
+    ]);
+  });
+
   it("loads a suite with its jobs and trials, and nothing for an unknown id", async () => {
     await seed();
     const data = await loadSuite("s_site");

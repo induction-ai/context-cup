@@ -24,10 +24,20 @@ from harbor.models.agent.context import AgentContext
 
 from . import __version__
 from .chain import DriverChain
+from .container import (
+    AGENT_DIR,
+    DRIVER_USER,
+    INSTALL_ROOT,
+    PROXY_URL,
+    check_isolation,
+    create_driver_user,
+    probe_platform,
+    start_proxy,
+    stop_proxy,
+    wait_for_proxy,
+)
 from .uv_bootstrap import cached_uv_binary, uv_target_triple
 
-INSTALL_ROOT = "/installed-agent"
-AGENT_DIR = "/logs/agent"
 REMOTE_PACKAGE = f"{INSTALL_ROOT}/context_cup_runner"
 # The shared protocol library (course/protocol), installed into the runner's
 # venv here and into engine venvs by their setup.sh via CC_PROTOCOL_DIR.
@@ -67,7 +77,6 @@ UPLOAD_IGNORE = (
 
 # Settings the suite passes with --agent-env and the loop reads as-is.
 PASSTHROUGH_SETTINGS = (
-    "CC_PROXY_URL",
     "CC_TARGET_JSON",
     "CC_TURN_RETRIES",
     "CC_MAX_STEPS",
@@ -84,6 +93,9 @@ class CourseAgent(BaseInstalledAgent):
     benchmark: str = ""
 
     capabilities = AgentCapabilities(atif=True, mcp_servers=True)
+
+    _driver_drop: str | None = None
+    """How run.sh switches to DRIVER_USER in this container; set by install."""
 
     @staticmethod
     def name() -> str:
@@ -160,9 +172,11 @@ class CourseAgent(BaseInstalledAgent):
         # The upload target's parent must exist, or harbor's `docker compose cp`
         # fails and falls back to a tar stream whose directories the agent user
         # cannot traverse.
+        # Sticky, so a driver can add files there but not replace the ones
+        # root writes (the proxy's calls.jsonl among them).
         await self.exec_as_root(
             environment,
-            command=f"mkdir -p {REMOTE_CHAIN} {AGENT_DIR} && chmod a+rwx {AGENT_DIR}",
+            command=f"mkdir -p {REMOTE_CHAIN} {AGENT_DIR} && chmod 1777 {AGENT_DIR}",
         )
         await environment.upload_dir(Path(__file__).parent, REMOTE_PACKAGE)
         await environment.upload_dir(
@@ -174,7 +188,8 @@ class CourseAgent(BaseInstalledAgent):
             await environment.upload_dir(self.stage_package(package.dir, index), remote)
         await self._open_install_root(environment)
 
-        await self._upload_uv(environment)
+        platform = await probe_platform(self, environment)
+        await self._upload_uv(environment, platform)
         deps = " ".join(shlex.quote(d) for d in IN_CONTAINER_DEPS)
         await self.exec_as_root(
             environment,
@@ -195,26 +210,37 @@ class CourseAgent(BaseInstalledAgent):
                 continue
             await self.exec_as_root(
                 environment,
-                command=f"cd {shlex.quote(remote)} && bash setup.sh 2>&1 | tee {AGENT_DIR}/setup_{package.name}.txt",
+                # PATH is set in the command itself: some environments (Daytona)
+                # exec through a login shell that resets PATH from the env.
+                command=(
+                    f"export PATH={UV_DIR}:{RUNNER_VENV}/bin:$PATH; "
+                    f"cd {shlex.quote(remote)} && bash setup.sh 2>&1 "
+                    f"| tee {AGENT_DIR}/setup_{package.name}.txt"
+                ),
                 env=self.script_env(chain, index),
                 timeout_sec=900,
             )
-        # setup.sh runs as root; run.sh runs as the agent user and must be able
+        # setup.sh runs as root; run.sh runs as DRIVER_USER and must be able
         # to read and execute everything setup left behind (venvs included).
         await self._open_install_root(environment)
 
-    async def _upload_uv(self, environment: BaseEnvironment) -> None:
-        """Put the pinned uv release at UV_BIN, built for the container."""
-        probe = await self.exec_as_root(
+        # The proxy, holding the keys as root, and the proof the driver user
+        # cannot read them.
+        self._driver_drop = await create_driver_user(self, environment)
+        await start_proxy(
+            self,
             environment,
-            command="uname -m; (ls /lib/ld-musl-* >/dev/null 2>&1 && echo musl) || echo gnu",
+            platform=platform,
+            target=json.loads(self._get_env("CC_TARGET_JSON") or "null"),
+            save_bodies=self._get_env("CC_SAVE_BODIES") == "1",
         )
-        lines = [ln.strip() for ln in (probe.stdout or "").splitlines() if ln.strip()]
-        if len(lines) < 2:
-            raise RuntimeError(
-                f"could not probe the container architecture: {probe.stdout!r}"
-            )
-        binary = cached_uv_binary(uv_target_triple(lines[0], lines[1]))
+        await check_isolation(self, environment, self._driver_drop)
+
+    async def _upload_uv(
+        self, environment: BaseEnvironment, platform: tuple[str, str]
+    ) -> None:
+        """Put the pinned uv release at UV_BIN, built for the container."""
+        binary = cached_uv_binary(uv_target_triple(*platform))
         await self.exec_as_root(environment, command=f"mkdir -p {UV_DIR}")
         await environment.upload_file(binary, UV_BIN)
         await self.exec_as_root(environment, command=f"chmod 755 {UV_BIN}")
@@ -243,14 +269,17 @@ class CourseAgent(BaseInstalledAgent):
             "CC_AGENT_DIR": AGENT_DIR,
             "CC_DRIVER_CHAIN": self.remote_chain_value(self.host_chain()),
             "CC_INSTRUCTION_FILE": REMOTE_INSTRUCTION,
+            "CC_PROXY_URL": PROXY_URL,
         }
+        if self._driver_drop:
+            env["CC_DRIVER_USER"] = DRIVER_USER
+            env["CC_DRIVER_DROP"] = self._driver_drop
         for key in PASSTHROUGH_SETTINGS:
             value = self._get_env(key)
             if value:
                 env[key] = value
-        for required in ("CC_TARGET_JSON", "CC_PROXY_URL"):
-            if required not in env:
-                raise ValueError(f"{required} is required")
+        if "CC_TARGET_JSON" not in env:
+            raise ValueError("CC_TARGET_JSON is required")
         env.update(self.environment_settings(environment))
         return env
 
@@ -262,23 +291,31 @@ class CourseAgent(BaseInstalledAgent):
         local_instruction.write_text(instruction, encoding="utf-8")
         await environment.upload_file(local_instruction, REMOTE_INSTRUCTION)
 
+        if not self._driver_drop:
+            raise RuntimeError(
+                f"install did not set up {DRIVER_USER}; driver code must not run as root"
+            )
         env = self._loop_env(environment)
         await self.exec_as_agent(
             environment, command=f"mkdir -p {AGENT_DIR} {REMOTE_STATE}"
         )
-        await self.exec_as_agent(
-            environment,
-            command=(
-                f"cd {INSTALL_ROOT} && {RUNNER_PYTHON} -m context_cup_runner.loop "
-                f"2>&1 </dev/null | tee {AGENT_DIR}/runner.txt"
-            ),
-            env=env,
-            timeout_sec=None,
-        )
+        await wait_for_proxy(self, environment)
+        try:
+            await self.exec_as_agent(
+                environment,
+                command=(
+                    f"cd {INSTALL_ROOT} && {RUNNER_PYTHON} -m context_cup_runner.loop "
+                    f"2>&1 </dev/null | tee {AGENT_DIR}/runner.txt"
+                ),
+                env=env,
+                timeout_sec=None,
+            )
+        finally:
+            await stop_proxy(self, environment)
 
     def populate_context_post_run(self, context: AgentContext) -> None:
-        # Token counts and cost come from the proxy log on the host; harbor's
-        # own record keeps only what the loop summarised.
+        # Token counts and cost come from the trial's calls.jsonl, read by the
+        # suite; harbor's own record keeps only what the loop summarised.
         summary = _read_json(self.logs_dir / "summary.json")
         if isinstance(summary, dict):
             context.metadata = {

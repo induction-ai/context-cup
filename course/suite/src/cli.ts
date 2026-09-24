@@ -10,7 +10,7 @@ import {
   withTransaction,
 } from "@context-cup/db/connection.js";
 import { suite as suiteTable } from "@context-cup/db/schema.js";
-import { startProxy, type RunningProxy } from "@context-cup/proxy/server.js";
+import { buildProxyBundle } from "@context-cup/proxy/bundle.js";
 import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import { eq } from "drizzle-orm";
 import pino from "pino";
@@ -25,15 +25,24 @@ import {
   assertTaskRunnable,
   buildHarborCommand,
   harborProvisioned,
+  needsNotionAuth,
   prepareHarbor,
   prepareJobDir,
   targetJson,
+  toolathlonTasksDir,
   type HarborEnv,
 } from "./harbor.ts";
 import { newId } from "./ids.ts";
-import { ingestJob, insertJob, markJobStarted, parseJob } from "./ingest.ts";
+import {
+  ingestJob,
+  insertJob,
+  markJobStarted,
+  parseJob,
+  type ParsedTrial,
+} from "./ingest.ts";
 import { listSuiteKeys, loadSuiteFile } from "./keys.ts";
 import { resolveLaunch, type Asker, type Choice } from "./launch.ts";
+import { prepareMcpAuthForDaytona } from "./mcp_auth.ts";
 import { workspacePackages } from "./packages.ts";
 import {
   resultsHeader,
@@ -43,7 +52,19 @@ import {
   writeResults,
   type CellResult,
 } from "./results.ts";
-import { dockerJobCap, processQueue, type QueueEntry } from "./scheduler.ts";
+import {
+  RETRY_ERRORS_MAX_FAILURE_RATE,
+  shortfallRuns,
+  shouldRetryErrors,
+  totalCount,
+} from "./retry.ts";
+import {
+  dockerJobCap,
+  processQueue,
+  type QueueEntry,
+  type SchedulerOptions,
+} from "./scheduler.ts";
+import { scoredTrials } from "./scoring.ts";
 import { describeTarget, loadTargets } from "./targets.ts";
 
 /** Where the results site is served; bin/suite prints a link into it. */
@@ -171,6 +192,12 @@ async function main(): Promise<void> {
       default: "docker" as HarborEnv,
       describe: "Where harbor runs the task environment",
     })
+    .option("retry_errors", {
+      type: "number",
+      default: 0,
+      describe:
+        "After the suite finishes, rerun the trials that did not finish, up to this many more passes. Skipped when more than half the trials failed. Every attempt is kept",
+    })
     .option("log_dir", {
       type: "string",
       describe:
@@ -197,6 +224,10 @@ async function main(): Promise<void> {
   if (!Number.isInteger(count) || count < 1) {
     throw new Error("--count must be a positive integer");
   }
+  const retry_errors = argv.retry_errors;
+  if (!Number.isInteger(retry_errors) || retry_errors < 0) {
+    throw new Error("--retry_errors must be a whole number, 0 or more");
+  }
   const launch = await resolveLaunch({
     driver: argv.driver,
     target: argv.target,
@@ -216,30 +247,12 @@ async function main(): Promise<void> {
   );
   const docker_jobs = harbor_env === "docker" ? dockerJobCap() : 0;
 
-  // One proxy per run: every model call from every trial goes through it,
-  // it holds the provider keys, and it writes the call log ingest reads.
-  const proxy_host = process.env.CC_PROXY_HOST || "host.docker.internal";
-  const calls_file = path.join(suite_dir, "calls.jsonl");
-  let proxy: RunningProxy | undefined;
-  if (!argv.dry_run) {
-    mkdirSync(suite_dir, { recursive: true });
-    proxy = await startProxy({
-      port: 0,
-      callsFile: calls_file,
-      defaultModel: {
-        provider: spec.target.provider,
-        model: spec.target.model,
-      },
-      bodiesDir:
-        process.env.CC_SAVE_BODIES === "1"
-          ? path.join(suite_dir, "bodies")
-          : undefined,
-    });
-  }
-  const proxy_url = `http://${proxy_host}:${proxy ? proxy.port : "<port>"}`;
+  // The proxy runs inside every trial container (the runner uploads this
+  // bundle), holds the keys there, and writes the trial's own calls.jsonl.
+  const proxy_bundle = argv.dry_run ? undefined : await buildProxyBundle();
 
   const warnings: string[] = [];
-  const entries: QueueEntry[] = runs.map((run) => {
+  const makeEntry = (run: SuiteRun): QueueEntry => {
     try {
       assertTaskRunnable(run);
     } catch (err) {
@@ -253,8 +266,8 @@ async function main(): Promise<void> {
       job_id,
       suite_dir,
       harbor_env,
-      proxy_url,
       concurrency,
+      proxy_bundle,
     });
     return {
       job_id,
@@ -264,7 +277,8 @@ async function main(): Promise<void> {
       uses_docker: harbor_env === "docker",
       command,
     };
-  });
+  };
+  const entries = runs.map(makeEntry);
 
   const missing = new Set(entries.flatMap((e) => e.command.missing_keys));
   if (missing.size > 0) {
@@ -327,17 +341,7 @@ async function main(): Promise<void> {
         logDir: suite_dir,
         startedAt: started_at,
       });
-    for (const e of entries) {
-      await insertJob({
-        job_id: e.job_id,
-        suite_id,
-        run: e.run,
-        target: targetJson(e.run),
-        concurrency: e.concurrency_use,
-        command: e.command.shell,
-        jobs_dir: e.command.jobs_dir,
-      });
-    }
+    await insertJobs(entries, 0);
   });
   logger.info({
     event: "suite_start",
@@ -358,13 +362,13 @@ async function main(): Promise<void> {
   const stop = () => {
     report("stopping: waiting for running jobs to be killed");
     controller.abort();
-    void proxy?.close();
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
 
-  const cells: CellResult[] = [];
-  const results = await processQueue(entries, {
+  // Every job's trials by task: a retry pass adds a job to the same task.
+  const trialsByTask = new Map<string, ParsedTrial[]>();
+  const queueOptions: SchedulerOptions = {
     suite_concurrency: file.concurrency,
     docker_jobs,
     log_dir: suite_dir,
@@ -372,6 +376,11 @@ async function main(): Promise<void> {
     signal: controller.signal,
     report,
     on_started: async (entry) => {
+      // Daytona cannot mount secrets/mcp, so a notion task gets a fresh
+      // token baked into its image's configs instead.
+      if (harbor_env === "daytona" && needsNotionAuth(entry.run)) {
+        await prepareMcpAuthForDaytona(toolathlonTasksDir(), report);
+      }
       prepareJobDir(entry.command);
       logger.info({ event: "job_start", job_id: entry.job_id });
       await markJobStarted(entry.job_id, new Date());
@@ -382,11 +391,7 @@ async function main(): Promise<void> {
       let trials: ReturnType<typeof parseJob> = [];
       let parse_error: string | undefined;
       try {
-        trials = parseJob(
-          entry.command.jobs_dir,
-          entry.command.job_name,
-          calls_file
-        );
+        trials = parseJob(entry.command.jobs_dir, entry.command.job_name);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         parse_error = message;
@@ -410,8 +415,11 @@ async function main(): Promise<void> {
         trials,
       });
       await ingestJob(suite_id, entry.job_id, result, trials);
+      trialsByTask.set(entry.run.task_name, [
+        ...(trialsByTask.get(entry.run.task_name) ?? []),
+        ...trials,
+      ]);
       const cell = summarizeCell(entry.run, trials);
-      cells.push(cell);
       if (parse_error) {
         // The row now says failed; the scheduler must too (console, exit
         // code, results.json), so the failure keeps bubbling.
@@ -429,15 +437,45 @@ async function main(): Promise<void> {
             : "")
       );
     },
-  });
+  };
+  const results = await processQueue(entries, queueOptions);
 
-  await proxy?.close();
+  const expected_trials = totalCount(runs);
+  const doneByTask = () =>
+    new Map(
+      [...trialsByTask].map(([task, trials]) => [
+        task,
+        scoredTrials(trials).length,
+      ])
+    );
+  for (let pass = 1; pass <= retry_errors; pass++) {
+    if (controller.signal.aborted) break;
+    const owed = shortfallRuns(runs, doneByTask());
+    const shortfall = totalCount(owed);
+    if (shortfall === 0) break;
+    if (!shouldRetryErrors(shortfall, expected_trials)) {
+      report(
+        `\nretry_errors: ${shortfall} of ${expected_trials} trial(s) did not finish, over ${RETRY_ERRORS_MAX_FAILURE_RATE * 100}%; not retrying`
+      );
+      break;
+    }
+    report(
+      `\nretry_errors: pass ${pass}/${retry_errors}, retrying ${shortfall} of ${expected_trials} trial(s) that did not finish`
+    );
+    const retries = interleave(owed).map(makeEntry);
+    await withTransaction(() => insertJobs(retries, pass));
+    results.push(...(await processQueue(retries, queueOptions)));
+  }
+  const unfinished = totalCount(shortfallRuns(runs, doneByTask()));
+
   const finished_at = new Date();
   await getRawDatabase()
     .update(suiteTable)
     .set({ finishedAt: finished_at })
     .where(eq(suiteTable.id, suite_id));
-  cells.sort((a, b) => a.task_name.localeCompare(b.task_name));
+  const cells: CellResult[] = runs
+    .map((run) => summarizeCell(run, trialsByTask.get(run.task_name) ?? []))
+    .sort((a, b) => a.task_name.localeCompare(b.task_name));
   const results_out = {
     suite_id,
     suite_name: suite_key,
@@ -449,6 +487,8 @@ async function main(): Promise<void> {
     finished_at: finished_at.toISOString(),
     git_sha: gitSha(),
     harbor_env,
+    retry_errors,
+    expected_trials,
     jobs: results.map((r) => ({ job_id: r.job_id, ok: r.ok, error: r.error })),
     cells,
     ...suiteTotals(cells),
@@ -465,15 +505,41 @@ async function main(): Promise<void> {
     console.log(
       `${failed} of ${results.length} job(s) failed; see ${path.relative(process.cwd(), suite_dir)}/<job_id>.log`
     );
-    process.exitCode = 1;
   }
-  // A trial error is unscored work: the run did not measure what it meant to.
   const errored = cells.reduce((n, c) => n + c.errors, 0);
   if (errored > 0) {
     console.log(
       `${errored} trial(s) errored; see ${suiteUrl(suite_id)} for each error`
     );
+  }
+  // A trial that never finished is unscored work: the run did not measure
+  // what it meant to. One a retry made up is not.
+  if (unfinished > 0) {
+    console.log(
+      `${unfinished} of ${expected_trials} trial(s) did not finish` +
+        (retry_errors > 0 ? ` after ${retry_errors} retry pass(es)` : "")
+    );
     process.exitCode = 1;
+  } else if (failed > 0 && retry_errors === 0) {
+    process.exitCode = 1;
+  }
+
+  async function insertJobs(
+    jobs: readonly QueueEntry[],
+    pass: number
+  ): Promise<void> {
+    for (const e of jobs) {
+      await insertJob({
+        job_id: e.job_id,
+        suite_id,
+        run: e.run,
+        target: targetJson(e.run),
+        concurrency: e.concurrency_use,
+        command: e.command.shell,
+        jobs_dir: e.command.jobs_dir,
+        pass,
+      });
+    }
   }
 }
 

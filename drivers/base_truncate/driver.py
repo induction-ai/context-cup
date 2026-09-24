@@ -27,7 +27,7 @@ def clip(text: str, max_bytes: int) -> str:
 
 def call(ctx: PythonContext) -> Any:
     """Send `context_payload` to the run's provider. Each SDK already points at
-    the run's proxy (base URL and placeholder key set by the runner), so none
+    the trial's proxy (base URL and placeholder key set by the runner), so none
     needs configuring; the proxy adds the real key and records the call."""
     payload = ctx.context_payload
     if ctx.provider.name == "openai":

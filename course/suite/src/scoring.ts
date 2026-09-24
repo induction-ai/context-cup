@@ -1,11 +1,14 @@
 /** The score of a run, defined once.
  *
- *  A trial has a reward from the verifier, or an error. A job's score is the
- *  mean reward over its done trials (a reward and no error); its cost is the
+ *  A trial has a reward from the verifier, or an error. A task's score is the
+ *  mean reward over its done trials (a reward and no error), across all its
+ *  jobs (a `--retry_errors` pass adds a job to the same task); its cost is the
  *  mean over the done trials that were priced. Errored, timed-out, and
- *  unfinished trials are left out, never counted as zero. A suite's score is the mean of its
- *  jobs' scores, job-weighted, and its cost the mean of its jobs' costs.
- *  Nothing here is stored: it is computed wherever it is shown. */
+ *  unfinished trials are left out, never counted as zero. A suite's score is
+ *  the mean of its tasks' scores, task-weighted, and its cost the mean of
+ *  their costs. Nothing here is stored: it is computed wherever it is shown.
+ *  (`jobScore` and `jobMeanCost` take any set of trials: one job's or one
+ *  task's.) */
 
 export type ScoredTrial = {
   reward: number | null;

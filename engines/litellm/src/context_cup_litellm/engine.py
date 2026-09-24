@@ -218,7 +218,7 @@ class LLM:
 @dataclass
 class LitellmContext:
     """What a litellm driver's `run(ctx)` receives: the conversation as
-    litellm chat messages and `llm`, a litellm handle on the run's proxy. It
+    litellm chat messages and `llm`, a litellm handle on the trial's proxy. It
     returns the response of the `llm.completion(...)` call that is its turn.
 
     - `context_messages`: the working copy; persists (see below).

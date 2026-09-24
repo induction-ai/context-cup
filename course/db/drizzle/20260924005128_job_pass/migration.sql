@@ -1,0 +1,1 @@
+ALTER TABLE "job" ADD COLUMN "pass" integer DEFAULT 0 NOT NULL;

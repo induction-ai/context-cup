@@ -9,6 +9,7 @@
     "./*": "./src/*"
   },
   "scripts": {
+    "build": "tsx src/bundle.ts",
     "test": "../../bin/test --project proxy",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write src tests --log-level warn",
@@ -16,15 +17,14 @@
   },
   "dependencies": {
     "@context-cup/shared": "workspace:*",
+    "esbuild": "catalog:",
     "express": "catalog:",
-    "yargs": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "catalog:",
     "@types/express": "catalog:",
     "@types/node": "catalog:",
-    "@types/yargs": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
