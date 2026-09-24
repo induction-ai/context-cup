@@ -5,7 +5,6 @@ import {
 } from "@context-cup/shared/test_helpers/index.js";
 import {
   dockerJobCap,
-  jobTimeoutMs,
   processQueue,
   type Launched,
   type QueueEntry,
@@ -185,15 +184,14 @@ describe("processQueue", () => {
   });
 
   it("derives caps and timeouts", async () => {
-    expect(dockerJobCap("arm64", {})).toBe(2);
-    expect(dockerJobCap("x64", {})).toBe(4);
-    expect(dockerJobCap("x64", { SUITE_DOCKER_COUNT: "6" })).toBe(6);
-    expect(jobTimeoutMs(sampleRun({ count: 4, timeout_minutes: 40 }), 2)).toBe(
-      70 * 2 * 60_000
-    );
-    expect(jobTimeoutMs(sampleRun({ count: 1, timeout_minutes: 10 }), 1)).toBe(
-      40 * 60_000
-    );
+    expect(dockerJobCap("arm64", {}, 12)).toBe(2);
+    expect(dockerJobCap("x64", {}, 16)).toBe(4);
+    // Clamped to the host's CPUs, never below one.
+    expect(dockerJobCap("x64", {}, 2)).toBe(2);
+    expect(dockerJobCap("x64", {}, 0)).toBe(1);
+    // A positive integer override wins; anything else is ignored.
+    expect(dockerJobCap("x64", { SUITE_DOCKER_COUNT: "6" }, 2)).toBe(6);
+    expect(dockerJobCap("x64", { SUITE_DOCKER_COUNT: "2.5" }, 16)).toBe(4);
   });
 });
 

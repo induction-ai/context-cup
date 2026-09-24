@@ -11,7 +11,6 @@ import httpx2
 import pytest
 from context_cup_protocol import Dirs, ProviderClient, ProviderInfo, Target, TurnInput
 from context_cup_pydantic import HISTORY, PydanticContext, finish
-from context_cup_pydantic.engine import SEEN
 from pydantic_ai import Agent
 from pydantic_ai_harness.compaction import ClearToolResults
 
@@ -84,6 +83,7 @@ def ctx_for(
     *,
     first: bool = True,
     state: Any = None,
+    index: int = 1,
 ) -> PydanticContext:
     def handler(request: httpx2.Request) -> httpx2.Response:
         sent.append((str(request.url), json.loads(request.content)))
@@ -99,7 +99,7 @@ def ctx_for(
     turn = TurnInput(
         trial_id="t",
         turn_id="001_aaaaaa",
-        turn_index=1,
+        turn_index=index,
         first=first,
         provider=ProviderInfo(
             name="openai",
@@ -132,8 +132,7 @@ def test_capabilities_get_the_target_through_the_proxy_and_the_raw_response(
     assert request["instructions"] == "Be a bank agent."
     assert [t["name"] for t in request["tools"]] == ["get_balance"]
     assert "Hi! How can I help?" in json.dumps(request["input"])
-    assert (tmp_path / HISTORY).exists()
-    assert json.loads((tmp_path / SEEN).read_text()) == {"seen": 2}
+    assert json.loads((tmp_path / HISTORY / "1.json").read_text())["seen"] == 2
     assert ctx.state is None, "state stays the driver's"
 
     # Next turn: the tool result goes back as a deferred result.
@@ -145,7 +144,9 @@ def test_capabilities_get_the_target_through_the_proxy_and_the_raw_response(
     ]
     second = body([done("You have 12 USD.")], "resp_2")
     sent2: list[tuple[str, dict[str, Any]]] = []
-    ctx = ctx_for(tmp_path, items, [second], sent2, first=False, state=ctx.state)
+    ctx = ctx_for(
+        tmp_path, items, [second], sent2, first=False, state=ctx.state, index=2
+    )
     assert finish(ctx, []) == second
     outputs = [
         i for i in sent2[0][1]["input"] if i.get("type") == "function_call_output"
@@ -196,13 +197,13 @@ def test_capabilities_are_applied(tmp_path: Path) -> None:
         call("c1"),
         {"type": "function_call_output", "call_id": "c1", "output": "first " * 50},
     ]
-    ctx = ctx_for(tmp_path, items, replies, sent, first=False, state=ctx.state)
+    ctx = ctx_for(tmp_path, items, replies, sent, first=False, state=ctx.state, index=2)
     finish(ctx, strategy)
     items += [
         call("c2"),
         {"type": "function_call_output", "call_id": "c2", "output": "second"},
     ]
-    ctx = ctx_for(tmp_path, items, replies, sent, first=False, state=ctx.state)
+    ctx = ctx_for(tmp_path, items, replies, sent, first=False, state=ctx.state, index=3)
     finish(ctx, strategy)
     last = json.dumps(sent[-1][1]["input"])
     assert (

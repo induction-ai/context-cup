@@ -9,14 +9,21 @@ move."""
 from __future__ import annotations
 
 import copy
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, cast
 
 import httpx2
-from context_cup_protocol import Dirs, Payload, ProviderInfo, Target, TurnInput, view
+from context_cup_protocol import (
+    Dirs,
+    Payload,
+    ProviderInfo,
+    Target,
+    TurnInput,
+    load_snapshot,
+    save_snapshot,
+    view,
+)
 from openai.types.shared import ReasoningEffort
 from pydantic_ai import (
     Agent,
@@ -38,10 +45,10 @@ from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.tools import ToolDefinition
 
-HISTORY = "pydantic_history.json"
-SEEN = "pydantic_seen.json"
-"""How many conversation messages the history accounts for. The engine's own
-bookkeeping lives in these files so `ctx.state` stays the driver's."""
+HISTORY = "pydantic_history"
+"""The agent's history and how many conversation messages it accounts for,
+saved per accepted turn (see `context_cup_protocol.snapshot`). The engine's
+own bookkeeping lives there so `ctx.state` stays the driver's."""
 
 
 @dataclass
@@ -54,7 +61,7 @@ class PydanticContext:
       `contextCup.config`), and `turn`, the whole `input.json`: read only.
     - `context_payload`, `original_payload`: the course's native request
       bodies, informational only. The agent's real context is its own
-      history, kept in `dirs.state/pydantic_history.json`.
+      history, kept in `dirs.state/pydantic_history/`.
     - `state`: the engine's; `finish` overwrites it every turn, so a driver
       keeps its own memory in files under `dirs.state`.
     - `http_client`: the connection the engine gives the model.
@@ -112,13 +119,14 @@ def finish(ctx: PydanticContext, result: Any) -> Payload:
         )
 
     conversation = view(ctx.provider.name, ctx.context_payload)
-    history_file = Path(ctx.dirs.state) / HISTORY
-    seen_file = Path(ctx.dirs.state) / SEEN
-    seen = 0 if ctx.first else int(json.loads(seen_file.read_text())["seen"])
+    kept = load_snapshot(ctx.turn, HISTORY)
+    if kept is None and not ctx.first:
+        raise RuntimeError("no agent history from the last accepted turn")
+    seen = 0 if kept is None else int(kept["seen"])
     history: list[ModelMessage] = (
         []
-        if ctx.first
-        else list(ModelMessagesTypeAdapter.validate_json(history_file.read_bytes()))
+        if kept is None
+        else list(ModelMessagesTypeAdapter.validate_python(kept["history"]))
     )
     prompts: list[str] = []
     results: dict[str, Any] = {}
@@ -183,6 +191,15 @@ def finish(ctx: PydanticContext, result: Any) -> Payload:
     )
     if not responses:
         raise RuntimeError("the agent made no successful Responses call this turn")
-    history_file.write_bytes(ModelMessagesTypeAdapter.dump_json(run.all_messages()))
-    seen_file.write_text(json.dumps({"seen": len(conversation.messages)}))
+    # Read by the next turn only if the runner accepts this one.
+    save_snapshot(
+        ctx.turn,
+        HISTORY,
+        {
+            "seen": len(conversation.messages),
+            "history": ModelMessagesTypeAdapter.dump_python(
+                run.all_messages(), mode="json"
+            ),
+        },
+    )
     return responses[-1]

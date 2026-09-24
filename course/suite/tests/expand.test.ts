@@ -19,8 +19,29 @@ describe("expandSuite", () => {
       target: { provider: "openai", model: "gpt-5.5" },
       count: 2,
       runner: "tau3",
-      timeout_minutes: 40,
+      timeout_minutes: null,
     });
+  });
+
+  it("takes the largest timeout set at any level, or none", async () => {
+    const file = sampleSuite();
+    const withTimeouts = {
+      ...file,
+      timeout_minutes: 40,
+      tasks: {
+        ...file.tasks,
+        banking_001: { ...file.tasks.banking_001!, timeout_minutes: 90 },
+        sales_accounting: {
+          ...file.tasks.sales_accounting!,
+          timeout_minutes: 10,
+        },
+      },
+    };
+    const runs = expandSuite(withTimeouts, sampleSpec());
+    expect(runs.map((r) => [r.task_name, r.timeout_minutes])).toEqual([
+      ["banking_001", 90],
+      ["sales_accounting", 40],
+    ]);
   });
 
   it("naming tasks selects only those and lifts explicit_only", async () => {

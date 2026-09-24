@@ -21,16 +21,16 @@ import { samplePackages } from "./helpers.ts";
 describe("resolveChain", () => {
   it("walks a two-level chain root to leaf", async () => {
     const chain = resolveChain(
-      "@context-cup-drivers/base_truncate",
+      "@context-cup-drivers/base_python",
       samplePackages()
     );
     expect(chain.map((p) => p.name)).toEqual([
       "@context-cup/engine-python",
-      "@context-cup-drivers/base_truncate",
+      "@context-cup-drivers/base_python",
     ]);
-    expect(driverChainDirs("base_truncate", samplePackages())).toEqual([
+    expect(driverChainDirs("base_python", samplePackages())).toEqual([
       "/ws/engines/python",
-      "/ws/drivers/base_truncate",
+      "/ws/drivers/base_python",
     ]);
   });
 
@@ -104,10 +104,10 @@ describe("findDriver", () => {
       "/ws/drivers/base_passthrough"
     );
     expect(() => findDriver("engine-python", samplePackages())).toThrow(
-      'Unknown driver "engine-python". Drivers in the workspace: base_passthrough, base_truncate'
+      'Unknown driver "engine-python". Drivers in the workspace: base_passthrough, base_python'
     );
-    expect(driverShortName("@context-cup-drivers/base_truncate")).toBe(
-      "base_truncate"
+    expect(driverShortName("@context-cup-drivers/base_python")).toBe(
+      "base_python"
     );
   });
 

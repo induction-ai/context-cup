@@ -182,3 +182,6 @@ CLAUDE.local.md
 .temp
 # Worktrees
 .worktrees/
+
+# TypeScript drivers, bundled on the host by their engine's build.sh
+drivers/*/bundle/

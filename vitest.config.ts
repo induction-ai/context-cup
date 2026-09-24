@@ -65,6 +65,33 @@ export default defineConfig({
       },
       {
         test: {
+          name: "protocol",
+          root: "course/protocol",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["node_modules"],
+        },
+      },
+      {
+        test: {
+          name: "engine-typescript",
+          root: "engines/typescript",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["node_modules"],
+        },
+      },
+      {
+        test: {
+          name: "engine-aisdk",
+          root: "engines/aisdk",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["node_modules"],
+        },
+      },
+      {
+        test: {
           name: "suite",
           root: "course/suite",
           environment: "node",

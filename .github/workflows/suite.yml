@@ -1,7 +1,7 @@
 name: Suite
 run-name: >-
   Suite ${{ inputs.suite }} driver=${{ inputs.driver }} target=${{
-  inputs.target }}${{ inputs.count > 1 && format(' count={0}', inputs.count) ||
+  inputs.target }}${{ inputs.count && format(' count={0}', inputs.count) ||
   '' }}${{ inputs.task && format(' task={0}', inputs.task) || '' }}
 
 # One bin/suite run: one suite file, one driver, one target. Results go to the
@@ -31,11 +31,13 @@ on:
         default: "<choose a driver>"
         options:
           - "<choose a driver>"
+          - base_aisdk
           - base_codex
           - base_litellm
           - base_passthrough
           - base_pydantic
-          - base_truncate
+          - base_python
+          - base_typescript
       target:
         description: "Target model (targets.json); the driver must support its provider"
         required: true
@@ -47,10 +49,10 @@ on:
           - gpt-5.5@low
           - gpt-5.5@medium
       count:
-        description: "Trials per task"
+        description: "Optional: trials per task. Blank = the suite file’s count (else 1)."
         required: false
-        type: number
-        default: 1
+        type: string
+        default: ""
       task:
         description: "Optional: only these tasks (space-separated). Blank = all in the suite."
         required: false
@@ -182,7 +184,8 @@ jobs:
           HARBOR_ENV: ${{ inputs.harbor_env || 'daytona' }}
           RETRY_ERRORS: ${{ inputs.retry_errors }}
         run: |
-          args=("$SUITE" --driver "$DRIVER" --target "$TARGET" --count "${COUNT:-1}" --harbor_env "$HARBOR_ENV" --log_dir ".temp/suites")
+          args=("$SUITE" --driver "$DRIVER" --target "$TARGET" --harbor_env "$HARBOR_ENV" --log_dir ".temp/suites")
+          [ -n "$COUNT" ] && args+=(--count "$COUNT")
           # Unquoted expansion is intentional: each blank-free token becomes a
           # separate value for the repeatable --task flag.
           [ -n "$TASK" ] && args+=(--task $TASK)

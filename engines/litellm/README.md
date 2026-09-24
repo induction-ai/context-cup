@@ -31,7 +31,7 @@ chat-completions shape, typed as litellm's own `AllMessageValues`, the type
 | `ctx.provider`                                | `ProviderInfo`           | `name="anthropic"`, `api_key="cc-proxy"`, `client.base_url="…/t/<trial>/anthropic/v1"`                                                                | fixed for the trial                                                                                                                                                   |
 | `ctx.target`                                  | `Target`                 | `model="claude-sonnet-4-6"`, `reasoning_effort=None`                                                                                                  | fixed for the trial                                                                                                                                                   |
 | `ctx.config`                                  | `dict`                   | `{"max_tokens": 60000}`                                                                                                                               | your `package.json` `contextCup.config`                                                                                                                               |
-| `ctx.dirs`                                    | `Dirs`                   | `turn="/logs/agent/turns/003_k3v9xq"`, `state="/logs/agent/driver_state"`                                                                             | files in `state` survive the trial; the engine keeps its own `litellm_context.json` there                                                                             |
+| `ctx.dirs`                                    | `Dirs`                   | `turn="/logs/agent/turns/003_k3v9xq"`, `state="/logs/agent/driver_state"`                                                                             | files in `state` survive the trial; the engine keeps its own `litellm_context/` there, one file per accepted turn                                                     |
 | `ctx.context_payload`, `ctx.original_payload` | `dict`                   | the course's native request bodies                                                                                                                    | informational; the messages above are built from them                                                                                                                 |
 | `ctx.turn`                                    | `TurnInput`              | the whole `input.json`                                                                                                                                | read only                                                                                                                                                             |
 
@@ -61,7 +61,10 @@ The connection on every call: the litellm route for the model (OpenAI over
 the Responses API, the wire the course speaks), the proxy base URL for the
 call's provider, the placeholder key, `store: false` on OpenAI, and the
 `x-cc-purpose` header. It captures each call's raw body, persists
-`ctx.context_messages`, and folds each turn's new input into it. Gemini's
+`ctx.context_messages`, and folds each turn's new input into it. Only a turn
+the runner accepts carries forward: when an attempt is thrown away (an empty
+reply, a failed turn), its retry starts from the last accepted turn's list,
+as `ctx.state` does. Gemini's
 thought signatures are carried on their function calls, where litellm reads
 them back (without them Gemini 3 loses its reasoning between turns).
 

@@ -10,6 +10,10 @@ Settings:
   CC_TAU3_MAX_ERRORS       runtime error budget, default 10
   CC_MAX_STEPS             also handed to the runtime's configure_run
   CC_TOOL_TIMEOUT_SEC      per MCP call, default 120
+  CC_MAX_TOOL_OUTPUT_CHARS longer tool results are cut, default 100000 (0: never)
+
+A cut result's full text is saved under the agent dir's clipped_tool_outputs,
+where a driver can read it back; tau3 offers the model no tools for it.
 """
 
 from __future__ import annotations
@@ -27,7 +31,53 @@ from ..environment import EnvironmentStart, StepResult, ToolResult
 from ..mcp_util import mcp_tool_to_function_tool, result_text
 
 FIRST_AGENT_MESSAGE = "Hi! How can I help you today?"
+DEFAULT_MAX_TOOL_OUTPUT_CHARS = 100_000
+CLIPPED_DIR_NAME = "clipped_tool_outputs"
 USER_STOP_TOKENS = ("###STOP###", "###TRANSFER###", "###OUT-OF-SCOPE###")
+
+ORCHESTRATION_TOOL_NAMES = frozenset(
+    {
+        "configure_run",
+        "get_runtime_status",
+        "get_assistant_tool_schemas",
+        "start_conversation",
+        "submit_assistant_message",
+        "submit_assistant_tool_calls",
+        "send_message_to_user",
+        "end_conversation",
+        "record_termination",
+    }
+)
+"""The runtime's own controls, listed beside the domain tools; never offered
+to the model."""
+
+TAU2_TERMINATION_REASONS = frozenset(
+    {
+        "user_stop",
+        "agent_stop",
+        "max_steps",
+        "too_many_errors",
+        "agent_error",
+        "user_error",
+    }
+)
+"""What the runtime's record_termination accepts (tau2's TerminationReason).
+Any other way the trial ended (a runner or environment failure) is recorded
+as `agent_error`."""
+
+
+def tau2_termination_reason(stop_reason: str) -> str:
+    return stop_reason if stop_reason in TAU2_TERMINATION_REASONS else "agent_error"
+
+
+def assistant_tool_schemas(listed: list[Any]) -> list[dict[str, Any]]:
+    """The MCP listing as function schemas, the runtime's controls left out."""
+    return [
+        mcp_tool_to_function_tool(tool)
+        for tool in listed
+        if getattr(tool, "name", None) not in ORCHESTRATION_TOOL_NAMES
+    ]
+
 
 AGENT_INSTRUCTION = """\
 You are a customer service agent that helps the user according to the <policy> provided below.
@@ -65,6 +115,7 @@ def is_user_stop(text: str) -> bool:
 
 class Tau3Environment:
     name = "tau3"
+    fail_at_max_steps = False
 
     def __init__(
         self,
@@ -75,8 +126,12 @@ class Tau3Environment:
         max_steps: int,
         max_errors: int = 10,
         tool_timeout_sec: float = 120.0,
+        agent_dir: Path | None = None,
+        max_tool_output_chars: int = DEFAULT_MAX_TOOL_OUTPUT_CHARS,
     ):
         self.mcp_url = mcp_url
+        self.agent_dir = agent_dir
+        self.max_tool_output_chars = max_tool_output_chars
         self.instruction = instruction
         self.seed = seed
         self.max_steps = max_steps
@@ -89,7 +144,9 @@ class Tau3Environment:
         self.terminated: str | None = None
 
     @classmethod
-    def from_env(cls, env: dict[str, str]) -> Tau3Environment:
+    def from_env(
+        cls, env: dict[str, str], *, agent_dir: Path | None = None
+    ) -> Tau3Environment:
         seed_raw = env.get("CC_TAU3_SEED")
         return cls(
             mcp_url=env["CC_TAU3_MCP_URL"],
@@ -98,6 +155,31 @@ class Tau3Environment:
             max_steps=int(env.get("CC_MAX_STEPS") or 200),
             max_errors=int(env.get("CC_TAU3_MAX_ERRORS") or 10),
             tool_timeout_sec=float(env.get("CC_TOOL_TIMEOUT_SEC") or 120.0),
+            agent_dir=agent_dir,
+            max_tool_output_chars=int(
+                env.get("CC_MAX_TOOL_OUTPUT_CHARS") or DEFAULT_MAX_TOOL_OUTPUT_CHARS
+            ),
+        )
+
+    def _clip(self, text: str, tool_call_id: str) -> str:
+        """A result over the cap, cut with a note; the whole of it is saved
+        for the record when there is an agent dir."""
+        limit = self.max_tool_output_chars
+        if limit <= 0 or len(text) <= limit:
+            return text
+        where = ""
+        if self.agent_dir is not None:
+            save_dir = self.agent_dir / CLIPPED_DIR_NAME
+            save_dir.mkdir(parents=True, exist_ok=True)
+            safe_id = "".join(
+                ch if ch.isalnum() or ch in "-_" else "_" for ch in tool_call_id
+            )
+            path = save_dir / f"{safe_id}.txt"
+            path.write_text(text, encoding="utf-8")
+            where = f" The full output was saved to {path}."
+        return text[:limit] + (
+            f"\n\n[Tool output clipped: showing the first {limit} of {len(text)} "
+            f"characters.{where}]"
         )
 
     # -- MCP plumbing ------------------------------------------------------
@@ -180,11 +262,21 @@ class Tau3Environment:
     async def _assistant_tools(self, listed: list[Any]) -> list[dict[str, Any]]:
         try:
             schemas = await self._call_json("get_assistant_tool_schemas")
-            if isinstance(schemas, list) and schemas:
-                return schemas
         except Exception as exc:  # noqa: BLE001 - fall back to the listing
             print(f"[runner] get_assistant_tool_schemas unavailable: {exc}", flush=True)
-        return [mcp_tool_to_function_tool(tool) for tool in listed]
+            return assistant_tool_schemas(listed)
+        if not isinstance(schemas, list):
+            raise TypeError("get_assistant_tool_schemas must return a JSON list")
+        if not schemas:
+            # A runtime that has not set its domain up yet answers []; a trial
+            # without tools would score 0 without any error.
+            print(
+                "[runner] get_assistant_tool_schemas returned no tools; "
+                "using the MCP listing",
+                flush=True,
+            )
+            return assistant_tool_schemas(listed)
+        return schemas
 
     async def on_tool_calls(
         self, tool_calls: list[ToolCallRef], text: str | None
@@ -203,7 +295,9 @@ class Tau3Environment:
         results = [
             ToolResult(
                 tool_call_id=str(item.get("id", "")),
-                content=str(item.get("content") or ""),
+                content=self._clip(
+                    str(item.get("content") or ""), str(item.get("id", ""))
+                ),
             )
             for item in response.get("tool_results") or []
         ]
@@ -231,7 +325,8 @@ class Tau3Environment:
             if self._session is not None and self.terminated is None:
                 try:
                     status = await self._call_json(
-                        "record_termination", {"reason": stop_reason}
+                        "record_termination",
+                        {"reason": tau2_termination_reason(stop_reason)},
                     )
                     if isinstance(status, dict):
                         self._absorb_status(status)

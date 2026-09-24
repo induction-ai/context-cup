@@ -40,19 +40,19 @@ describe("resolveLaunch", () => {
     await expect(
       resolveLaunch({
         ...base(),
-        driver: "base_truncate",
+        driver: "base_python",
         target: "claude-sonnet-4-6",
         ask: null,
       })
     ).rejects.toThrow(
-      /base_truncate does not support provider anthropic.*supports openai.*gpt-5\.5@medium/
+      /base_python does not support provider anthropic.*supports openai.*gpt-5\.5@medium/
     );
   });
 
   it("rejects unknown drivers and targets with the lists", async () => {
     await expect(
       resolveLaunch({ ...base(), driver: "nope", target: "x", ask: null })
-    ).rejects.toThrow(/Unknown driver "nope".*base_passthrough, base_truncate/);
+    ).rejects.toThrow(/Unknown driver "nope".*base_passthrough, base_python/);
     await expect(
       resolveLaunch({
         ...base(),
@@ -65,12 +65,12 @@ describe("resolveLaunch", () => {
 
   it("without a terminal, a missing flag fails with the choices", async () => {
     await expect(resolveLaunch({ ...base(), ask: null })).rejects.toThrow(
-      /--driver is required.*base_passthrough, base_truncate/
+      /--driver is required.*base_passthrough, base_python/
     );
     await expect(
-      resolveLaunch({ ...base(), driver: "base_truncate", ask: null })
+      resolveLaunch({ ...base(), driver: "base_python", ask: null })
     ).rejects.toThrow(
-      /--target is required.*base_truncate can run: gpt-5\.5@medium/
+      /--target is required.*base_python can run: gpt-5\.5@medium/
     );
   });
 
@@ -80,11 +80,11 @@ describe("resolveLaunch", () => {
     expect(shown).toEqual([
       {
         question: "Driver",
-        names: ["base_codex", "base_passthrough", "base_truncate"],
+        names: ["base_codex", "base_passthrough", "base_python"],
       },
       { question: "Target model", names: ["gpt-5.5@medium"] },
     ]);
-    expect(launch.driver_name).toBe("base_truncate");
+    expect(launch.driver_name).toBe("base_python");
     expect(launch.target_name).toBe("gpt-5.5@medium");
   });
 
@@ -110,11 +110,11 @@ describe("resolveLaunch", () => {
       resolveLaunch({
         targets,
         packages: samplePackages(),
-        driver: "base_truncate",
+        driver: "base_python",
         ask: scripted([]).ask,
       })
     ).rejects.toThrow(
-      /base_truncate supports openai.*no target for those providers/
+      /base_python supports openai.*no target for those providers/
     );
   });
 
@@ -122,7 +122,7 @@ describe("resolveLaunch", () => {
     expect(driverChoices(samplePackages())).toEqual([
       { name: "base_codex", detail: "Codex CLI as a whole agent." },
       { name: "base_passthrough", detail: "" },
-      { name: "base_truncate", detail: "Clips oversized tool results." },
+      { name: "base_python", detail: "Clips oversized tool results." },
     ]);
   });
 });

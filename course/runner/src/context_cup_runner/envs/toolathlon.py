@@ -9,6 +9,12 @@ Settings:
   CC_WORKSPACE_DIR         default /workspace/dumps/workspace
   CC_TOOL_TIMEOUT_SEC      per MCP call, default 270
   CC_MAX_UNANSWERED_CALLS  dead-link threshold, default 3
+  CC_MAX_TOOL_OUTPUT_CHARS longer results are cut, default 100000
+  CC_TRUNCATE_TOOL_OUTPUT  on (default), off, or no_json (cut all but JSON)
+
+A cut result is saved under a short id; the four overlong-output tools
+(overlong.py) let the model search and page through it, and their own
+results are never cut.
 """
 
 from __future__ import annotations
@@ -24,11 +30,14 @@ from context_cup_protocol import ToolCallRef, Utterance
 
 from ..environment import EnvironmentStart, StepResult, ToolResult
 from ..mcp_util import mcp_tool_to_function_tool, result_text
+from ..overlong import OVERLONG_DIR_NAME, OVERLONG_TOOLS, OverlongOutputs, TruncateMode
 
 DEFAULT_GATEWAY = {"name": "gw", "transport": "sse", "url": "http://127.0.0.1:8765/sse"}
 DEFAULT_STOP_TOOLS = ["local-claim_done"]
 DEFAULT_BUNDLE = "/workspace/dumps/task_bundle.json"
 DEFAULT_WORKSPACE = "/workspace/dumps/workspace"
+DEFAULT_MAX_TOOL_OUTPUT_CHARS = 100_000
+TRUNCATE_MODES: tuple[TruncateMode, ...] = ("on", "off", "no_json")
 
 
 def read_bundle(path: Path) -> dict[str, Any]:
@@ -52,12 +61,18 @@ def bundle_stop_tools(bundle: dict[str, Any]) -> list[str]:
 
 
 def _connection_lost(exc: BaseException) -> bool:
+    """Whether the transport is gone and only a rebuild brings it back."""
     nested = getattr(exc, "exceptions", None)
     if nested:
         return any(_connection_lost(inner) for inner in nested)
-    return isinstance(
+    if isinstance(
         exc, (anyio.ClosedResourceError, anyio.BrokenResourceError, anyio.EndOfStream)
-    )
+    ):
+        return True
+    from mcp import McpError
+    from mcp.types import CONNECTION_CLOSED
+
+    return isinstance(exc, McpError) and exc.error.code == CONNECTION_CLOSED
 
 
 class McpRouter:
@@ -109,12 +124,21 @@ class McpRouter:
                 self._owner[routed] = (session, tool.name)
                 self.tools.append(mcp_tool_to_function_tool(tool, name=routed))
 
-    async def reconnect(self) -> None:
+    async def _reset(self) -> None:
         await self.close()
         self._stack = AsyncExitStack()
         self._owner.clear()
         self.tools.clear()
-        await self.connect()
+
+    async def reconnect(self) -> None:
+        """Rebuild every session: a failed transport stays closed for good."""
+        await self._reset()
+        try:
+            await self.connect()
+        except Exception:
+            # Half a rebuild leaves sessions open that nothing routes to.
+            await self._reset()
+            raise
 
     async def close(self) -> None:
         try:
@@ -129,16 +153,22 @@ class McpRouter:
                 f"MCP unusable after {self.unanswered} unanswered calls"
             ) from exc
 
+    def _unanswered(self, exc: BaseException) -> str:
+        self._count_unanswered(exc)
+        return f"MCP tool error:\n{type(exc).__name__}: {exc}"
+
     async def call(self, name: str, arguments: dict[str, Any]) -> str:
-        if name not in self._owner:
+        if not self._owner:
+            # An earlier rebuild failed, so this call has not reached any
+            # server yet; running it once the link is back repeats nothing.
+            try:
+                await self.reconnect()
+            except Exception as exc:  # noqa: BLE001
+                return self._unanswered(exc)
             if not self._owner:
-                try:
-                    await self.reconnect()
-                except Exception as exc:  # noqa: BLE001
-                    self._count_unanswered(exc)
-                    return f"MCP tool error:\n{type(exc).__name__}: {exc}"
-            if name not in self._owner:
-                return f"MCP tool error:\nunknown tool {name!r}"
+                return self._unanswered(RuntimeError("MCP rebuild exposed no tools"))
+        if name not in self._owner:
+            return f"MCP tool error:\nunknown tool {name!r}"
         session, actual = self._owner[name]
         try:
             result = await session.call_tool(
@@ -165,6 +195,9 @@ class McpRouter:
 
 class ToolathlonEnvironment:
     name = "toolathlon"
+    fail_at_max_steps = True
+    """Toolathlon has no cap of its own; running out of steps is a failed
+    trial, as in upstream Toolathlon."""
 
     def __init__(
         self,
@@ -173,10 +206,18 @@ class ToolathlonEnvironment:
         instruction: str,
         bundle: dict[str, Any],
         workspace_dir: str,
+        agent_dir: Path,
         tool_timeout_sec: float = 270.0,
         max_unanswered: int = 3,
+        max_tool_output_chars: int = DEFAULT_MAX_TOOL_OUTPUT_CHARS,
+        truncate: TruncateMode = "on",
     ):
         self.instruction = instruction
+        self.overlong = OverlongOutputs(
+            agent_dir / OVERLONG_DIR_NAME,
+            max_chars=max_tool_output_chars,
+            mode=truncate,
+        )
         self.system_prompt = bundle_system_prompt(bundle)
         self.stop_tools = set(bundle_stop_tools(bundle))
         self.workspace_dir = workspace_dir
@@ -191,13 +232,23 @@ class ToolathlonEnvironment:
         raw = env.get("CC_MCP_SERVERS_JSON")
         servers = json.loads(raw) if raw else []
         bundle_path = Path(env.get("CC_TOOLATHLON_BUNDLE") or DEFAULT_BUNDLE)
+        truncate = env.get("CC_TRUNCATE_TOOL_OUTPUT") or "on"
+        if truncate not in TRUNCATE_MODES:
+            raise ValueError(
+                f"CC_TRUNCATE_TOOL_OUTPUT must be one of {', '.join(TRUNCATE_MODES)}"
+            )
         return cls(
             servers=servers or [dict(DEFAULT_GATEWAY)],
             instruction=Path(env["CC_INSTRUCTION_FILE"]).read_text(encoding="utf-8"),
             bundle=read_bundle(bundle_path),
             workspace_dir=env.get("CC_WORKSPACE_DIR") or DEFAULT_WORKSPACE,
+            agent_dir=agent_dir,
             tool_timeout_sec=float(env.get("CC_TOOL_TIMEOUT_SEC") or 270.0),
             max_unanswered=int(env.get("CC_MAX_UNANSWERED_CALLS") or 3),
+            max_tool_output_chars=int(
+                env.get("CC_MAX_TOOL_OUTPUT_CHARS") or DEFAULT_MAX_TOOL_OUTPUT_CHARS
+            ),
+            truncate=truncate,
         )
 
     async def open(self) -> EnvironmentStart:
@@ -209,7 +260,7 @@ class ToolathlonEnvironment:
         return EnvironmentStart(
             system=self.system_prompt,
             opening=[Utterance("user", self.instruction)],
-            tools=list(self.router.tools),
+            tools=[*self.router.tools, *OVERLONG_TOOLS],
             workspace_dir=self.workspace_dir,
         )
 
@@ -224,7 +275,13 @@ class ToolathlonEnvironment:
                     ToolResult(call.id, "Invalid tool arguments: not a JSON object")
                 )
                 continue
-            output = await self.router.call(call.name, call.arguments)
+            if self.overlong.handles(call.name):
+                # Read-back of a saved output: never cut again.
+                output = self.overlong.call(call.name, call.arguments)
+            else:
+                output = self.overlong.clip(
+                    await self.router.call(call.name, call.arguments)
+                )
             print(f"[runner] tool {call.name}: {output[:400]!r}", flush=True)
             results.append(ToolResult(call.id, output))
             if call.name in self.stop_tools:

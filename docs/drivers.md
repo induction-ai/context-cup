@@ -8,19 +8,27 @@ contract is [protocol.md](protocol.md).
 
 ## Pick a lane
 
-| lane                                      | `run(ctx)` receives                                                                    | `run(ctx)` returns                                           | copy this                           | pick it when                                                                                                                                           |
-| ----------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`engines/python`](../engines/python)     | the provider's native request body, plus a provider-neutral view of it                 | the provider's response: the SDK object or its JSON          | `base_passthrough`, `base_truncate` | you want exact control: reasoning items, cache-control blocks, and thought signatures are all in front of you. Bring any SDK.                          |
-| [`engines/pydantic`](../engines/pydantic) | read-only turn facts                                                                   | Pydantic AI capabilities (a list), or a whole `Agent`        | `base_pydantic`                     | your strategy is a Pydantic AI (Harness) capability: compaction, tool-output limits, your own history processor.                                       |
-| [`engines/litellm`](../engines/litellm)   | the conversation as litellm chat messages, and `ctx.llm`, a litellm handle for the run | a litellm response from `ctx.llm.completion(...)`            | `base_litellm`                      | you want one strategy for OpenAI, Anthropic, and Gemini over chat messages, and can live without OpenAI reasoning items and Anthropic thinking blocks. |
-| `kind: "agent"`                           | nothing: harbor runs a whole agent against the task                                    | nothing: the agent works the task and the verifier scores it | `base_codex`                        | you are entering an existing agent (Codex, Claude Code) as it is. Compared on score and cost only.                                                     |
+| lane                                          | `run(ctx)` receives                                                                    | `run(ctx)` returns                                           | copy this                         | pick it when                                                                                                                                           |
+| --------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`engines/python`](../engines/python)         | the provider's native request body, plus a provider-neutral view of it                 | the provider's response: the SDK object or its JSON          | `base_passthrough`, `base_python` | you want exact control: reasoning items, cache-control blocks, and thought signatures are all in front of you. Bring any SDK.                          |
+| [`engines/pydantic`](../engines/pydantic)     | read-only turn facts                                                                   | Pydantic AI capabilities (a list), or a whole `Agent`        | `base_pydantic`                   | your strategy is a Pydantic AI (Harness) capability: compaction, tool-output limits, your own history processor.                                       |
+| [`engines/litellm`](../engines/litellm)       | the conversation as litellm chat messages, and `ctx.llm`, a litellm handle for the run | a litellm response from `ctx.llm.completion(...)`            | `base_litellm`                    | you want one strategy for OpenAI, Anthropic, and Gemini over chat messages, and can live without OpenAI reasoning items and Anthropic thinking blocks. |
+| [`engines/typescript`](../engines/typescript) | the Python engine's `ctx` in TypeScript: the native request body and the same view     | the provider's response as JSON                              | `base_typescript`                 | you want the Python lane's exact control, in TypeScript, with npm SDKs.                                                                                |
+| [`engines/aisdk`](../engines/aisdk)           | the conversation as AI SDK messages, and `ctx.llm`, an AI SDK handle for the run       | a result from `ctx.llm.generateText(...)`                    | `base_aisdk`                      | you want one strategy for OpenAI, Anthropic, and Gemini over the AI SDK's messages, with each provider's reasoning carried for you.                    |
+| `kind: "agent"`                               | nothing: harbor runs a whole agent against the task                                    | nothing: the agent works the task and the verifier scores it | `base_codex`                      | you are entering an existing agent (Codex, Claude Code) as it is. Compared on score and cost only.                                                     |
 
-In the first three lanes the course owns the loop: every turn it writes
+In every lane but the last the course owns the loop: every turn it writes
 `input.json`, runs your `run(ctx)` once, reads the model's response, runs any
 tools it asked for, appends the results, and calls you again. A turn ends
 when the model asks for an environment tool or answers in text. Tools a
-driver owns itself (a read-back tool for clipped output, a memory) run inside
-your turn and never reach the course.
+driver owns itself (a memory, a summariser) run inside your turn and never
+reach the course. Toolathlon's environment cuts tool results over 100,000
+characters, as upstream Toolathlon does, and offers the four
+`local-*_overlong_tooloutput` tools that search and page the saved text;
+they arrive in the task's tool list like any other environment tool.
+tau3's environment cuts them at the same length, with a note, and offers no
+such tools; the whole text is saved under the agent log directory's
+`clipped_tool_outputs/`.
 
 ## Start a driver
 
@@ -52,9 +60,10 @@ Copy the base driver of your lane to `drivers/<your_name>/` and edit.
 - `config`: free-form; it arrives as `ctx.config`. Keep tunables here so a
   variant is a manifest edit, not a code change.
 
-`driver.py` defines `run(ctx)`. It may import sibling files in its own
-directory, and `context_cup_protocol` (the protocol library), and nothing
-else from the course.
+`driver.py` defines `run(ctx)` (`driver.ts` exports it, on the TypeScript
+lanes). It may import sibling files in its own directory, and
+`context_cup_protocol` (`@context-cup/protocol` in TypeScript, the protocol
+library), and nothing else from the course.
 
 `setup.sh` (optional) installs what your driver needs into the engine's
 venv, once per trial container. The Python engine installs no provider SDK,
@@ -69,6 +78,11 @@ uv pip install --quiet --python "${CC_CHAIN%%:*}/.venv/bin/python" openai
 `${CC_CHAIN%%:*}` is the first package of your chain, the engine, whose venv
 runs your code. `uv` is on `PATH` in every setup script; the container's own
 Python is never used.
+
+A TypeScript driver needs no `setup.sh`: list its npm packages in
+`package.json` `dependencies`, `pnpm install`, and the engine's `build.sh`
+bundles them with `driver.ts` on the host before every run (see
+[engines/typescript](../engines/typescript)).
 
 ## Models, keys, and accounting
 
@@ -87,7 +101,8 @@ Python is never used.
 - **Every call is counted.** The proxy records each call's model, tokens,
   and timing; the suite prices it. Summaries, reranking, subagents: all of it
   is in your cost. Label auxiliary calls with the header
-  `x-cc-purpose: <label>` (`ctx.llm.completion(purpose=...)` on litellm);
+  `x-cc-purpose: <label>` (`ctx.llm.completion(purpose=...)` on litellm,
+  `ctx.llm.generateText({ purpose })` on the AI SDK);
   unlabelled calls count as `turn`.
 - **You pick your models.** `target` is the run's model and the default, not
   a rule: call a cheaper model for summaries, or a different one entirely.
@@ -103,7 +118,8 @@ Each turn is a fresh process, so anything you keep must be written down:
 - `ctx.dirs.state`: a directory that survives the whole trial, for anything
   too big for `state`: indexes, summaries, spilled outputs.
 - The working conversation: `ctx.context_payload` on the Python engine,
-  `ctx.context_messages` on litellm. Your edits carry forward; the course
+  `ctx.context_messages` on litellm, `ctx.contextPayload` on TypeScript,
+  `ctx.contextMessages` (and `ctx.instructions`) on the AI SDK. Your edits carry forward; the course
   appends the model's reply and the tool results to what you left.
 
 ## Run it

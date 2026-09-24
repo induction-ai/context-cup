@@ -151,7 +151,10 @@ export default async function SuitePage({
             <dt className="col-4 col-md-3 text-body-secondary fw-normal">
               harbor
             </dt>
-            <dd className="col-8 col-md-9 font-monospace">{suite.harborEnv}</dd>
+            <dd className="col-8 col-md-9 font-monospace">
+              {suite.harborEnv}
+              {suite.harborSha ? ` @ ${shortSha(suite.harborSha)}` : ""}
+            </dd>
           </dl>
         </div>
         <div className="col">

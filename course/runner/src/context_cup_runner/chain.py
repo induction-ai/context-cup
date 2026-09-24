@@ -20,7 +20,7 @@ from typing import Any
 
 
 def short_name(package_name: str) -> str:
-    """`@context-cup-drivers/base_truncate` is the driver `base_truncate`: the
+    """`@context-cup-drivers/base_python` is the driver `base_python`: the
     scope is dropped whichever it is."""
     return package_name.rsplit("/", 1)[-1]
 

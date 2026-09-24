@@ -59,7 +59,7 @@ export function sampleRun(overrides: Partial<SuiteRun> = {}): SuiteRun {
   };
 }
 
-/** An in-memory workspace: engine-python <- base_passthrough / base_truncate. */
+/** An in-memory workspace: engine-python <- base_passthrough / base_python. */
 export function samplePackages(): Map<string, CupPackage> {
   const pkgs: CupPackage[] = [
     {
@@ -75,8 +75,8 @@ export function samplePackages(): Map<string, CupPackage> {
       extends: "@context-cup/engine-python",
     },
     {
-      name: "@context-cup-drivers/base_truncate",
-      dir: "/ws/drivers/base_truncate",
+      name: "@context-cup-drivers/base_python",
+      dir: "/ws/drivers/base_python",
       kind: "driver",
       extends: "@context-cup/engine-python",
       providers: ["openai"],

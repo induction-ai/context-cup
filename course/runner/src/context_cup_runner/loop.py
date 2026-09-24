@@ -34,7 +34,6 @@ from context_cup_protocol import (
 from . import __version__
 from .atif import TurnRecord, build_trajectory
 from .chain import DriverChain, RunAs, run_script, run_turn_script
-from .clipping import clip_tool_output
 from .environment import Environment, StepResult
 from .protocol import (
     PLACEHOLDER_KEY,
@@ -52,13 +51,28 @@ from .protocol import (
 )
 
 DEFAULT_TURN_RETRIES = 3
+DEFAULT_EMPTY_RETRIES = 3
+"""Re-asks after an empty reply, across the whole trial. Separate from
+`DEFAULT_TURN_RETRIES`: a model that blanks every few turns should fail the
+trial, not be re-asked forever one turn at a time."""
 DEFAULT_MAX_STEPS = 200
-DEFAULT_MAX_TOOL_OUTPUT_CHARS = 100_000
 DEFAULT_TURN_TIMEOUT_SEC = 1800.0
 
 
 class TrialError(RuntimeError):
-    """The trial cannot continue; harbor records the message."""
+    """The trial cannot continue; harbor records the message. `stop_reason`
+    is what summary.json and the environment are told."""
+
+    def __init__(self, message: str, *, stop_reason: str = "runner_error"):
+        super().__init__(message)
+        self.stop_reason = stop_reason
+
+
+class EnvironmentFailure(TrialError):
+    """The benchmark environment raised; the trial cannot continue."""
+
+    def __init__(self, message: str):
+        super().__init__(message, stop_reason="env_error")
 
 
 def announce_turn(proxy_url: str, trial_id: str, turn_id: str) -> None:
@@ -87,8 +101,8 @@ class Settings:
     target: Target
     proxy_url: str = ""
     turn_retries: int = DEFAULT_TURN_RETRIES
+    empty_retries: int = DEFAULT_EMPTY_RETRIES
     max_steps: int = DEFAULT_MAX_STEPS
-    max_tool_output_chars: int = DEFAULT_MAX_TOOL_OUTPUT_CHARS
     turn_timeout_sec: float | None = DEFAULT_TURN_TIMEOUT_SEC
     run_as: RunAs | None = None
     """Who run.sh and teardown.sh run as; None runs them as the loop's user."""
@@ -111,10 +125,8 @@ class Settings:
             target=target,
             proxy_url=need("CC_PROXY_URL"),
             turn_retries=int(env.get("CC_TURN_RETRIES") or DEFAULT_TURN_RETRIES),
+            empty_retries=int(env.get("CC_EMPTY_RETRIES") or DEFAULT_EMPTY_RETRIES),
             max_steps=int(env.get("CC_MAX_STEPS") or default_max_steps),
-            max_tool_output_chars=int(
-                env.get("CC_MAX_TOOL_OUTPUT_CHARS") or DEFAULT_MAX_TOOL_OUTPUT_CHARS
-            ),
             turn_timeout_sec=float(
                 env.get("CC_TURN_TIMEOUT_SEC") or DEFAULT_TURN_TIMEOUT_SEC
             ),
@@ -166,6 +178,8 @@ class Trial:
         self.errors: list[dict[str, Any]] = []
         self.turn_counter = 0
         self.env_tool_calls = 0
+        self.empty_retries_left = settings.empty_retries
+        self.empty_replies_retried = 0
         self.started_at = _now()
 
     @property
@@ -259,9 +273,16 @@ class Trial:
         return turn_id, output, extracted, None, False
 
     def run_turn(self, turn_index: int) -> tuple[TurnOutput, Extracted]:
+        """One turn. A failed attempt (a crash, no output, a bad output.json)
+        uses one of this turn's `turn_retries`; an empty reply is discarded
+        and uses one of the trial's `empty_retries` instead. Running out of
+        either ends the trial."""
         attempts = self.settings.turn_retries + 1
+        failures = 0
+        attempt = 0
         last_error = "unknown"
-        for attempt in range(attempts):
+        while True:
+            attempt += 1
             turn_id, output, extracted, error, discarded = self._run_once(turn_index)
             if output is not None and extracted is not None:
                 return output, extracted
@@ -270,27 +291,39 @@ class Trial:
                 {
                     "turn_id": turn_id,
                     "turn_index": turn_index,
-                    "attempt": attempt + 1,
+                    "attempt": attempt,
                     "error": last_error,
                     "discarded": discarded,
                 }
             )
             if discarded:
+                if self.empty_retries_left <= 0:
+                    print(
+                        f"[runner] turn {turn_id} empty reply discarded, no retries left",
+                        flush=True,
+                    )
+                    raise TrialError(
+                        f"turn {turn_index}: the model replied with nothing after "
+                        f"{self.empty_replies_retried} empty replies were retried",
+                        stop_reason="agent_error",
+                    )
+                self.empty_retries_left -= 1
+                self.empty_replies_retried += 1
                 print(
                     f"[runner] turn {turn_id} empty reply discarded, retrying "
-                    f"({attempt + 1}/{attempts - 1})"
-                    if attempt + 1 < attempts
-                    else f"[runner] turn {turn_id} empty reply discarded, no retries left",
+                    f"({self.empty_replies_retried}/{self.settings.empty_retries})",
                     flush=True,
                 )
-            else:
-                print(
-                    f"[runner] turn {turn_id} failed ({attempt + 1}/{attempts}): {last_error}",
-                    flush=True,
+                continue
+            failures += 1
+            print(
+                f"[runner] turn {turn_id} failed ({failures}/{attempts}): {last_error}",
+                flush=True,
+            )
+            if failures >= attempts:
+                raise TrialError(
+                    f"turn {turn_index} failed after {attempts} attempts: {last_error}"
                 )
-        raise TrialError(
-            f"turn {turn_index} failed after {attempts} attempts: {last_error}"
-        )
 
     def _record(self, output: TurnOutput) -> None:
         """Take the driver's response into both payloads, and its state and
@@ -309,9 +342,12 @@ class Trial:
     async def _apply(self, extracted: Extracted) -> StepResult:
         if extracted.tool_calls:
             self.env_tool_calls += len(extracted.tool_calls)
-            result = await self.environment.on_tool_calls(
-                extracted.tool_calls, extracted.text
-            )
+            try:
+                result = await self.environment.on_tool_calls(
+                    extracted.tool_calls, extracted.text
+                )
+            except Exception as exc:
+                raise EnvironmentFailure(f"{type(exc).__name__}: {exc}") from exc
             by_id = {call.id: call for call in extracted.tool_calls}
             pairs: list[tuple[ToolCallRef, str]] = []
             for tool_result in result.tool_results:
@@ -322,25 +358,24 @@ class Trial:
                         flush=True,
                     )
                     continue
-                clipped = clip_tool_output(
-                    tool_result.content,
-                    max_chars=self.settings.max_tool_output_chars,
-                    agent_dir=self.agent_dir,
-                    tool_call_id=tool_result.tool_call_id,
-                )
-                pairs.append((call, clipped))
+                pairs.append((call, tool_result.content))
             self.adapter.append_tool_results(self.original, pairs)
             self.adapter.append_tool_results(self.context, pairs)
         else:
-            result = await self.environment.on_message(extracted.text or "")
+            try:
+                result = await self.environment.on_message(extracted.text or "")
+            except Exception as exc:
+                raise EnvironmentFailure(f"{type(exc).__name__}: {exc}") from exc
         for text in result.user_messages:
             self.adapter.append_user(self.original, text)
             self.adapter.append_user(self.context, text)
         return result
 
-    async def run(self) -> TrialResult:
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        start = await self.environment.open()
+    async def _open(self) -> str | None:
+        try:
+            start = await self.environment.open()
+        except Exception as exc:
+            raise EnvironmentFailure(f"{type(exc).__name__}: {exc}") from exc
         self.tools = list(start.tools)
         self.workspace_dir = start.workspace_dir
         self.original = self.adapter.initial_payload(
@@ -351,11 +386,18 @@ class Trial:
             reasoning_effort=self.settings.target.reasoning_effort,
         )
         self.context = copy.deepcopy(self.original)
-        stop_reason = start.stop_reason or "max_steps"
+        return start.stop_reason
+
+    async def run(self) -> TrialResult:
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        stop_reason = "max_steps"
         extra: dict[str, Any] = {}
         turns = 0
         try:
-            if start.stop_reason is None:
+            opened_stop = await self._open()
+            if opened_stop is not None:
+                stop_reason = opened_stop
+            else:
                 for turn_index in range(1, self.settings.max_steps + 1):
                     output, extracted = self.run_turn(turn_index)
                     self._record(output)
@@ -365,9 +407,20 @@ class Trial:
                     if result.stop_reason:
                         stop_reason = result.stop_reason
                         break
+                else:
+                    if self.environment.fail_at_max_steps:
+                        raise TrialError(
+                            f"exceeded {self.settings.max_steps} steps",
+                            stop_reason="max_steps",
+                        )
         except TrialError as exc:
-            stop_reason = "runner_error"
+            stop_reason = exc.stop_reason
             extra["error"] = str(exc)
+            raise
+        except Exception as exc:
+            # Never leave "max_steps" standing for a crash.
+            stop_reason = "runner_error"
+            extra["error"] = f"{type(exc).__name__}: {exc}"
             raise
         finally:
             try:
@@ -418,17 +471,18 @@ class Trial:
     ) -> None:
         _write_json(self.agent_dir / "original_payload.json", self.original)
         _write_json(self.agent_dir / "context_payload.json", self.context)
-        trajectory = build_trajectory(
-            trial_id=self.settings.trial_id,
-            steps=self.adapter.steps_from_payload(self.original),
-            turns=self.turn_records,
-            target=self.settings.target,
-            tools=self.tools,
-            runner_version=__version__,
-            driver=self.driver_info(),
-        )
-        if trajectory["steps"]:
-            _write_json(self.agent_dir / "trajectory.json", trajectory)
+        if self.original:  # empty when the environment never opened
+            trajectory = build_trajectory(
+                trial_id=self.settings.trial_id,
+                steps=self.adapter.steps_from_payload(self.original),
+                turns=self.turn_records,
+                target=self.settings.target,
+                tools=self.tools,
+                runner_version=__version__,
+                driver=self.driver_info(),
+            )
+            if trajectory["steps"]:
+                _write_json(self.agent_dir / "trajectory.json", trajectory)
         _write_json(
             self.agent_dir / "summary.json",
             {
@@ -436,6 +490,7 @@ class Trial:
                 "turns": turns,
                 "env_tool_calls": self.env_tool_calls,
                 "errors": self.errors,
+                "empty_replies_retried": self.empty_replies_retried,
                 "driver": self.driver_info(),
                 "provider": self.settings.target.provider,
                 "target": self.settings.target.model_dump(mode="json"),
@@ -453,7 +508,7 @@ def build_environment(
     if benchmark == "tau3":
         from .envs.tau3 import Tau3Environment
 
-        return Tau3Environment.from_env(env)
+        return Tau3Environment.from_env(env, agent_dir=settings.agent_dir)
     if benchmark == "toolathlon":
         from .envs.toolathlon import ToolathlonEnvironment
 
@@ -484,6 +539,8 @@ async def async_main(env: dict[str, str]) -> int:
     try:
         result = await trial.run()
     except TrialError as exc:
+        if exc.__cause__ is not None:
+            traceback.print_exception(exc.__cause__)
         print(f"[runner] trial failed: {exc}", file=sys.stderr, flush=True)
         return 2
     except Exception:  # noqa: BLE001 - the traceback is the useful part

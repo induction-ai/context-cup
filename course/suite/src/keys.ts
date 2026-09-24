@@ -13,16 +13,20 @@ const zTaskCommon = {
   timeout_minutes: z.number().positive().optional(),
 };
 
+// Strict throughout: a misspelt key (`timeout_minute`) is an error, not a
+// silently ignored setting.
 const zTask = z.discriminatedUnion("runner", [
-  z.object({
+  z.strictObject({
     runner: z.literal("tau3"),
-    tau3: z.object({ customer: z.string().min(1) }),
+    tau3: z.strictObject({ customer: z.string().min(1) }),
     ...zTaskCommon,
   }),
-  z.object({
+  z.strictObject({
     runner: z.literal("toolathlon"),
     /** `task` defaults to the suite-file key. */
-    toolathlon: z.object({ task: z.string().min(1).optional() }).default({}),
+    toolathlon: z
+      .strictObject({ task: z.string().min(1).optional() })
+      .default({}),
     ...zTaskCommon,
   }),
 ]);
@@ -35,8 +39,11 @@ export const zSuiteFile = z
   .object({
     /** Max concurrent trials across the whole suite. */
     concurrency: z.number().int().positive().default(8),
-    /** Per-task budget for the agent; harbor's timeout multiplier derives from it. */
-    timeout_minutes: z.number().positive().default(40),
+    /** Trials per task when `--count` isn't given (default 1). */
+    count: z.number().int().positive().optional(),
+    /** Per-trial budget for the agent; harbor's timeout multiplier derives
+     *  from it. Unset, harbor keeps each task's own timeout. */
+    timeout_minutes: z.number().positive().optional(),
     tasks: z.record(z.string(), zTask),
   })
   // Drivers and targets are launch choices, never part of a suite file.

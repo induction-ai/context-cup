@@ -1,0 +1,40 @@
+{
+  "private": true,
+  "name": "@context-cup/engine-aisdk",
+  "version": "0.1.0",
+  "description": "AI SDK engine: a driver gets ctx.llm, an AI SDK handle preconfigured for the run, and returns the generateText result of its turn.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*.js": "./src/*.ts"
+  },
+  "contextCup": {
+    "kind": "engine",
+    "providers": [
+      "openai",
+      "anthropic",
+      "gemini"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "../../bin/test --project engine-aisdk",
+    "format": "prettier --write src tests --log-level warn",
+    "lint": "prettier --check src tests"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.58",
+    "@ai-sdk/google": "^4.0.76",
+    "@ai-sdk/openai": "^4.0.71",
+    "@context-cup/protocol": "workspace:*",
+    "ai": "catalog:"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "catalog:",
+    "@types/node": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

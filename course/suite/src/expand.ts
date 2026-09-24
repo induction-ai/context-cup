@@ -15,8 +15,8 @@ export type SuiteRun = RunSpec & {
   task_name: string;
   task: SuiteTask;
   runner: RunnerName;
-  /** Minutes the agent gets per trial. */
-  timeout_minutes: number;
+  /** Minutes the agent gets per trial; null leaves harbor's task default. */
+  timeout_minutes: number | null;
 };
 
 /** Task filter from the command line. Naming tasks selects only those and
@@ -42,6 +42,18 @@ function chosenTasks(
   return Object.entries(file.tasks).filter(([, t]) => !t.explicit_only);
 }
 
+/** The largest timeout set at any level (task or suite file), or null when
+ *  none is: a task can ask for more time than the suite default, not less. */
+export function resolveTimeout(
+  task: SuiteTask,
+  file: SuiteFile
+): number | null {
+  const set = [task.timeout_minutes, file.timeout_minutes].filter(
+    (m): m is number => m !== undefined
+  );
+  return set.length > 0 ? Math.max(...set) : null;
+}
+
 /** One run per task, minus explicit-only tasks not named on the command
  *  line. See {@link interleave} for queue order. */
 export function expandSuite(
@@ -54,7 +66,7 @@ export function expandSuite(
     task_name,
     task,
     runner: task.runner,
-    timeout_minutes: task.timeout_minutes ?? file.timeout_minutes,
+    timeout_minutes: resolveTimeout(task, file),
   }));
 }
 

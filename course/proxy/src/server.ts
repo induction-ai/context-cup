@@ -18,7 +18,63 @@ export type ProxyOptions = {
   /** The run's target: filled in where a call names no model or names
    *  {@link MODEL_ALIAS}. A model the caller named is never changed. */
   defaultModel?: DefaultModel;
+  retry?: Partial<RetryPolicy>;
 };
+
+/** How the proxy retries a transient upstream failure before the caller sees
+ *  anything, so every driver gets the same patience whatever its SDK does. */
+export type RetryPolicy = {
+  /** Retries after the first attempt. */
+  max: number;
+  baseMs: number;
+  maxMs: number;
+  sleep: (ms: number) => Promise<void>;
+  /** Where each retry is reported (the proxy's log). */
+  report: (line: string) => void;
+};
+
+export const DEFAULT_RETRY: RetryPolicy = {
+  max: 4,
+  baseMs: 2_000,
+  maxMs: 60_000,
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  report: (line) => console.error(line),
+};
+
+/** Rate limits and overloaded or failing servers, including Anthropic's 529. */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504, 529]);
+
+/** Whether a failed reply is worth another attempt. Quota or billing
+ *  exhaustion is a 429 too, but permanent: retrying only burns the trial's
+ *  time on the same wall. */
+export function retryableReply(status: number, body: string): boolean {
+  const text = body.toLowerCase();
+  if (
+    text.includes("insufficient_quota") ||
+    text.includes("exceeded your current quota")
+  ) {
+    return false;
+  }
+  // A 529 "Overloaded" isn't always sent with its own status.
+  return RETRYABLE_STATUS.has(status) || text.includes("overloaded");
+}
+
+/** The wait before retry `attempt` (0-based): the server's Retry-After when it
+ *  sends one in seconds, up to the policy's cap, else exponential backoff
+ *  with jitter. */
+export function retryDelayMs(
+  attempt: number,
+  retryAfter: string | null,
+  policy: Pick<RetryPolicy, "baseMs" | "maxMs">,
+  random: () => number = Math.random
+): number {
+  const told = retryAfter === null ? NaN : Number(retryAfter);
+  if (Number.isFinite(told) && told >= 0) {
+    return Math.min(told * 1000, policy.maxMs);
+  }
+  const backoff = Math.min(policy.maxMs, policy.baseMs * 2 ** attempt);
+  return backoff + random() * (backoff / 2);
+}
 
 export type DefaultModel = { provider: Provider; model: string };
 
@@ -144,6 +200,7 @@ export function createApp(options: ProxyOptions) {
     options.bodiesDir
   );
   const state = new TrialState();
+  const retry: RetryPolicy = { ...DEFAULT_RETRY, ...options.retry };
   const app = express();
   app.disable("x-powered-by");
 
@@ -206,8 +263,9 @@ export function createApp(options: ProxyOptions) {
     const upstream = upstreamFor(provider, env);
     const url = `${upstream}${forwardPath}${query}`;
     const host = new URL(url).hostname;
-    const started = Date.now();
-    const started_at = new Date(started).toISOString();
+    // Each attempt is its own record; these mark the one in flight.
+    let started = Date.now();
+    let started_at = new Date(started).toISOString();
     const purpose = firstHeader(req, "x-cc-purpose") ?? "turn";
 
     const headers: Record<string, string> = {};
@@ -224,20 +282,59 @@ export function createApp(options: ProxyOptions) {
     Object.assign(headers, authHeaders(provider, key));
 
     let upstreamResponse: globalThis.Response;
-    try {
-      upstreamResponse = await fetch(url, {
-        method: req.method,
-        headers,
-        body: ["GET", "HEAD"].includes(req.method) ? undefined : requestBody,
-        redirect: "manual",
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res
-        .status(502)
-        .json({ error: `upstream ${host} unreachable: ${message}` });
-      record(null, 502, Buffer.alloc(0), `upstream unreachable: ${message}`);
-      return;
+    for (let attempt = 0; ; attempt++) {
+      const last = attempt >= retry.max;
+      started = Date.now();
+      started_at = new Date(started).toISOString();
+      try {
+        upstreamResponse = await fetch(url, {
+          method: req.method,
+          headers,
+          body: ["GET", "HEAD"].includes(req.method) ? undefined : requestBody,
+          redirect: "manual",
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!last) {
+          // The provider may have processed (and billed) the request before
+          // the connection failed, so the attempt stays on the record.
+          record(
+            null,
+            502,
+            Buffer.alloc(0),
+            `upstream unreachable, retried: ${message}`
+          );
+          await backOff(attempt, null, `unreachable: ${message}`);
+          continue;
+        }
+        res
+          .status(502)
+          .json({ error: `upstream ${host} unreachable: ${message}` });
+        record(null, 502, Buffer.alloc(0), `upstream unreachable: ${message}`);
+        return;
+      }
+      if (last || upstreamResponse.status < 400) break;
+      // An error reply is small and nothing has been sent to the caller yet,
+      // so read it to decide, and relay it as it was if it is final.
+      const text = await upstreamResponse.text();
+      if (!retryableReply(upstreamResponse.status, text)) {
+        upstreamResponse = new Response(text, {
+          status: upstreamResponse.status,
+          headers: upstreamResponse.headers,
+        });
+        break;
+      }
+      record(
+        upstreamResponse.headers.get("content-type"),
+        upstreamResponse.status,
+        Buffer.from(text),
+        `status ${upstreamResponse.status}, retried`
+      );
+      await backOff(
+        attempt,
+        upstreamResponse.headers.get("retry-after"),
+        `status ${upstreamResponse.status}`
+      );
     }
 
     res.status(upstreamResponse.status);
@@ -275,6 +372,18 @@ export function createApp(options: ProxyOptions) {
     }
     res.end();
     record(contentType, upstreamResponse.status, Buffer.concat(chunks));
+
+    async function backOff(
+      attempt: number,
+      retryAfter: string | null,
+      why: string
+    ): Promise<void> {
+      const ms = retryDelayMs(attempt, retryAfter, retry);
+      retry.report(
+        `retry ${attempt + 1}/${retry.max} for ${trial_id} ${host}${forwardPath} after ${(ms / 1000).toFixed(1)}s (${why})`
+      );
+      await retry.sleep(ms);
+    }
 
     function record(
       responseContentType: string | null,

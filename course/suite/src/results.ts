@@ -30,6 +30,8 @@ export type SuiteResults = {
   started_at: string;
   finished_at: string;
   git_sha: string | null;
+  /** The harbor fork commit; null with HARBOR_DIR=global. */
+  harbor_sha: string | null;
   harbor_env: string;
   jobs: Array<{ job_id: string; ok: boolean; error: string | null }>;
   cells: CellResult[];

@@ -111,6 +111,22 @@ def proxy_command(*, target: dict[str, Any] | None, save_bodies: bool) -> list[s
     return argv
 
 
+async def upload_node(
+    agent: BaseInstalledAgent, environment: BaseEnvironment, platform: tuple[str, str]
+) -> None:
+    """Put the pinned node release at NODE_BIN, built for the container, once.
+    The proxy runs on it, and driver scripts get it as CC_NODE."""
+    present = await agent.exec_as_root(
+        environment, command=f"test -x {NODE_BIN} && echo present || true"
+    )
+    if "present" in (present.stdout or ""):
+        return
+    node = cached_node_binary(node_platform(*platform))
+    await agent.exec_as_root(environment, command=f"mkdir -p {NODE_DIR}")
+    await environment.upload_file(node, NODE_BIN)
+    await agent.exec_as_root(environment, command=f"chmod 755 {NODE_DIR} {NODE_BIN}")
+
+
 async def start_proxy(
     agent: BaseInstalledAgent,
     environment: BaseEnvironment,
@@ -119,22 +135,18 @@ async def start_proxy(
     target: dict[str, Any] | None,
     save_bodies: bool,
 ) -> None:
-    """Upload node and the proxy bundle, hand the proxy the keys, start it
-    detached as root, and wait until it answers."""
-    node = cached_node_binary(node_platform(*platform))
+    """Upload node (unless it is there) and the proxy bundle, hand the proxy
+    the keys, start it detached as root, and wait until it answers."""
+    await upload_node(agent, environment, platform)
     await agent.exec_as_root(
         environment,
         command=(
-            f"mkdir -p {NODE_DIR} {PROXY_DIR} {AGENT_DIR} && "
+            f"mkdir -p {PROXY_DIR} {AGENT_DIR} && "
             f"mkdir -p -m 700 {SECRET_DIR} && chmod 700 {SECRET_DIR}"
         ),
     )
-    await environment.upload_file(node, NODE_BIN)
     await environment.upload_file(proxy_bundle(), REMOTE_PROXY_BUNDLE)
-    await agent.exec_as_root(
-        environment,
-        command=f"chmod 755 {NODE_BIN} && chmod 644 {REMOTE_PROXY_BUNDLE}",
-    )
+    await agent.exec_as_root(environment, command=f"chmod 644 {REMOTE_PROXY_BUNDLE}")
 
     # harbor's own process env, never the agent's extra env: that is what
     # every exec sees, and CodexAgent puts the placeholder key there.

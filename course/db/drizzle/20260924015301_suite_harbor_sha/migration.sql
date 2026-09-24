@@ -1,0 +1,1 @@
+ALTER TABLE "suite" ADD COLUMN "harbor_sha" text;

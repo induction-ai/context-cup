@@ -2,7 +2,7 @@
   "private": true,
   "name": "@context-cup-drivers/base_litellm",
   "version": "0.1.0",
-  "description": "LiteLLM's own trimming: trim_messages cuts the conversation to fit the model's window (config.max_tokens, default 75% of it), keeping tool calls paired with their results.",
+  "description": "Clips any tool result larger than max_bytes before it reaches the model. base_python, on LiteLLM.",
   "contextCup": {
     "kind": "driver",
     "extends": "@context-cup/engine-litellm",
@@ -10,6 +10,9 @@
       "openai",
       "anthropic",
       "gemini"
-    ]
+    ],
+    "config": {
+      "max_bytes": 100000
+    }
   }
 }

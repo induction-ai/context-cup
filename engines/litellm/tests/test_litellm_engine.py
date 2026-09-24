@@ -348,6 +348,7 @@ def test_context_messages_keep_the_drivers_edits_and_gain_only_what_is_new(
     turn = ctx.turn.model_copy(
         update={
             "turn_id": "003_ghijkl",
+            "turn_index": 3,
             "context_payload": payload,
             "original_payload": payload,
         }
@@ -356,3 +357,10 @@ def test_context_messages_keep_the_drivers_edits_and_gain_only_what_is_new(
     assert later.context_messages[:3] == ctx.context_messages
     assert later.context_messages[-1] == {"role": "assistant", "content": "Done."}
     assert len(later.original_messages) > len(later.context_messages)
+
+    # An attempt the runner throws away leaves nothing for its retry: the
+    # retry starts again from the last accepted turn.
+    later.context_messages = []
+    finish(later, later.llm.completion())
+    retry = LitellmContext(turn.model_copy(update={"turn_id": "004_mnopqr"}), {})
+    assert retry.context_messages[:3] == ctx.context_messages

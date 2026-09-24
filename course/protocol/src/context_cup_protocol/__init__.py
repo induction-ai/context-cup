@@ -27,6 +27,7 @@ from .providers import (
     adapter_for,
     function_schemas,
 )
+from .snapshot import load_snapshot, save_snapshot
 from .view import Conversation, Message, Tool, ToolCall, view, write
 
 __all__ = [
@@ -55,7 +56,9 @@ __all__ = [
     "Wire",
     "adapter_for",
     "function_schemas",
+    "load_snapshot",
     "run_engine",
+    "save_snapshot",
     "view",
     "write",
 ]

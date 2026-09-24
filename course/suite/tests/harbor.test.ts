@@ -135,7 +135,8 @@ describe("buildHarborCommand", () => {
     expect(command.argv.join(" ")).toContain(
       "--env daytona --environment-build-timeout-multiplier 2 --max-retries 1"
     );
-    expect(command.argv).toContain("auto_stop_interval_mins=120");
+    // The trial's budget (40m) plus 30m overhead plus a 10m margin.
+    expect(command.argv).toContain("auto_stop_interval_mins=80");
     expect(command.argv).toContain(
       'labels={"context-cup-suite":"suite","context-cup-job":"j_tool"}'
     );

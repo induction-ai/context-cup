@@ -127,6 +127,8 @@ beforeAll(async () => {
   proxy = await startProxy({
     callsFile,
     bodiesDir,
+    // Relaying and recording as such; retries have their own tests.
+    retry: { max: 0 },
     env: {
       OPENAI_API_KEY: "sk-real",
       ANTHROPIC_API_KEY: "ak-real",

@@ -1,4 +1,4 @@
-# base_truncate
+# base_python
 
 Clips every tool result larger than `max_bytes` before it reaches the model,
 leaving a marker with the number of bytes removed. The simplest strategy
@@ -15,8 +15,8 @@ view.
 - **Files**: `driver.py`, `setup.sh` (installs `openai`, `anthropic`, `httpx`).
 
 ```
-bin/suite smoke_tau --driver base_truncate --target gpt-5.5@medium
-bin/suite toolathlon_local --driver base_truncate --target claude-sonnet-4-6
+bin/suite smoke_tau --driver base_python --target gpt-5.5@medium
+bin/suite toolathlon_local --driver base_python --target claude-sonnet-4-6
 ```
 
 **Make your own**: copy the directory and change the loop in `run`: any

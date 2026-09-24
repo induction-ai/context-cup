@@ -17,15 +17,32 @@ def _stub_harbor_codex(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     seen: dict[str, object] = {}
 
     class Codex:
-        def __init__(self, logs_dir, *args, extra_env=None, **kwargs):
+        def __init__(self, logs_dir, *args, extra_env=None, mcp_servers=None, **kwargs):
             self.logs_dir = Path(logs_dir)
             self._extra_env = dict(extra_env or {})
+            self.mcp_servers = list(mcp_servers or [])
             seen["kwargs"] = dict(kwargs)
             seen["installed"] = False
 
         async def install(self, environment):
             seen["installed"] = True
             seen["env_at_install"] = dict(self._extra_env)
+
+        async def exec_as_agent(self, environment, command):
+            seen.setdefault("commands", []).append(command)  # type: ignore[union-attr]
+
+        def _build_effective_config(self, openai_base_url=None):
+            # harbor writes an SSE server as a bare url, which Codex can't use.
+            return {
+                "mcp_servers": {
+                    s.name: (
+                        {"command": s.command, "args": list(s.args)}
+                        if s.transport == "stdio"
+                        else {"url": s.url}
+                    )
+                    for s in self.mcp_servers
+                }
+            }
 
         async def run(self, instruction, environment, context):
             seen["ran"] = instruction
@@ -91,7 +108,7 @@ def test_routes_each_trial_through_its_own_proxy_prefix(monkeypatch, tmp_path):
             ),
         },
     )
-    assert seen["kwargs"] == {"reasoning_effort": "high"}
+    assert seen["kwargs"] == {"reasoning_effort": "high", "version": "0.156.1"}
     asyncio.run(agent.install(object()))
     env = seen["env_at_install"]
     assert isinstance(env, dict)
@@ -129,4 +146,46 @@ def test_no_reasoning_effort_means_no_kwarg(monkeypatch, tmp_path):
         tmp_path / "t__1" / "agent",
         extra_env={"CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "m"})},
     )
-    assert seen["kwargs"] == {}
+    assert seen["kwargs"] == {"version": "0.156.1"}
+
+
+def test_sse_servers_are_bridged_through_mcp_remote_and_all_required(
+    monkeypatch, tmp_path
+):
+    import asyncio
+
+    seen = _stub_harbor_codex(monkeypatch)
+    from context_cup_runner.codex import MCP_REMOTE_COMMAND, CodexAgent
+
+    gateway = types.SimpleNamespace(
+        name="gw", transport="sse", url="http://127.0.0.1:8765/sse"
+    )
+    local = types.SimpleNamespace(
+        name="fs", transport="stdio", command="fs-server", args=["--root", "/w"]
+    )
+    agent = CodexAgent(
+        tmp_path / "t__1" / "agent", extra_env={}, mcp_servers=[gateway, local]
+    )
+    config = agent._build_effective_config()
+    assert config["mcp_servers"] == {
+        "gw": {
+            "command": MCP_REMOTE_COMMAND,
+            "args": [gateway.url, "--transport", "sse-only", "--allow-http"],
+            "required": True,
+        },
+        "fs": {"command": "fs-server", "args": ["--root", "/w"], "required": True},
+    }
+    asyncio.run(agent.install(object()))
+    commands = seen["commands"]
+    assert isinstance(commands, list) and len(commands) == 1
+    assert "mcp-remote@0.14.3" in commands[0]
+
+
+def test_no_sse_server_means_no_mcp_remote_install(monkeypatch, tmp_path):
+    import asyncio
+
+    seen = _stub_harbor_codex(monkeypatch)
+    from context_cup_runner.codex import CodexAgent
+
+    asyncio.run(CodexAgent(tmp_path / "t__1" / "agent", extra_env={}).install(object()))
+    assert "commands" not in seen

@@ -20,7 +20,7 @@ suites/     which tasks, drivers, and models a run covers (toolathlon_local: the
 
 Workspace packages are scoped `@context-cup/*`, for example `@context-cup/db`,
 `@context-cup/engine-python`, while drivers use `@context-cup-drivers/*`, for example
-`@context-cup-drivers/base_truncate`. How a driver
+`@context-cup-drivers/base_python`. How a driver
 plugs in is specified in [docs/protocol.md](docs/protocol.md); to write one,
 start with [docs/drivers.md](docs/drivers.md).
 
@@ -64,25 +64,29 @@ A run is one suite file, one driver, and one target model.
 
 ```
 bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium
-bin/suite toolathlon_local --driver base_truncate --target gpt-5.5@medium --count 2
+bin/suite toolathlon_local --driver base_python --target gpt-5.5@medium --count 2
 bin/suite smoke_tau                       # prompts for the driver, then a target it supports
 bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
 ```
 
-- `suites/*.json` list the tasks and how hard to run them (concurrency,
-  timeouts). Nothing else.
+- `suites/*.json` list the tasks and how hard to run them (concurrency, a
+  default `count`, and `timeout_minutes`; without one, harbor keeps each
+  task's own timeout). Nothing else. Keys are checked strictly, so a typo is
+  an error.
 - `targets.json` at the repo root names the target models: provider, model,
   reasoning effort, and an optional `concurrency` cap for provider rate
   limits, merged with the suite's and each task's caps by the scheduler. `--target` refers to a name in it (`TARGETS_FILE`
   overrides the path).
 - `--driver` is a package under `drivers/`; it must declare support for the
   target's provider in its `package.json`. `base_passthrough` and
-  `base_truncate` speak the turn protocol directly; `base_pydantic` is a
+  `base_python` speak the turn protocol directly; `base_pydantic` is a
   Pydantic AI agent that owns the model side while the course runs the
   environment's tools, the baseline for drivers built from Pydantic AI
-  Harness capabilities (`engines/pydantic`); `base_litellm` trims the
-  conversation to the model's window with LiteLLM's `trim_messages` and
-  sends it as chat messages, the baseline for litellm-based drivers (`engines/litellm`); `base_codex` is a whole agent
+  Harness capabilities (`engines/pydantic`); `base_litellm` does the same clipping on litellm chat
+  messages, the baseline for litellm-based drivers (`engines/litellm`);
+  `base_typescript` clips oversized tool results in TypeScript
+  (`engines/typescript`), and `base_aisdk` does the same clipping on the AI SDK, the
+  baseline for AI SDK drivers (`engines/aisdk`); `base_codex` is a whole agent
   run by harbor and compared on score and cost only.
 - `--count` is attempts per task. `--task` narrows to named tasks.
 - `--harbor_env daytona` runs in Daytona sandboxes instead of local Docker
@@ -131,7 +135,10 @@ Every model call a trial makes goes through a proxy (`course/proxy`) that
 runs inside that trial's container: `bin/suite` bundles it into one file,
 and the runner uploads it with a `node` binary and starts it as root with
 the provider keys. It forwards to the provider and writes the trial's
-`agent/calls.jsonl`, which is where tokens and cost come from. Driver code
+`agent/calls.jsonl`, which is where tokens and cost come from. Before the
+driver sees a reply, it retries rate limits, overloaded and 5xx replies, and
+an unreachable provider up to 4 times (2s to 60s backoff with jitter,
+honouring `Retry-After`); an exhausted quota is never retried. Driver code
 runs as an unprivileged user that cannot read the keys; each trial's
 `agent/isolation.txt` records the check. Set `CC_SAVE_BODIES=1` to keep
 every request and response body under the trial's `agent/bodies/`.

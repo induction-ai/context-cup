@@ -9,6 +9,7 @@ import {
 import { arch, availableParallelism } from "node:os";
 import path from "node:path";
 import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
+import { sandboxAutoStopMinutes } from "./budget.ts";
 import { JOB_LABEL, SUITE_LABEL } from "./daytona.ts";
 import type { SuiteRun } from "./expand.ts";
 import type { Provider } from "./keys.ts";
@@ -21,9 +22,6 @@ import {
 } from "./tasks.ts";
 
 export type HarborEnv = "docker" | "daytona";
-
-/** Idle minutes before Daytona stops a sandbox on its own. */
-export const DAYTONA_AUTO_STOP_MINUTES = 120;
 
 // ---------------------------------------------------------------------------
 // Resolving the `harbor` CLI. By default a run uses the induction-ai fork,
@@ -85,13 +83,15 @@ export function harborProvisioned(): boolean {
 }
 
 /** Clone or update the fork and sync its venv. Idempotent; once per process. */
-let provisioned = false;
-export function prepareHarbor(report: Report): void {
-  if (provisioned) return;
-  provisioned = true;
+let provisioned: { sha: string | null } | undefined;
+/** Provision the harbor checkout once per run; returns the commit it is at
+ *  (null for the harbor on PATH). */
+export function prepareHarbor(report: Report): string | null {
+  if (provisioned) return provisioned.sha;
   if (usesGlobalHarbor()) {
     report("harbor: using the harbor on PATH (HARBOR_DIR=global)");
-    return;
+    provisioned = { sha: null };
+    return null;
   }
   const dir = harborDir();
   if (existsSync(path.join(dir, ".git"))) {
@@ -107,18 +107,22 @@ export function prepareHarbor(report: Report): void {
     run(`git clone ${HARBOR_REPO_URL} ${JSON.stringify(dir)}`, REPO_ROOT);
   }
   run("uv sync --extra daytona", dir);
-  report(`harbor: fork at ${headSha(dir)}`);
+  const sha = headSha(dir);
+  // The checkout follows the fork's main, so record which commit this is.
+  report(`harbor: fork at ${sha?.slice(0, 7) ?? "unknown"}`);
   syncToolathlonAuthConfig(report);
+  provisioned = { sha };
+  return sha;
 }
 
-function headSha(dir: string): string {
+function headSha(dir: string): string | null {
   try {
-    return execSync("git rev-parse --short HEAD", {
+    return execSync("git rev-parse HEAD", {
       cwd: dir,
       encoding: "utf8",
     }).trim();
   } catch {
-    return "unknown";
+    return null;
   }
 }
 
@@ -369,7 +373,7 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
       "1",
       // A stuck sandbox stops itself instead of billing until someone notices.
       "--ek",
-      `auto_stop_interval_mins=${DAYTONA_AUTO_STOP_MINUTES}`,
+      `auto_stop_interval_mins=${sandboxAutoStopMinutes(run)}`,
       // Every sandbox names its run, so a leftover one can be traced and swept.
       "--ek",
       `labels=${JSON.stringify({
@@ -380,10 +384,13 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
   }
   // Tasks pin a 60 minute agent timeout; scale it to the suite's budget so a
   // hung trial fails inside harbor before the outer wall clock kills the job.
-  argv.push(
-    "--agent-timeout-multiplier",
-    (run.timeout_minutes / 60).toFixed(4)
-  );
+  // Without a suite budget, harbor keeps the task's own.
+  if (run.timeout_minutes !== null) {
+    argv.push(
+      "--agent-timeout-multiplier",
+      (run.timeout_minutes / 60).toFixed(4)
+    );
+  }
   if (run.task.runner === "tau3") {
     argv.push("--extra-docker-compose", TAU3_COMPOSE_OVERRIDE);
   }
@@ -395,10 +402,14 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
     PYTHONPATH: [RUNNER_SRC, PROTOCOL_SRC, env.PYTHONPATH]
       .filter(Boolean)
       .join(path.delimiter),
-    // Job-level env for harbor itself: the tau3 user simulator and verifier
-    // run on the real OpenAI API, and the runner hands the keys to each
+    // Job-level env for harbor itself: the runner hands the keys to each
     // trial's proxy. No driver process sees these.
-    OPENAI_BASE_URL: "https://api.openai.com/v1",
+    ...(run.task.runner === "tau3"
+      ? {
+          // The tau3 user simulator and verifier run on the real OpenAI API.
+          OPENAI_BASE_URL: "https://api.openai.com/v1",
+        }
+      : {}),
     ...(inputs.proxy_bundle ? { CC_PROXY_BUNDLE: inputs.proxy_bundle } : {}),
     ...keys,
   };

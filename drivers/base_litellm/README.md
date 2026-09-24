@@ -1,18 +1,17 @@
 # base_litellm
 
-LiteLLM's own trimming: the working conversation is cut to fit the model's
-context window with `litellm.utils.trim_messages`, any tool call separated
-from its result is dropped, and the trimmed list is kept for the next turn.
-The default for litellm-based drivers.
+Clips every tool result larger than `max_bytes` before it reaches the model,
+leaving a marker with the number of bytes removed: `base_python`, on
+LiteLLM. The smallest driver on the LiteLLM engine that does something, and
+the example of editing chat messages.
 
 - **Lane**: [`engines/litellm`](../../engines/litellm); chat messages in
   `ctx.context_messages`, calls through `ctx.llm`.
 - **Providers**: `openai`, `anthropic`, `gemini`.
-- **Config**: `max_tokens`, the budget for the trim. Unset, litellm uses 75%
-  of the model's input window, which most tasks never reach, so the driver
-  then behaves like a passthrough. Set it lower to make it bite.
-- **Files**: `driver.py`, `test_driver.py` (`uv run pytest drivers`). No
-  `setup.sh`: the engine installs litellm.
+- **Config**: `max_bytes` (default `100000`), the largest tool result sent
+  whole.
+- **Files**: `driver.py`, `test_base_litellm.py` (`uv run pytest drivers`).
+  No `setup.sh`: the engine installs litellm.
 
 ```
 bin/suite smoke_tau --driver base_litellm --target claude-sonnet-4-6
@@ -20,5 +19,5 @@ bin/suite smoke_tau --driver base_litellm --target claude-sonnet-4-6
 
 **Make your own**: copy the directory, edit `ctx.context_messages` in `run`,
 and return `ctx.llm.completion()`. Whatever the list holds when `run` returns
-persists. Reuse `keep_tool_pairs` after any cut that can split a call from
-its result.
+persists. Keep each tool call with its result; a provider rejects either
+half on its own. Put tunables in `contextCup.config`.

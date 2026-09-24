@@ -10,8 +10,11 @@ disk or a command line, so a driver can be written in any language.
 The reference implementation of the models below, the provider adapters,
 the provider-neutral view, and the turn mechanics every engine shares
 (`run_engine`) is the Python library `course/protocol`
-(`context_cup_protocol`). The runner and the engines both import it; engines
-and drivers may import it and nothing else from `course/`.
+(`context_cup_protocol`). The runner and the Python engines import it. The
+same package is also `@context-cup/protocol`, its TypeScript twin for the
+TypeScript engines: the models, the view (which reads every payload as the
+Python one does), `runEngine`, and the bundler. Engines and drivers may
+import it and nothing else from `course/`.
 
 ## Roles
 
@@ -36,7 +39,7 @@ The course never calls a model. The driver never calls an environment tool.
 
 ## Driver package
 
-A driver is a pnpm workspace package with up to three executables. An engine
+A driver is a pnpm workspace package with up to four scripts. An engine
 is a driver that other drivers build on; the two have the same shape and the
 tooling treats them alike. The pattern is Dev Container Features: a manifest,
 an install script, and a dependency order the tooling honours. An engine
@@ -44,12 +47,15 @@ defines the `ctx` its drivers' `run` receives: the Python engine hands over
 the payloads with a provider-neutral view of them; the Pydantic engine takes
 back Pydantic AI capabilities and runs the agent itself; the LiteLLM engine
 hands over the conversation as litellm chat messages with a litellm handle
-for the call. [drivers.md](drivers.md) and each engine's README have the
-details.
+for the call. The TypeScript engine and the AI SDK engine are the Python and
+LiteLLM engines' shapes in TypeScript, the second with the AI SDK's messages
+and an AI SDK handle. [drivers.md](drivers.md) and each engine's README have
+the details.
 
 ```
-drivers/base_truncate/
+drivers/base_python/
   package.json
+  build.sh       optional  runs once per suite run on the host, before any trial
   setup.sh       optional  runs once per trial, after the parent's setup.sh
   run.sh         optional  runs once per turn: run.sh <input.json> <output.json>
   teardown.sh    optional  runs once per trial, before the parent's teardown.sh
@@ -62,6 +68,13 @@ engines/python/
   setup.sh       a venv with the protocol library and the engine; no SDKs
   run.sh         exec .venv/bin/python -m context_cup_engine --driver "$CC_DRIVER_DIR" \
                    --input "$1" --output "$2"
+
+engines/typescript/
+  package.json   { "name": "@context-cup/engine-typescript", … }
+  build.sh       bundle the engine, the leaf's driver.ts, and their npm packages
+                   into $CC_DRIVER_DIR/bundle/turn.mjs
+  run.sh         exec "$CC_NODE" "$CC_DRIVER_DIR/bundle/turn.mjs" --driver "$CC_DRIVER_DIR" \
+                   --input "$1" --output "$2"
 ```
 
 `package.json` carries the protocol fields under `contextCup`:
@@ -69,7 +82,7 @@ engines/python/
 ```json
 {
   "private": true,
-  "name": "@context-cup-drivers/base_truncate",
+  "name": "@context-cup-drivers/base_python",
   "version": "0.1.0",
   "description": "Clip any tool result over max_bytes.",
   "contextCup": {
@@ -97,17 +110,23 @@ engines/python/
   it.
 - Ordinary `dependencies` and `scripts` are for the host side only:
   `pnpm install` never runs inside a trial container, so anything the driver
-  needs at run time is installed by `setup.sh`.
+  needs at run time is installed by `setup.sh`, or bundled on the host by
+  `build.sh` (how the TypeScript engines ship a driver's npm packages).
 
-**Resolution, root to leaf.** Given the chain `[engine-python, base_truncate]`:
+**Resolution, root to leaf.** Given the chain `[engine-python, base_python]`:
 
 | phase    | what runs                                                   |
 | -------- | ----------------------------------------------------------- |
+| build    | every `build.sh` in the chain, root first, on the host      |
 | setup    | every `setup.sh` in the chain, root first                   |
 | turn     | the `run.sh` nearest the leaf; parents' run.sh are shadowed |
 | teardown | every `teardown.sh` in the chain, leaf first                |
 
-Scripts run inside the trial container with the working directory set to
+`bin/suite` runs the build phase once per run, before the first trial,
+from each package's directory with `CC_DRIVER_DIR`, `CC_SELF_DIR`, and
+`CC_CHAIN` set to host paths; a failed `build.sh` stops the run. What it
+leaves in a package directory is uploaded with the package. The other
+scripts run inside the trial container with the working directory set to
 their own package directory. `setup.sh` runs as root, so it can install
 what it needs. `run.sh` and `teardown.sh` run as `ccdriver`, an
 unprivileged user the runner creates in every container, with `HOME` set to
@@ -123,6 +142,7 @@ Scripts see:
 | `CC_STATE_DIR`    | the driver-private directory that survives across turns                        |
 | `CC_TRIAL_ID`     | the trial id                                                                   |
 | `CC_PYTHON`       | setup.sh only: the runner's own Python 3.12, a uv venv; engines make their own |
+| `CC_NODE`         | the runner's `node` (24), the same binary the proxy runs on                    |
 | `CC_PROTOCOL_DIR` | setup.sh only: the uploaded protocol library to install                        |
 | `CC_TURN_DIR`     | run.sh only: the current turn directory                                        |
 
@@ -131,6 +151,11 @@ pinned `uv`, puts it on `PATH` for every script with `UV_CACHE_DIR` and
 `UV_PYTHON_INSTALL_DIR` shared, and never uses the task image's interpreter.
 An engine's `setup.sh` does the same: `uv venv --python 3.12` into its own
 directory, then `uv pip install` into that venv.
+
+Node is uploaded the same way: the runner puts a pinned `node` 24 binary
+for the container's architecture and libc at `CC_NODE` before any
+`setup.sh`, and never uses the task image's own. It comes without npm; a
+TypeScript engine bundles on the host instead.
 
 A `setup.sh` that fails ends the trial before the first turn. A `run.sh`
 that exits non-zero fails the turn (see retries below).
@@ -243,7 +268,7 @@ calls it made.
   "response": { …the provider's response object, verbatim… },
   "context_payload": { …the request the driver sent, if it differs from the input… },
   "state": { "summaries": 2 },
-  "driver": { "name": "base_truncate", "engine": "python", "version": "0.1.0" }
+  "driver": { "name": "base_python", "engine": "python", "version": "0.1.0" }
 }
 ```
 
@@ -258,15 +283,17 @@ calls it made.
 - Anything else a driver wants remembered, such as private tool round trips
   it answered itself, belongs in `state`.
 
-A non-zero exit, a missing `output.json`, a missing `response`, or a reply
-with neither text nor tool calls fails the turn. The runner retries a failed turn up to
-`CC_TURN_RETRIES` times (default 3) with a fresh turn id, then ends the
-trial with an error that harbor records: the trial is unscored, not scored
-zero. Failed attempts are not turns. An empty reply is also discarded: its
-calls stay in the proxy's call log and in `model_call` (flagged
-`discarded`) but are left out of the trial's tokens and cost, since a
-blank response is a provider hiccup, not the driver's spend. Other failed
-attempts count toward cost.
+A non-zero exit, a missing `output.json`, or a missing `response` fails the
+turn. The runner retries a failed turn up to `CC_TURN_RETRIES` times
+(default 3) with a fresh turn id, then ends the trial with an error that
+harbor records: the trial is unscored, not scored zero. Failed attempts are
+not turns. A reply with neither text nor tool calls is discarded and asked
+again with a fresh turn id; those re-asks come from a budget for the whole
+trial, `CC_EMPTY_RETRIES` (default 3), and running out ends the trial with
+`agent_error`. A discarded reply's calls stay in the proxy's call log and in
+`model_call` (flagged `discarded`) but are left out of the trial's tokens
+and cost, since a blank response is a provider hiccup, not the driver's
+spend. Other failed attempts count toward cost.
 
 `target` is the model the course builds the initial payload for and labels
 the run with. A driver may call whatever models it likes, for the turn's
@@ -300,7 +327,10 @@ The proxy writes one line per call to `calls.jsonl` in the trial's agent log
 directory (`/logs/agent`, which harbor copies to `<trial>/agent/`):
 trial, turn, sequence, purpose, provider, host, model, wire, usage (input
 including cached, cached input, cache writes, output, reasoning output),
-duration, status, and service tier. The runner tells the proxy which turn is
+duration, status, and service tier. The proxy retries a rate limit or a
+failing server itself before the caller sees anything, and each attempt it
+retried gets its own line with the error, since the provider may have billed
+it. The runner tells the proxy which turn is
 current before each attempt, so calls are attributed to turns; an agent
 driver's calls carry no turn. A driver labels an auxiliary call by sending
 the header `x-cc-purpose` with it (any SDK can add a header), and anything
@@ -366,6 +396,7 @@ Settings reach the agent class through `--agent-env`:
 | `CC_HOST_DRIVER_CHAIN` | host paths of every package in the chain, root to leaf, colon separated (the suite resolves `extends`). harbor layers these values over every exec the agent runs, so the container-side list travels under `CC_DRIVER_CHAIN` instead |
 | `CC_TARGET_JSON`       | the `target` object from input.json, as JSON                                                                                                                                                                                          |
 | `CC_TURN_RETRIES`      | optional, default 3                                                                                                                                                                                                                   |
+| `CC_EMPTY_RETRIES`     | optional, default 3: re-asks after an empty reply, across the whole trial                                                                                                                                                             |
 | `CC_MAX_STEPS`         | optional cap on turns, default per benchmark                                                                                                                                                                                          |
 | `CC_SAVE_BODIES`       | optional; `1` has the proxy keep every request and response body                                                                                                                                                                      |
 
@@ -377,11 +408,13 @@ proxy.
 
 ## Naming
 
-Drivers shipped with the course are prefixed `base_`, one or two per lane:
-`base_passthrough` sends the context payload unchanged and `base_truncate`
-clips oversized tool results (Python engine), `base_pydantic` runs Pydantic
-AI with no strategy (Pydantic engine), `base_litellm` trims with LiteLLM
-(LiteLLM engine), and `base_codex` is OpenAI's Codex CLI (agent).
+Drivers shipped with the course are prefixed `base_`, one or two per lane.
+`base_passthrough` sends the context payload unchanged (Python engine).
+`base_python`, `base_litellm`, `base_typescript`, and `base_aisdk` all run
+the same strategy, clipping any tool result over `max_bytes`, one per lane
+(Python, LiteLLM, TypeScript, and AI SDK engines), so the lanes can be
+compared on it. `base_pydantic` runs Pydantic AI with no strategy (Pydantic
+engine), and `base_codex` is OpenAI's Codex CLI (agent).
 Contestants pick any other prefix.
 
 ## Agent drivers

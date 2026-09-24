@@ -165,7 +165,11 @@ class MemoryEnvironment:
         stop_on_message: str | None = "final_message",
         stop_tools: set[str] | None = None,
         opening: list[Utterance] | None = None,
+        fail_at_max_steps: bool = False,
+        raise_on_tool_calls: Exception | None = None,
     ):
+        self.fail_at_max_steps = fail_at_max_steps
+        self.raise_on_tool_calls = raise_on_tool_calls
         self.tool_output = tool_output
         self.stop_on_message = stop_on_message
         self.stop_tools = stop_tools or set()
@@ -190,6 +194,8 @@ class MemoryEnvironment:
         self, tool_calls: list[ToolCallRef], text: str | None
     ) -> StepResult:
         self.received.append(tool_calls)
+        if self.raise_on_tool_calls is not None:
+            raise self.raise_on_tool_calls
         results = [
             ToolResult(call.id, f"{self.tool_output}:{call.name}")
             for call in tool_calls

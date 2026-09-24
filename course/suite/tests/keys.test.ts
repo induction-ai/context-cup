@@ -14,8 +14,31 @@ describe("suite files", () => {
       },
     });
     expect(file.concurrency).toBe(8);
-    expect(file.timeout_minutes).toBe(40);
+    // Unset, harbor keeps each task's own timeout, and --count defaults to 1.
+    expect(file.timeout_minutes).toBeUndefined();
+    expect(file.count).toBeUndefined();
     expect(file.tasks.banking_047?.runner).toBe("tau3");
+  });
+
+  it("rejects a misspelt key inside a task", async () => {
+    expect(() =>
+      parseSuiteFile({
+        tasks: {
+          banking_047: {
+            runner: "tau3",
+            tau3: { customer: "banking_047" },
+            timeout_minute: 40,
+          },
+        },
+      })
+    ).toThrow();
+    expect(() =>
+      parseSuiteFile({
+        tasks: {
+          banking_047: { runner: "tau3", tau3: { customr: "banking_047" } },
+        },
+      })
+    ).toThrow();
   });
 
   it("is only tasks and how hard to run them: drivers and targets are launch choices", async () => {

@@ -1,7 +1,8 @@
 import { createWriteStream } from "node:fs";
-import { arch } from "node:os";
+import { arch, availableParallelism } from "node:os";
 import path from "node:path";
 import { execa } from "execa";
+import { jobTimeoutMs } from "./budget.ts";
 import type { SuiteRun } from "./expand.ts";
 import type { HarborCommand } from "./harbor.ts";
 
@@ -18,6 +19,7 @@ export type LaunchRequest = {
   log_file: string;
   verbose: boolean;
   prefix: string;
+  report: (line: string) => void;
 };
 
 /** How commands start; swapped for a fake in tests. */
@@ -50,6 +52,16 @@ export type SchedulerOptions = {
   /** Runs after a job's process exits, before its budget is released. */
   on_finished?: (entry: QueueEntry, result: JobResult) => Promise<void>;
   on_started?: (entry: QueueEntry) => Promise<void>;
+  /** Runs after a timed-out or cancelled job's process group is gone: the
+   *  cleanup its own process never got to do (e.g. deleting the Daytona
+   *  sandboxes it made). A failure is added to the job's error. */
+  on_killed?: (
+    entry: QueueEntry,
+    reason: "timed_out" | "cancelled"
+  ) => Promise<void>;
+  /** Why no further job may start, once there is a reason (e.g. results can
+   *  no longer be stored, so every later job would be lost the same way). */
+  halted?: () => string | null;
   kill_grace_ms?: number;
 };
 
@@ -64,30 +76,38 @@ export type JobResult = {
   log_file: string;
 };
 
-/** Local docker jobs run amd64 images under emulation on arm64, so the
- *  default cap is small. SUITE_DOCKER_COUNT overrides. */
+/** Max concurrent docker jobs on a native (x86) host. Each job's environments
+ *  are multi-GB task images, so even a big box doesn't stack more than this
+ *  (disk, not cores, is the real ceiling). */
+const MAX_NATIVE_DOCKER_JOBS = 4;
+
+/** Max concurrent docker jobs on an arm64 host, where the amd64 task images
+ *  run under emulation. Each emulated environment start is slow, and too many
+ *  at once miss harbor's environment start timeout. */
+const MAX_EMULATED_DOCKER_JOBS = 2;
+
+/** Max harbor jobs running at once on the docker env, whatever each job's
+ *  own trial concurrency; daytona has no local limit. SUITE_DOCKER_COUNT
+ *  overrides when it is a positive integer. Otherwise the cap follows the
+ *  architecture, clamped to the host's CPUs so a 2-vCPU runner doesn't start
+ *  four heavy images at once. */
 export function dockerJobCap(
   hostArch: string = arch(),
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  hostCpus: number = availableParallelism()
 ): number {
   const raw = Number(env.SUITE_DOCKER_COUNT);
-  if (Number.isFinite(raw) && raw > 0) return Math.floor(raw);
-  return hostArch === "arm64" ? 2 : 4;
-}
-
-/** Wall clock for one job: the per-trial budget plus slack, once per wave of
- *  sequential attempts. */
-export function jobTimeoutMs(run: SuiteRun, concurrency_use: number): number {
-  const per_wave_min = run.timeout_minutes + 30;
-  const waves = Math.max(
-    1,
-    Math.ceil(run.count / Math.max(1, concurrency_use))
-  );
-  return per_wave_min * waves * 60_000;
+  if (Number.isInteger(raw) && raw > 0) return raw;
+  const cap =
+    hostArch === "arm64" ? MAX_EMULATED_DOCKER_JOBS : MAX_NATIVE_DOCKER_JOBS;
+  return Math.max(1, Math.min(cap, hostCpus));
 }
 
 export const execaLauncher: Launcher = (request) => {
-  const subprocess = execa(request.command, {
+  // exec: the scheduler's SIGTERM reaches the command itself (harbor's
+  // launcher), not a shell in front of it. Only here, where a shell runs the
+  // command; the command as recorded and printed stays pasteable.
+  const subprocess = execa(`exec ${request.command}`, {
     shell: true,
     env: request.env,
     extendEnv: true,
@@ -108,15 +128,22 @@ export const execaLauncher: Launcher = (request) => {
     signal: (signal) => {
       if (subprocess.pid === undefined) return;
       try {
-        // Harbor spawns its own children; kill the whole group.
+        // SIGTERM goes to the command alone (it execs harbor), so harbor gets
+        // exactly one and runs its own teardown; SIGKILL, after the grace
+        // period, takes the whole group harbor started.
         process.kill(
-          process.platform !== "win32" ? -subprocess.pid : subprocess.pid,
+          signal === "SIGKILL" && process.platform !== "win32"
+            ? -subprocess.pid
+            : subprocess.pid,
           signal
         );
       } catch (err) {
         if (err instanceof Error && "code" in err && err.code === "ESRCH")
           return;
-        throw err;
+        // From a timer or an abort listener, a throw would crash the suite.
+        request.report(
+          `${request.prefix} could not send ${signal}: ${String(err)}`
+        );
       }
     },
   };
@@ -137,6 +164,7 @@ export async function processQueue(
   const running = new Set<Promise<void>>();
   const results: JobResult[] = [];
   const cancelled = () => options.signal?.aborted ?? false;
+  const halted = () => options.halted?.() ?? null;
 
   let free = options.suite_concurrency;
   let docker_free = options.docker_jobs;
@@ -202,6 +230,7 @@ export async function processQueue(
         log_file,
         verbose: options.verbose ?? false,
         prefix,
+        report,
       });
       const kill = () => launched.signal("SIGKILL");
       stops.add(kill);
@@ -210,38 +239,64 @@ export async function processQueue(
       let terminating: Promise<void> | undefined;
       const terminate = () => {
         if (terminating) return;
+        clearTimeout(timer);
         launched.signal("SIGTERM");
         terminating = new Promise((resolve) =>
           setTimeout(() => {
             kill();
             resolve();
-          }, options.kill_grace_ms ?? 10_000).unref()
+          }, options.kill_grace_ms ?? 10_000)
         );
       };
       const cancel = () => {
+        if (terminating) return;
         was_cancelled = true;
         terminate();
       };
       const timeout_ms = jobTimeoutMs(entry.run, entry.concurrency_use);
-      const timer = setTimeout(() => {
-        timed_out = true;
-        terminate();
-      }, timeout_ms);
+      const timer =
+        timeout_ms > 0
+          ? setTimeout(() => {
+              timed_out = true;
+              terminate();
+            }, timeout_ms)
+          : undefined;
       options.signal?.addEventListener("abort", cancel, { once: true });
       try {
         const outcome = await launched.done;
         exit_code = outcome.exit_code;
+        // The command can exit before children that closed their output
+        // pipes; hold the job (and its budget) until the group is killed.
+        await terminating;
       } finally {
         clearTimeout(timer);
         options.signal?.removeEventListener("abort", cancel);
         stops.delete(kill);
       }
       if (timed_out) {
-        error = `timed out after ${Math.round(timeout_ms / 60_000)}m; killed`;
+        const waves = Math.max(
+          1,
+          Math.ceil(entry.run.count / Math.max(1, entry.concurrency_use))
+        );
+        error =
+          `timed out after ${Math.round(timeout_ms / 60_000)}m ` +
+          `(${entry.run.count} attempts / ${entry.concurrency_use} concurrent → ${waves} wave(s)); killed`;
         exit_code = null;
       } else if (was_cancelled) {
         error = "cancelled";
         exit_code = null;
+      }
+      if (timed_out || was_cancelled) {
+        report(`${prefix} ${error}`);
+        try {
+          await options.on_killed?.(
+            entry,
+            timed_out ? "timed_out" : "cancelled"
+          );
+        } catch (err) {
+          error += `; ${timed_out ? "timeout" : "cancellation"} cleanup failed: ${err instanceof Error ? err.message : String(err)}`;
+          report(`${prefix} ${error}`);
+        }
       }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -275,7 +330,7 @@ export async function processQueue(
   try {
     while (pending.length > 0 || running.size > 0) {
       let admitted = false;
-      if (!cancelled()) {
+      if (!cancelled() && halted() === null) {
         for (let i = 0; i < pending.length; i++) {
           const entry = pending[i]!;
           if (!fits(entry)) continue;
@@ -293,6 +348,13 @@ export async function processQueue(
       if (running.size === 0) {
         if (cancelled()) {
           report(`stopped: ${pending.length} job(s) not run`);
+          break;
+        }
+        const reason = halted();
+        if (reason !== null) {
+          report(
+            `stopping the suite: ${reason}; ${pending.length} job(s) not run`
+          );
           break;
         }
         if (pending.length > 0 && !admitted) {

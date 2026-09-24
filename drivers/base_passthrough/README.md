@@ -18,5 +18,5 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium
 **Make your own**: copy the directory, rename the package in
 `package.json`, and edit `ctx.context_payload` in `driver.py` before the
 call. For one strategy across providers, start from
-[`base_truncate`](../base_truncate) instead, which works through the
+[`base_python`](../base_python) instead, which works through the
 provider-neutral view.

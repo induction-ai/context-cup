@@ -14,7 +14,6 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, cast
 
 import httpx
@@ -27,6 +26,8 @@ from context_cup_protocol import (
     ProviderInfo,
     Target,
     TurnInput,
+    load_snapshot,
+    save_snapshot,
     view,
 )
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
@@ -42,10 +43,10 @@ ROUTE: dict[Provider, str] = {
 # Appended to `<proxy>/t/<trial>/<provider>`; litellm adds Anthropic's /v1 itself.
 VERSION: dict[Provider, str] = {"openai": "/v1", "anthropic": "", "gemini": "/v1beta"}
 
-CONTEXT_FILE = "litellm_context.json"
+CONTEXT_SNAPSHOT = "litellm_context"
 """The engine's own bookkeeping in the state dir: the driver's context messages
-and how many conversation messages they account for. `ctx.state` stays the
-driver's."""
+and how many conversation messages they account for, saved per accepted turn
+(see `context_cup_protocol.snapshot`). `ctx.state` stays the driver's."""
 
 TRANSPORT: httpx.BaseTransport | None = None
 """Tests replace the network with a mock transport here."""
@@ -233,8 +234,8 @@ class LitellmContext:
       are built from; informational.
 
     The engine's own bookkeeping (`context_messages` and `seen`) is kept in
-    `dirs.state/litellm_context.json`. engines/litellm/README.md has the full
-    table and examples."""
+    `dirs.state/litellm_context/`, one file per accepted turn.
+    engines/litellm/README.md has the full table and examples."""
 
     turn: TurnInput
     config: dict[str, Any] = field(default_factory=dict)
@@ -268,11 +269,10 @@ class LitellmContext:
             return cast(list[AllMessageValues], chat), conversation
 
         self.original_messages, _ = messages(self.turn.original_payload)
-        saved = Path(self.turn.dirs.state) / CONTEXT_FILE
-        if self.turn.first or not saved.exists():
+        kept = load_snapshot(self.turn, CONTEXT_SNAPSHOT)
+        if kept is None:
             self.context_messages, conversation = messages(self.context_payload)
         else:
-            kept = json.loads(saved.read_text())
             new, conversation = messages(self.context_payload, int(kept["seen"]))
             self.context_messages = [*kept["messages"], *new]
         self.seen = len(conversation.messages)
@@ -313,7 +313,10 @@ def finish(ctx: LitellmContext, result: Any) -> Payload:
             f"the turn's response must come from the run's provider "
             f"({ctx.provider.name}), not {call.provider}"
         )
-    saved = Path(ctx.dirs.state) / CONTEXT_FILE
-    saved.parent.mkdir(parents=True, exist_ok=True)
-    saved.write_text(json.dumps({"seen": ctx.seen, "messages": ctx.context_messages}))
+    # Read by the next turn only if the runner accepts this one.
+    save_snapshot(
+        ctx.turn,
+        CONTEXT_SNAPSHOT,
+        {"seen": ctx.seen, "messages": ctx.context_messages},
+    )
     return copy.deepcopy(call.raw)

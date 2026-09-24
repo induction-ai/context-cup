@@ -1,21 +1,25 @@
-"""The runner and the engines share one Python implementation of the
-protocol (course/protocol), so what is left to check is the boundary with
-TypeScript, and one runner-built input.json surviving the trip through JSON."""
+"""The runner and the Python engines share one implementation of the protocol
+(course/protocol), and the TypeScript engines share its twin in the same
+package, so what is left to check is the boundary between the languages, and
+one runner-built input.json surviving the trip through JSON."""
 
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 from pathlib import Path
 from typing import get_args
 
 import context_cup_protocol as protocol
 import context_cup_runner.protocol as runner_protocol
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def ts_list(name: str) -> set[str]:
-    source = (ROOT / "course/shared/src/provider.ts").read_text()
+def ts_list(name: str, file: str = "course/shared/src/provider.ts") -> set[str]:
+    source = (ROOT / file).read_text()
     match = re.search(rf"{name} = (\[.*?\]) as const", source, re.DOTALL)
     assert match, name
     return set(re.findall(r'"([^"]+)"', match.group(1)))
@@ -24,6 +28,9 @@ def ts_list(name: str) -> set[str]:
 def test_typescript_and_python_agree_on_providers_and_wires() -> None:
     assert ts_list("PROVIDERS") == set(get_args(protocol.Provider))
     assert ts_list("WIRES") == set(get_args(protocol.Wire))
+    assert ts_list("PROVIDERS", "course/protocol/src/models.ts") == set(
+        get_args(protocol.Provider)
+    )
 
 
 def test_a_runner_built_input_is_what_the_engine_reads() -> None:
@@ -55,3 +62,41 @@ def test_a_runner_built_input_is_what_the_engine_reads() -> None:
     parsed = protocol.TurnInput.model_validate_json(turn.model_dump_json())
     assert parsed == turn
     assert parsed.provider.client.base_url == "http://proxy.test:1/t/t__1/openai/v1"
+
+
+def test_the_typescript_view_reads_payloads_as_the_python_one_does() -> None:
+    tsx = ROOT / "node_modules/.bin/tsx"
+    if not tsx.exists():
+        pytest.skip("pnpm install has not run")
+    fixtures = json.loads(
+        (ROOT / "course/protocol/tests/view_fixtures.json").read_text()
+    )
+    # A structured Gemini result, which both views render as Python's json.dumps.
+    fixtures["gemini"]["contents"][4]["parts"][1]["functionResponse"]["response"] = {
+        "rows": [1, {"a": "é"}],
+        "ok": True,
+    }
+    out = subprocess.run(
+        [str(tsx), str(ROOT / "tests/view_dump.ts")],
+        input=json.dumps(fixtures),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    typescript = json.loads(out.stdout)
+    for provider, payload in fixtures.items():
+        conversation = protocol.view(provider, payload)
+        assert typescript[provider] == {
+            "system": conversation.system,
+            "tools": [t.model_dump() for t in conversation.tools],
+            "messages": [
+                {
+                    "role": m.role,
+                    "text": m.text,
+                    "toolCalls": [c.model_dump() for c in m.tool_calls],
+                    "toolCallId": m.tool_call_id,
+                    "opaque": m.opaque,
+                }
+                for m in conversation.messages
+            ],
+        }, provider

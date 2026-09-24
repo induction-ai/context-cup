@@ -52,6 +52,8 @@ const zTrialResult = z.object({
     })
     .nullable()
     .optional(),
+  started_at: z.string().nullable().optional(),
+  finished_at: z.string().nullable().optional(),
 });
 
 const zUsage = z.object({
@@ -172,9 +174,19 @@ export function readCallLog(file: string): CallRecord[] {
   if (!existsSync(file)) return [];
   const calls: CallRecord[] = [];
   const lines = readFileSync(file, "utf8").split("\n");
+  const last = lines.findLastIndex((line) => line.trim());
   for (const [index, line] of lines.entries()) {
     if (!line.trim()) continue;
-    const parsed = zCall.safeParse(JSON.parse(line));
+    let json: unknown;
+    try {
+      json = JSON.parse(line);
+    } catch (err) {
+      // A proxy killed mid-write leaves a partial last line; that call was
+      // never answered. Anywhere else, the file is corrupt.
+      if (index === last) break;
+      throw new Error(`${file}:${index + 1}: ${String(err)}`);
+    }
+    const parsed = zCall.safeParse(json);
     if (!parsed.success) {
       throw new Error(
         `${file}:${index + 1}: ${parsed.error.issues.map((i) => i.message).join("; ")}`
@@ -228,8 +240,36 @@ function readReward(
     const value = Number(readFileSync(rewardFile, "utf8").trim());
     if (Number.isFinite(value)) return value;
   }
-  const reward = result.verifier_result?.rewards?.reward;
-  return typeof reward === "number" ? reward : null;
+  // A verifier may report several named rewards; every benchmark here reports
+  // one, and "reward" is the name harbor gives it.
+  const rewards = result.verifier_result?.rewards;
+  if (!rewards) return null;
+  const reward = rewards.reward ?? Object.values(rewards)[0];
+  return typeof reward === "number" && Number.isFinite(reward) ? reward : null;
+}
+
+/** Milliseconds between two ISO timestamps, or null if either is missing or
+ *  unparseable, or the span is negative. */
+function spanMs(from?: string | null, to?: string | null): number | null {
+  if (!from || !to) return null;
+  const ms = Date.parse(to) - Date.parse(from);
+  return Number.isFinite(ms) && ms >= 0 ? ms : null;
+}
+
+/** Longest error kept: room for a failing command plus the stderr that
+ *  explains it. */
+const MAX_ERROR_LEN = 2000;
+
+/** Share of an over-long error kept from its start; the rest comes from its
+ *  end. Harbor's "Command failed … stderr: …" messages close with the reason,
+ *  so keeping only the head would drop it. */
+const ERROR_HEAD_FRACTION = 0.4;
+
+/** Both ends of an over-long error, without the middle. */
+export function clipError(full: string): string {
+  if (full.length <= MAX_ERROR_LEN) return full;
+  const head = Math.floor(MAX_ERROR_LEN * ERROR_HEAD_FRACTION);
+  return `${full.slice(0, head)}…${full.slice(head - MAX_ERROR_LEN)}`;
 }
 
 function readScoreReason(trialDir: string): string | null {
@@ -316,17 +356,14 @@ export function parseTrial(
       : counted.reduce((sum, c) => sum + (c.cost_cents ?? 0), 0);
   const exception = result.exception_info;
   const error = exception
-    ? `${exception.exception_type}: ${exception.exception_message}`.slice(
-        0,
-        2000
-      )
+    ? clipError(`${exception.exception_type}: ${exception.exception_message}`)
     : null;
-  const started = result.agent_execution?.started_at;
-  const finished = result.agent_execution?.finished_at;
+  // The agent's own span, else the whole trial's.
   const duration_ms =
-    started && finished
-      ? new Date(finished).getTime() - new Date(started).getTime()
-      : null;
+    spanMs(
+      result.agent_execution?.started_at,
+      result.agent_execution?.finished_at
+    ) ?? spanMs(result.started_at, result.finished_at);
   return {
     trial_name: result.trial_name,
     trial_dir: trialDir,
@@ -341,6 +378,54 @@ export function parseTrial(
     calls,
     cost_cents,
   };
+}
+
+/** A trial that has an error and nothing else to record. */
+export function erroredTrial(
+  trial_name: string,
+  trial_dir: string,
+  error: string
+): ParsedTrial {
+  return {
+    trial_name,
+    trial_dir,
+    reward: null,
+    score_reason: null,
+    error,
+    stop_reason: null,
+    turns: null,
+    env_tool_calls: null,
+    duration_ms: null,
+    totals: {
+      input: 0,
+      cached_input: 0,
+      cache_write_input: 0,
+      output: 0,
+      reasoning_output: 0,
+    },
+    calls: [],
+    cost_cents: null,
+  };
+}
+
+/** `trials` padded to `count` with errored placeholders, so a job whose
+ *  harbor left trials unrecorded shows every attempt it owed. */
+export function withMissingTrials(
+  trials: readonly ParsedTrial[],
+  count: number,
+  jobDir: string
+): ParsedTrial[] {
+  const missing = Math.max(0, count - trials.length);
+  return [
+    ...trials,
+    ...Array.from({ length: missing }, (_, i) =>
+      erroredTrial(
+        `missing_${i + 1}`,
+        jobDir,
+        `harbor recorded ${trials.length} of ${count} trial(s); this one left nothing`
+      )
+    ),
+  ];
 }
 
 /** Every trial of a harbor job, discovered from each trial's result.json.
@@ -358,7 +443,18 @@ export function parseJob(jobsDir: string, jobName: string): ParsedTrial[] {
       !existsSync(path.join(dir, "result.json"))
     )
       continue;
-    const parsed = parseTrial(dir);
+    // One unreadable trial is that trial's error, not the job's: the rest
+    // still count.
+    let parsed: ParsedTrial;
+    try {
+      parsed = parseTrial(dir);
+    } catch (err) {
+      parsed = erroredTrial(
+        name,
+        dir,
+        clipError(`ingest: ${err instanceof Error ? err.message : String(err)}`)
+      );
+    }
     seen.add(parsed.trial_name);
     trials.push(parsed);
   }
@@ -371,26 +467,13 @@ export function parseJob(jobsDir: string, jobName: string): ParsedTrial[] {
           for (const trial_name of names) {
             if (seen.has(trial_name)) continue;
             seen.add(trial_name);
-            trials.push({
-              trial_name,
-              trial_dir: path.join(jobDir, trial_name),
-              reward: null,
-              score_reason: null,
-              error: `${type}: no trial result written`,
-              stop_reason: null,
-              turns: null,
-              env_tool_calls: null,
-              duration_ms: null,
-              totals: {
-                input: 0,
-                cached_input: 0,
-                cache_write_input: 0,
-                output: 0,
-                reasoning_output: 0,
-              },
-              calls: [],
-              cost_cents: null,
-            });
+            trials.push(
+              erroredTrial(
+                trial_name,
+                path.join(jobDir, trial_name),
+                `${type}: no trial result written`
+              )
+            );
           }
         }
       }

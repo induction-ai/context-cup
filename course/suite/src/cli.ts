@@ -15,6 +15,14 @@ import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import { eq } from "drizzle-orm";
 import pino from "pino";
 import yargs from "yargs";
+import { buildDriver } from "./build.ts";
+import {
+  daytonaClient,
+  deleteSandboxes,
+  JOB_LABEL,
+  listSandboxes,
+  SUITE_LABEL,
+} from "./daytona.ts";
 import {
   expandSuite,
   interleave,
@@ -38,6 +46,7 @@ import {
   insertJob,
   markJobStarted,
   parseJob,
+  withMissingTrials,
   type ParsedTrial,
 } from "./ingest.ts";
 import { listSuiteKeys, loadSuiteFile } from "./keys.ts";
@@ -179,8 +188,8 @@ async function main(): Promise<void> {
     })
     .option("count", {
       type: "number",
-      default: 1,
-      describe: "Trials per task (harbor --n-attempts)",
+      describe:
+        "Trials per task (harbor --n-attempts); default the suite file’s count, else 1",
     })
     .option("task", {
       type: "string",
@@ -201,7 +210,7 @@ async function main(): Promise<void> {
     .option("log_dir", {
       type: "string",
       describe:
-        "Parent directory for this suite's output (default .temp/suites)",
+        "Parent directory for this suite’s output (default .temp/suites)",
     })
     .option("verbose", {
       type: "boolean",
@@ -220,7 +229,7 @@ async function main(): Promise<void> {
   const suite_key = argv.suite_key as string;
   const harbor_env = argv.harbor_env as HarborEnv;
   const { path: key_file, file } = loadSuiteFile(suite_key);
-  const count = argv.count;
+  const count = argv.count ?? file.count ?? 1;
   if (!Number.isInteger(count) || count < 1) {
     throw new Error("--count must be a positive integer");
   }
@@ -250,6 +259,9 @@ async function main(): Promise<void> {
   // The proxy runs inside every trial container (the runner uploads this
   // bundle), holds the keys there, and writes the trial's own calls.jsonl.
   const proxy_bundle = argv.dry_run ? undefined : await buildProxyBundle();
+  // Each build.sh in the driver's chain, on the host (a TypeScript driver is
+  // bundled here); the runner uploads what they leave in the package.
+  if (!argv.dry_run) await buildDriver(spec.driver_name);
 
   const warnings: string[] = [];
   const makeEntry = (run: SuiteRun): QueueEntry => {
@@ -319,7 +331,7 @@ async function main(): Promise<void> {
     `suite ${suite_id}: ${suite_key}, ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}) → ${path.relative(process.cwd(), suite_dir)}`
   );
 
-  prepareHarbor(report);
+  const harbor_sha = prepareHarbor(report);
   report(`results page: ${suiteUrl(suite_id)}`);
   const started_at = new Date();
   await withTransaction(async () => {
@@ -336,6 +348,7 @@ async function main(): Promise<void> {
         reasoningEffort: spec.target.reasoning_effort ?? null,
         count,
         gitSha: gitSha(),
+        harborSha: harbor_sha,
         ...githubRun(process.env),
         harborEnv: harbor_env,
         logDir: suite_dir,
@@ -358,13 +371,35 @@ async function main(): Promise<void> {
     })),
   });
 
+  // The first SIGINT or SIGTERM stops the run: running jobs are killed, their
+  // sandboxes deleted, and what finished is still ingested and reported.
+  // Later signals change nothing (the default handler would exit at once and
+  // orphan harbor's process groups); a hard deadline covers a stuck cleanup.
   const controller = new AbortController();
-  const stop = () => {
+  let stopped_by: number | null = null;
+  const stop = (code: number) => {
+    if (stopped_by !== null) return;
+    stopped_by = code;
     report("stopping: waiting for running jobs to be killed");
     controller.abort();
+    // Ten seconds for termination, sixty for sandbox cleanup, then reporting.
+    setTimeout(() => process.exit(code), 80_000).unref();
   };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  process.on("SIGINT", () => stop(130));
+  process.on("SIGTERM", () => stop(143));
+
+  /** Set by the first failure to store results. From then on no job starts:
+   *  every later one would be lost the same way, burning sandbox time on
+   *  results nobody can see. */
+  let store_failure: string | null = null;
+  const storing = async <T>(what: string, write: () => Promise<T>) => {
+    try {
+      return await write();
+    } catch (err) {
+      store_failure ??= `results can’t be stored (${what}: ${err instanceof Error ? err.message : String(err)})`;
+      throw err;
+    }
+  };
 
   // Every job's trials by task: a retry pass adds a job to the same task.
   const trialsByTask = new Map<string, ParsedTrial[]>();
@@ -382,9 +417,44 @@ async function main(): Promise<void> {
         await prepareMcpAuthForDaytona(toolathlonTasksDir(), report);
       }
       prepareJobDir(entry.command);
-      logger.info({ event: "job_start", job_id: entry.job_id });
-      await markJobStarted(entry.job_id, new Date());
+      logger.info({
+        event: "job_start",
+        job_id: entry.job_id,
+        task_name: entry.run.task_name,
+        runner: entry.run.runner,
+        driver: entry.run.driver_name,
+        target: entry.run.target_name,
+        provider: entry.run.target.provider,
+        model: entry.run.target.model,
+        count: entry.run.count,
+        concurrency_use: entry.concurrency_use,
+        command: entry.command.shell,
+      });
+      await storing("job start", () =>
+        markJobStarted(entry.job_id, new Date())
+      );
     },
+    // A killed harbor never deletes its own sandboxes; free the quota now
+    // rather than at the end of the suite.
+    on_killed: async (entry) => {
+      if (harbor_env !== "daytona") return;
+      const client = daytonaClient();
+      const sandboxes = await listSandboxes(client, {
+        labels: { [SUITE_LABEL]: suite_id, [JOB_LABEL]: entry.job_id },
+      });
+      if (sandboxes.length === 0) return;
+      const { deleted, failed } = await deleteSandboxes(
+        client,
+        sandboxes.map((s) => s.id)
+      );
+      report(`[${entry.job_id}] deleted ${deleted.length} Daytona sandbox(es)`);
+      if (failed.size > 0) {
+        throw new Error(
+          `${failed.size} Daytona sandbox(es) not deleted: ${[...failed].map(([id, why]) => `${id}: ${why}`).join("; ")}`
+        );
+      }
+    },
+    halted: () => store_failure,
     on_finished: async (entry, result) => {
       // A trial that died early can leave partial artifacts; a parse failure
       // must still close the job out as failed rather than leave it running.
@@ -408,27 +478,42 @@ async function main(): Promise<void> {
           message,
         });
       }
+      // Every trial the job owed gets a row: one harbor left nothing for is
+      // an errored placeholder, and a clean exit that recorded fewer than it
+      // owed is a failed job.
+      const recorded = trials.length;
+      trials = withMissingTrials(
+        trials,
+        entry.run.count,
+        path.join(entry.command.jobs_dir, entry.command.job_name)
+      );
+      let short: string | undefined;
+      if (result.ok && recorded < entry.run.count) {
+        short = `harbor recorded ${recorded} of ${entry.run.count} trial(s)`;
+        result = { ...result, ok: false, error: short };
+      }
       logger.info({
         event: "job_finish",
         job_id: entry.job_id,
         result,
         trials,
       });
-      await ingestJob(suite_id, entry.job_id, result, trials);
+      // Before storing them: trials read from disk belong in results.json
+      // even when the database has gone away.
       trialsByTask.set(entry.run.task_name, [
         ...(trialsByTask.get(entry.run.task_name) ?? []),
         ...trials,
       ]);
+      await storing("ingest", () =>
+        ingestJob(suite_id, entry.job_id, result, trials)
+      );
       const cell = summarizeCell(entry.run, trials);
       if (parse_error) {
         // The row now says failed; the scheduler must too (console, exit
         // code, results.json), so the failure keeps bubbling.
         throw new Error(`ingest: ${parse_error.split("\n")[0]}`);
       }
-      if (result.ok && trials.length === 0) {
-        // harbor exited cleanly but left nothing to score.
-        throw new Error("no trials recorded");
-      }
+      if (short) throw new Error(short);
       const errored = trials.filter((t) => t.error);
       report(
         `[${entry.job_id}] ${trials.length} trial(s): reward ${cell.mean_reward?.toFixed(2) ?? "-"}, cost ${cell.mean_cost_cents?.toFixed(1) ?? "-"}¢` +
@@ -449,7 +534,8 @@ async function main(): Promise<void> {
       ])
     );
   for (let pass = 1; pass <= retry_errors; pass++) {
-    if (controller.signal.aborted) break;
+    // Once results can't be stored, a retry would be lost the same way.
+    if (controller.signal.aborted || store_failure !== null) break;
     const owed = shortfallRuns(runs, doneByTask());
     const shortfall = totalCount(owed);
     if (shortfall === 0) break;
@@ -463,16 +549,18 @@ async function main(): Promise<void> {
       `\nretry_errors: pass ${pass}/${retry_errors}, retrying ${shortfall} of ${expected_trials} trial(s) that did not finish`
     );
     const retries = interleave(owed).map(makeEntry);
-    await withTransaction(() => insertJobs(retries, pass));
+    try {
+      await storing("retry jobs", () =>
+        withTransaction(() => insertJobs(retries, pass))
+      );
+    } catch {
+      break; // store_failure says why, after the results files are written
+    }
     results.push(...(await processQueue(retries, queueOptions)));
   }
   const unfinished = totalCount(shortfallRuns(runs, doneByTask()));
 
   const finished_at = new Date();
-  await getRawDatabase()
-    .update(suiteTable)
-    .set({ finishedAt: finished_at })
-    .where(eq(suiteTable.id, suite_id));
   const cells: CellResult[] = runs
     .map((run) => summarizeCell(run, trialsByTask.get(run.task_name) ?? []))
     .sort((a, b) => a.task_name.localeCompare(b.task_name));
@@ -486,6 +574,7 @@ async function main(): Promise<void> {
     started_at: started_at.toISOString(),
     finished_at: finished_at.toISOString(),
     git_sha: gitSha(),
+    harbor_sha,
     harbor_env,
     retry_errors,
     expected_trials,
@@ -496,6 +585,19 @@ async function main(): Promise<void> {
   writeResults(path.join(suite_dir, "results.json"), results_out);
   const table = `${resultsHeader(results_out)}\n${resultsTable(cells)}`;
   writeFileSync(path.join(suite_dir, "results.txt"), table + "\n");
+  // After the files, so a database that has gone away can't cost the run its
+  // results on disk.
+  try {
+    await getRawDatabase()
+      .update(suiteTable)
+      .set({ finishedAt: finished_at })
+      .where(eq(suiteTable.id, suite_id));
+  } catch (err) {
+    console.error(
+      `could not mark the suite finished: ${err instanceof Error ? err.message : String(err)}`
+    );
+    process.exitCode = 1;
+  }
   console.log("\n" + table);
   console.log(
     `\nresults: ${path.relative(process.cwd(), path.join(suite_dir, "results.json"))}\n         ${suiteUrl(suite_id)}`
@@ -523,6 +625,13 @@ async function main(): Promise<void> {
   } else if (failed > 0 && retry_errors === 0) {
     process.exitCode = 1;
   }
+  if (store_failure !== null) {
+    console.log(`stopped early: ${store_failure}`);
+    process.exitCode = 1;
+  }
+  // Stopped by a signal: the shell's convention (130 for SIGINT, 143 for
+  // SIGTERM) says so.
+  if (stopped_by !== null) process.exitCode = stopped_by;
 
   async function insertJobs(
     jobs: readonly QueueEntry[],

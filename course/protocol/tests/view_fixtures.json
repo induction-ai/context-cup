@@ -1,0 +1,312 @@
+{
+  "openai": {
+    "model": "gpt-5.5",
+    "instructions": "You are a bank agent.",
+    "input": [
+      {
+        "role": "assistant",
+        "content": "Hi! How can I help?"
+      },
+      {
+        "role": "user",
+        "content": "What's my balance?"
+      },
+      {
+        "type": "reasoning",
+        "id": "rs_1",
+        "summary": [],
+        "encrypted_content": "enc=="
+      },
+      {
+        "type": "function_call",
+        "id": "fc_1",
+        "call_id": "call_1",
+        "name": "get_balance",
+        "arguments": "{\"acct\":\"A-1\"}",
+        "status": "completed"
+      },
+      {
+        "type": "function_call",
+        "id": "fc_2",
+        "call_id": "call_2",
+        "name": "get_limits",
+        "arguments": "{}",
+        "status": "completed"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_1",
+        "output": "balance 12 USD"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_2",
+        "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "type": "reasoning",
+        "id": "rs_2",
+        "summary": [],
+        "encrypted_content": "enc2=="
+      },
+      {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "You have 12 USD.",
+            "annotations": []
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Thanks"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "name": "get_balance",
+        "description": "Balance",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "acct": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "type": "web_search"
+      }
+    ],
+    "reasoning": {
+      "effort": "medium"
+    },
+    "store": false,
+    "include": ["reasoning.encrypted_content"]
+  },
+  "anthropic": {
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 16384,
+    "system": [
+      {
+        "type": "text",
+        "text": "You are a bank agent.",
+        "cache_control": {
+          "type": "ephemeral"
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "(Start of conversation)"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hi! How can I help?"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "What's my balance?"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "look it up",
+            "signature": "sig=="
+          },
+          {
+            "type": "text",
+            "text": "Checking."
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_1",
+            "name": "get_balance",
+            "input": {
+              "acct": "A-1"
+            }
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_2",
+            "name": "get_limits",
+            "input": {}
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_1",
+            "content": "balance 12 USD",
+            "cache_control": {
+              "type": "ephemeral"
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_2",
+            "content": [
+              {
+                "type": "text",
+                "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_balance",
+        "description": "Balance",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "acct": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "type": "web_search_20250305",
+        "name": "web_search"
+      }
+    ],
+    "thinking": {
+      "type": "enabled",
+      "budget_tokens": 8192
+    }
+  },
+  "gemini": {
+    "model": "gemini-3.1-pro",
+    "systemInstruction": {
+      "parts": [
+        {
+          "text": "You are a bank agent."
+        }
+      ]
+    },
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "(Start of conversation)"
+          }
+        ]
+      },
+      {
+        "role": "model",
+        "parts": [
+          {
+            "text": "Hi! How can I help?"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "What's my balance?"
+          }
+        ]
+      },
+      {
+        "role": "model",
+        "parts": [
+          {
+            "text": "planning",
+            "thought": true
+          },
+          {
+            "functionCall": {
+              "name": "get_balance",
+              "args": {
+                "acct": "A-1"
+              }
+            },
+            "thoughtSignature": "sig=="
+          },
+          {
+            "functionCall": {
+              "name": "get_limits",
+              "args": {}
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "functionResponse": {
+              "name": "get_balance",
+              "response": {
+                "result": "balance 12 USD"
+              }
+            }
+          },
+          {
+            "functionResponse": {
+              "name": "get_limits",
+              "response": {
+                "result": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "functionDeclarations": [
+          {
+            "name": "get_balance",
+            "description": "Balance",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ]
+      },
+      {
+        "googleSearch": {}
+      }
+    ],
+    "generationConfig": {
+      "thinkingConfig": {
+        "thinkingBudget": 8192
+      }
+    }
+  }
+}

@@ -294,7 +294,6 @@ def test_an_empty_reply_is_discarded_and_other_failures_are_not(workspace, capsy
     [
         ([{"crash": True}, {"crash": True}], "exited 7"),
         ([{"no_output": True}, {"no_output": True}], "no output.json"),
-        ([{"text": ""}, {"text": ""}], "neither text nor tool calls"),
         (
             [
                 {"text": "x", "wrong_turn_id": True},
@@ -315,6 +314,83 @@ def test_retries_exhausted_fail_the_trial(workspace, steps, expected):
     summary = json.loads((workspace["agent"] / "summary.json").read_text())
     assert summary["stop_reason"] == "runner_error"
     assert len(summary["errors"]) == 2
+
+
+def test_empty_replies_do_not_use_the_turn_s_attempts(workspace, capsys):
+    write_script(workspace["driver"], [{"text": ""}, {"text": ""}, {"text": "finally"}])
+    result = run(Trial(make_settings(workspace, turn_retries=0), MemoryEnvironment()))
+    assert result.stop_reason == "final_message"
+    assert [e["discarded"] for e in result.errors] == [True, True]
+    assert [e["attempt"] for e in result.errors] == [1, 2]
+    assert "empty reply discarded, retrying (2/3)" in capsys.readouterr().out
+    summary = json.loads((workspace["agent"] / "summary.json").read_text())
+    assert summary["empty_replies_retried"] == 2
+
+
+def test_the_empty_reply_budget_spans_the_trial(workspace):
+    write_script(
+        workspace["driver"],
+        [
+            {"text": ""},
+            {"text": None, "tool_calls": [call("c1", "echo")]},
+            {"text": ""},
+        ],
+    )
+    env = MemoryEnvironment()
+    trial = Trial(make_settings(workspace, empty_retries=1), env)
+    with pytest.raises(TrialError, match="after 1 empty replies were retried"):
+        run(trial)
+
+    # The environment and the summary hear agent_error, which tau3's runtime
+    # accepts, not a runner failure.
+    assert env.closed_with == "agent_error"
+    summary = json.loads((workspace["agent"] / "summary.json").read_text())
+    assert summary["stop_reason"] == "agent_error"
+    assert summary["turns"] == 1
+
+
+def test_an_environment_that_fails_at_max_steps_fails_the_trial(workspace):
+    write_script(
+        workspace["driver"],
+        [{"text": None, "tool_calls": [call(f"c{i}", "echo")]} for i in range(5)],
+    )
+    env = MemoryEnvironment(fail_at_max_steps=True)
+    with pytest.raises(TrialError, match="exceeded 3 steps"):
+        run(Trial(make_settings(workspace, max_steps=3), env))
+    assert env.closed_with == "max_steps"
+    summary = json.loads((workspace["agent"] / "summary.json").read_text())
+    assert summary["stop_reason"] == "max_steps"
+    assert summary["extra"]["error"] == "exceeded 3 steps"
+
+
+def test_an_environment_error_is_recorded_as_one(workspace):
+    write_script(
+        workspace["driver"], [{"text": None, "tool_calls": [call("c1", "echo")]}]
+    )
+    env = MemoryEnvironment(raise_on_tool_calls=RuntimeError("MCP unusable"))
+    with pytest.raises(TrialError, match="RuntimeError: MCP unusable"):
+        run(Trial(make_settings(workspace), env))
+    assert env.closed_with == "env_error"
+    summary = json.loads((workspace["agent"] / "summary.json").read_text())
+    assert summary["stop_reason"] == "env_error"
+    assert summary["extra"]["error"] == "RuntimeError: MCP unusable"
+
+
+def test_a_crash_is_never_left_as_max_steps(workspace, monkeypatch):
+    write_script(workspace["driver"], [{"text": "hi"}])
+    env = MemoryEnvironment()
+    trial = Trial(make_settings(workspace), env)
+
+    def explode(output):
+        raise KeyError("boom")
+
+    monkeypatch.setattr(trial, "_record", explode)
+    with pytest.raises(KeyError):
+        run(trial)
+    assert env.closed_with == "runner_error"
+    summary = json.loads((workspace["agent"] / "summary.json").read_text())
+    assert summary["stop_reason"] == "runner_error"
+    assert summary["extra"]["error"] == "KeyError: 'boom'"
 
 
 def test_stop_tool_and_max_steps(workspace):
@@ -350,23 +426,6 @@ def test_user_replies_are_appended(workspace):
     assert items[-1] == {"role": "user", "content": "reply"}
 
 
-def test_tool_output_is_clipped_and_saved(workspace):
-    big = "x" * 5000
-    write_script(
-        workspace["driver"],
-        [{"text": None, "tool_calls": [call("c1", "echo")]}, {"text": "bye"}],
-    )
-    env = MemoryEnvironment(tool_output=big)
-    run(Trial(make_settings(workspace, max_tool_output_chars=1000), env))
-
-    inputs = turn_inputs(workspace["agent"])
-    content = inputs[1]["context_payload"]["input"][-1]["output"]
-    assert content.startswith("x" * 1000 + "\n\n[Tool output clipped")
-    assert "of 5005 characters" in content
-    saved = workspace["agent"] / "clipped_tool_outputs" / "c1.txt"
-    assert saved.read_text() == big + ":echo"
-
-
 def test_settings_from_env(tmp_path: Path):
     from context_cup_runner.loop import Settings
 
@@ -386,6 +445,8 @@ def test_settings_from_env(tmp_path: Path):
     }
     settings = Settings.from_env(env, default_max_steps=99)
     assert settings.max_steps == 7 and settings.turn_retries == 3
+    assert settings.empty_retries == 3
+    assert Settings.from_env({**env, "CC_EMPTY_RETRIES": "5"}).empty_retries == 5
     assert settings.target.reasoning_effort == "low"
     assert settings.proxy_url == "http://proxy.test:1"
     info = settings.provider_info()

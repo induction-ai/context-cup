@@ -28,12 +28,14 @@ from .container import (
     AGENT_DIR,
     DRIVER_USER,
     INSTALL_ROOT,
+    NODE_BIN,
     PROXY_URL,
     check_isolation,
     create_driver_user,
     probe_platform,
     start_proxy,
     stop_proxy,
+    upload_node,
     wait_for_proxy,
 )
 from .uv_bootstrap import cached_uv_binary, uv_target_triple
@@ -79,8 +81,10 @@ UPLOAD_IGNORE = (
 PASSTHROUGH_SETTINGS = (
     "CC_TARGET_JSON",
     "CC_TURN_RETRIES",
+    "CC_EMPTY_RETRIES",
     "CC_MAX_STEPS",
     "CC_MAX_TOOL_OUTPUT_CHARS",
+    "CC_TRUNCATE_TOOL_OUTPUT",
     "CC_TURN_TIMEOUT_SEC",
     "CC_TOOL_TIMEOUT_SEC",
 )
@@ -140,6 +144,7 @@ class CourseAgent(BaseInstalledAgent):
         }
         env.update(UV_ENV)
         env["CC_PYTHON"] = RUNNER_PYTHON
+        env["CC_NODE"] = NODE_BIN
         env["PATH"] = (
             f"{UV_DIR}:{RUNNER_VENV}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         )
@@ -190,6 +195,8 @@ class CourseAgent(BaseInstalledAgent):
 
         platform = await probe_platform(self, environment)
         await self._upload_uv(environment, platform)
+        # Before the setup scripts, so every driver script can use it.
+        await upload_node(self, environment, platform)
         deps = " ".join(shlex.quote(d) for d in IN_CONTAINER_DEPS)
         await self.exec_as_root(
             environment,
@@ -270,6 +277,8 @@ class CourseAgent(BaseInstalledAgent):
             "CC_DRIVER_CHAIN": self.remote_chain_value(self.host_chain()),
             "CC_INSTRUCTION_FILE": REMOTE_INSTRUCTION,
             "CC_PROXY_URL": PROXY_URL,
+            # run.sh and teardown.sh inherit it: the node TypeScript engines run on.
+            "CC_NODE": NODE_BIN,
         }
         if self._driver_drop:
             env["CC_DRIVER_USER"] = DRIVER_USER

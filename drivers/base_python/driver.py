@@ -1,4 +1,4 @@
-"""base_truncate: clip any tool result larger than `config.max_bytes` before
+"""base_python: clip any tool result larger than `config.max_bytes` before
 it reaches the model. The Python engine's lane with a real edit: copy this to
 write one strategy that works on every provider through the provider-neutral
 view, while the native payload changes only where you changed something.
@@ -11,8 +11,8 @@ from anthropic import Anthropic
 from context_cup_engine import PythonContext
 from openai import OpenAI
 
-MARKER = "\n\n[truncated by base_truncate: {dropped} bytes removed]"
-MARKER_PREFIX = "\n\n[truncated by base_truncate:"
+MARKER = "\n\n[truncated by base_python: {dropped} bytes removed]"
+MARKER_PREFIX = "\n\n[truncated by base_python:"
 
 
 def clip(text: str, max_bytes: int) -> str:

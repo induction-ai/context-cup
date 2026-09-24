@@ -29,6 +29,10 @@ export const suite = pgTable("suite", {
   /** Trials per task (harbor `--n-attempts`). */
   count: integer().notNull(),
   gitSha: text(),
+  /** The harbor fork commit the run used (the checkout follows the fork's
+   *  main, so this is what makes a run reproducible); null with
+   *  HARBOR_DIR=global. */
+  harborSha: text(),
   /** Set when bin/suite runs inside GitHub Actions, from GITHUB_RUN_ID,
    *  GITHUB_RUN_ATTEMPT, and GITHUB_REPOSITORY; null for local runs. */
   githubRunId: text(),

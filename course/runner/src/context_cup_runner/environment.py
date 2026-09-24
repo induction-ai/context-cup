@@ -43,6 +43,10 @@ class StepResult:
 
 class Environment(Protocol):
     name: str
+    fail_at_max_steps: bool
+    """Whether reaching the loop's step cap fails the trial (Toolathlon) or
+    just ends it for the verifier to score (tau3, whose runtime enforces its
+    own cap)."""
 
     async def open(self) -> EnvironmentStart: ...
 

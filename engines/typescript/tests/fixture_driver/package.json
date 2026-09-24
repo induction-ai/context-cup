@@ -1,0 +1,11 @@
+{
+  "name": "@context-cup-drivers/fixture",
+  "version": "0.0.1",
+  "type": "module",
+  "contextCup": {
+    "kind": "driver",
+    "config": {
+      "label": "clipped"
+    }
+  }
+}

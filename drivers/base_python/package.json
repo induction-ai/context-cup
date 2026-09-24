@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "@context-cup-drivers/base_truncate",
+  "name": "@context-cup-drivers/base_python",
   "version": "0.1.0",
   "description": "Clips any tool result larger than max_bytes before it reaches the model.",
   "contextCup": {

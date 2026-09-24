@@ -5,201 +5,22 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
 from context_cup_protocol import Message, ToolCall, view, write
 
-OPENAI: dict[str, Any] = {
-    "model": "gpt-5.5",
-    "instructions": "You are a bank agent.",
-    "input": [
-        {"role": "assistant", "content": "Hi! How can I help?"},
-        {"role": "user", "content": "What's my balance?"},
-        {
-            "type": "reasoning",
-            "id": "rs_1",
-            "summary": [],
-            "encrypted_content": "enc==",
-        },
-        {
-            "type": "function_call",
-            "id": "fc_1",
-            "call_id": "call_1",
-            "name": "get_balance",
-            "arguments": '{"acct":"A-1"}',
-            "status": "completed",
-        },
-        {
-            "type": "function_call",
-            "id": "fc_2",
-            "call_id": "call_2",
-            "name": "get_limits",
-            "arguments": "{}",
-            "status": "completed",
-        },
-        {
-            "type": "function_call_output",
-            "call_id": "call_1",
-            "output": "balance 12 USD",
-        },
-        {"type": "function_call_output", "call_id": "call_2", "output": "x" * 40},
-        {
-            "type": "reasoning",
-            "id": "rs_2",
-            "summary": [],
-            "encrypted_content": "enc2==",
-        },
-        {
-            "type": "message",
-            "id": "msg_1",
-            "role": "assistant",
-            "status": "completed",
-            "content": [
-                {"type": "output_text", "text": "You have 12 USD.", "annotations": []}
-            ],
-        },
-        {"role": "user", "content": [{"type": "input_text", "text": "Thanks"}]},
-    ],
-    "tools": [
-        {
-            "type": "function",
-            "name": "get_balance",
-            "description": "Balance",
-            "parameters": {
-                "type": "object",
-                "properties": {"acct": {"type": "string"}},
-            },
-        },
-        {"type": "web_search"},
-    ],
-    "reasoning": {"effort": "medium"},
-    "store": False,
-    "include": ["reasoning.encrypted_content"],
-}
-
-ANTHROPIC: dict[str, Any] = {
-    "model": "claude-sonnet-4-6",
-    "max_tokens": 16384,
-    "system": [
-        {
-            "type": "text",
-            "text": "You are a bank agent.",
-            "cache_control": {"type": "ephemeral"},
-        }
-    ],
-    "messages": [
-        {
-            "role": "user",
-            "content": [{"type": "text", "text": "(Start of conversation)"}],
-        },
-        {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "Hi! How can I help?"}],
-        },
-        {"role": "user", "content": "What's my balance?"},
-        {
-            "role": "assistant",
-            "content": [
-                {"type": "thinking", "thinking": "look it up", "signature": "sig=="},
-                {"type": "text", "text": "Checking."},
-                {
-                    "type": "tool_use",
-                    "id": "toolu_1",
-                    "name": "get_balance",
-                    "input": {"acct": "A-1"},
-                },
-                {
-                    "type": "tool_use",
-                    "id": "toolu_2",
-                    "name": "get_limits",
-                    "input": {},
-                },
-            ],
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "toolu_1",
-                    "content": "balance 12 USD",
-                    "cache_control": {"type": "ephemeral"},
-                },
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "toolu_2",
-                    "content": [{"type": "text", "text": "x" * 40}],
-                },
-            ],
-        },
-    ],
-    "tools": [
-        {
-            "name": "get_balance",
-            "description": "Balance",
-            "input_schema": {
-                "type": "object",
-                "properties": {"acct": {"type": "string"}},
-            },
-        },
-        {"type": "web_search_20250305", "name": "web_search"},
-    ],
-    "thinking": {"type": "enabled", "budget_tokens": 8192},
-}
-
-GEMINI: dict[str, Any] = {
-    "model": "gemini-3.1-pro",
-    "systemInstruction": {"parts": [{"text": "You are a bank agent."}]},
-    "contents": [
-        {"role": "user", "parts": [{"text": "(Start of conversation)"}]},
-        {"role": "model", "parts": [{"text": "Hi! How can I help?"}]},
-        {"role": "user", "parts": [{"text": "What's my balance?"}]},
-        {
-            "role": "model",
-            "parts": [
-                {"text": "planning", "thought": True},
-                {
-                    "functionCall": {"name": "get_balance", "args": {"acct": "A-1"}},
-                    "thoughtSignature": "sig==",
-                },
-                {"functionCall": {"name": "get_limits", "args": {}}},
-            ],
-        },
-        {
-            "role": "user",
-            "parts": [
-                {
-                    "functionResponse": {
-                        "name": "get_balance",
-                        "response": {"result": "balance 12 USD"},
-                    }
-                },
-                {
-                    "functionResponse": {
-                        "name": "get_limits",
-                        "response": {"result": "x" * 40},
-                    }
-                },
-            ],
-        },
-    ],
-    "tools": [
-        {
-            "functionDeclarations": [
-                {
-                    "name": "get_balance",
-                    "description": "Balance",
-                    "parameters": {"type": "object", "properties": {}},
-                }
-            ]
-        },
-        {"googleSearch": {}},
-    ],
-    "generationConfig": {"thinkingConfig": {"thinkingBudget": 8192}},
-}
-
-FIXTURES = {"openai": OPENAI, "anthropic": ANTHROPIC, "gemini": GEMINI}
+# Shared with the TypeScript view's tests (view.test.ts) and the check that
+# both views read them alike (tests/test_protocol_contract.py).
+FIXTURES: dict[str, dict[str, Any]] = json.loads(
+    (Path(__file__).parent / "view_fixtures.json").read_text()
+)
+OPENAI, ANTHROPIC, GEMINI = (
+    FIXTURES["openai"],
+    FIXTURES["anthropic"],
+    FIXTURES["gemini"],
+)
 
 
 def dumps(payload: dict[str, Any]) -> str:
