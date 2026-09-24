@@ -787,6 +787,12 @@ function functionResponse(
   return { ...part, functionResponse: fresh };
 }
 
+/** Where a declaration keeps its schema: `parameters` (an OpenAPI subset) if
+ *  it already does, else `parametersJsonSchema`, the one the adapter writes. */
+function geminiSchemaKey(declaration: Native): string {
+  return "parameters" in declaration ? "parameters" : "parametersJsonSchema";
+}
+
 function declarations(payload: Payload): Native[] {
   return (payload.tools ?? []).flatMap((entry: unknown) =>
     isObject(entry) ? (entry.functionDeclarations ?? []) : []
@@ -820,7 +826,7 @@ const gemini: Codec = {
     return declarations(payload).map((d) => ({
       name: String(d.name),
       description: String(d.description || ""),
-      parameters: d.parameters || {},
+      parameters: d.parametersJsonSchema || d.parameters || {},
     }));
   },
 
@@ -833,7 +839,7 @@ const gemini: Codec = {
         ...base,
         name: tool.name,
         description: tool.description,
-        parameters: tool.parameters,
+        [geminiSchemaKey(base)]: tool.parameters,
       })
     );
     const entries: unknown[] = [];

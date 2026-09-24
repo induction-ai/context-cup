@@ -414,14 +414,66 @@ Drivers shipped with the course are prefixed `base_`, one or two per lane.
 the same strategy, clipping any tool result over `max_bytes`, one per lane
 (Python, LiteLLM, TypeScript, and AI SDK engines), so the lanes can be
 compared on it. `base_pydantic` runs Pydantic AI with no strategy (Pydantic
-engine), and `base_codex` is OpenAI's Codex CLI (agent).
+engine), `base_agent` is a whole agent written from scratch that clips the same
+way (script agent), and `base_codex` is OpenAI's Codex CLI (harbor agent).
 Contestants pick any other prefix.
 
 ## Agent drivers
 
 A package with `"kind": "agent"` is a whole agent rather than a turn-protocol
-driver: Codex, Claude Code, an agent framework that must run its own tools.
-harbor runs it directly, so the package names the harbor agent class:
+driver: it owns its loop, its conversation, and its calls to the task's
+tools, and works the task from harbor's instruction and the task's MCP
+servers, as harbor's own agents do. The course's turn loop, `input.json`, and
+`output.json` do not apply. An agent package takes one of two forms.
+
+**A script agent** (no `harbor_agent`) is an agent written from scratch, in
+any language. The package ships `agent.sh`, and optionally `setup.sh` and
+`build.sh`, which run as they do for any driver:
+
+```json
+{
+  "name": "@context-cup-drivers/base_agent",
+  "contextCup": {
+    "kind": "agent",
+    "providers": ["openai", "anthropic", "gemini"],
+    "config": { "max_bytes": 100000 }
+  }
+}
+```
+
+The course's script agent for the benchmark (`context_cup_runner.agent`:
+`Tau3ScriptAgent` or `ToolathlonScriptAgent`) sets the trial up as it does
+for a turn-protocol driver, with the proxy started and the keys out of reach
+of `ccdriver`. It then sets the benchmark up as the turn loop would, so an
+agent faces the same task a driver does: tau3's runtime is configured with the
+trial's seed and caps (the agent starts the conversation itself), and
+Toolathlon's agent prompt, which harbor's instruction leaves out, is read from
+the task bundle. Then it runs `agent.sh` once, as `ccdriver`, from the package
+directory. Besides the script variables above and the proxy's base URLs and
+placeholder keys, `agent.sh` gets:
+
+| var                   | meaning                                                                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CC_INSTRUCTION_FILE` | harbor's instruction for the task                                                                                                                                        |
+| `CC_MCP_SERVERS_JSON` | the task's MCP servers, `[{name, transport, url, command, args}]`: its tools                                                                                             |
+| `CC_TARGET_JSON`      | `{provider, model, reasoning_effort}`                                                                                                                                    |
+| `CC_MAX_STEPS`        | the course's step cap for the benchmark                                                                                                                                  |
+| `CC_AGENT_DIR`        | the trial's agent log directory                                                                                                                                          |
+| `CC_RESULT_FILE`      | where the agent may write its result                                                                                                                                     |
+| `CC_SYSTEM_PROMPT`    | the benchmark's system prompt, when it has one outside the instruction                                                                                                   |
+| `CC_HARNESS_TOOLS`    | comma-separated MCP tools the harness owns (tau3's runtime controls): listed by the server, never to be offered to the model, since calling one undoes the trial's setup |
+
+The agent works the task and exits; a non-zero exit fails the trial, and its
+output is the trial's `runner.txt`. It reads its own `config` from
+`$CC_DRIVER_DIR/package.json`. In `CC_RESULT_FILE` it may write, all
+optional, `stop_reason`, `turns` (model calls that were steps of the task),
+`env_tool_calls`, and `payload`, its conversation as the provider's native
+request body; the runner writes `summary.json` from them and, from
+`payload`, `trajectory.json`, as it does for a turn-protocol driver.
+[`base_agent`](../drivers/base_agent) is the example.
+
+**A harbor agent** names harbor's own agent class, wrapped by a class in the
+course (Codex):
 
 ```json
 {
@@ -434,18 +486,19 @@ harbor runs it directly, so the package names the harbor agent class:
 }
 ```
 
-The course's runner loop, `input.json`, and `output.json` do not apply. The
-agent reaches the model through the proxy like everything else: the wrapper
-class starts the same in-container proxy, stamps `OPENAI_BASE_URL` (or the
-provider's equivalent) with the trial's prefix, and hands the agent the
-placeholder key, so its own client goes through the proxy and a direct call
-would fail with 401. harbor installs and runs these agents as root, so
-unlike a script driver an agent driver could read the proxy's keys from
-`/proc`; it is trusted as far as harbor's own agents are.
+The wrapper class hands the agent the same prompt a script agent gets
+(on Toolathlon, the task bundle's agent prompt ahead of the task), starts the
+same in-container proxy, stamps
+`OPENAI_BASE_URL` (or the provider's equivalent) with the trial's prefix, and
+hands the agent the placeholder key, so its own client goes through the proxy
+and a direct call would fail with 401. harbor installs and runs these agents
+as root, so unlike a script driver or a script agent they could read the
+proxy's keys from `/proc`; they are trusted as far as harbor's own agents
+are.
 
-What a run of an agent driver has: the verifier's reward, the proxy's call
-log (turn ids are null, calls are sequenced), cost, and, with body capture,
-every request the agent sent. What it does not have: `context_payload`,
-`original_payload`, or `state`, because the agent owns its conversation;
-the results show such drivers by name only, and they are compared on score
-and cost.
+Either way the agent reaches the model through the proxy like everything
+else. What a run of an agent has: the verifier's reward, the proxy's call log
+(turn ids are null, calls are sequenced), cost, and, with body capture, every
+request the agent sent. What it does not have: `context_payload`,
+`original_payload`, or `state`, because the agent owns its conversation; the
+results compare agents with other drivers on score and cost.

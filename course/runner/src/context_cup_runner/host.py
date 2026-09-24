@@ -95,6 +95,9 @@ class CourseAgent(BaseInstalledAgent):
     benchmark and add its environment settings."""
 
     benchmark: str = ""
+    loop_module: str = "context_cup_runner.loop"
+    """What runs in the container once setup is done: the course's turn loop,
+    or (the script agents in agent.py) the launcher of a whole agent's agent.sh."""
 
     capabilities = AgentCapabilities(atif=True, mcp_servers=True)
 
@@ -313,7 +316,7 @@ class CourseAgent(BaseInstalledAgent):
             await self.exec_as_agent(
                 environment,
                 command=(
-                    f"cd {INSTALL_ROOT} && {RUNNER_PYTHON} -m context_cup_runner.loop "
+                    f"cd {INSTALL_ROOT} && {RUNNER_PYTHON} -m {self.loop_module} "
                     f"2>&1 </dev/null | tee {AGENT_DIR}/runner.txt"
                 ),
                 env=env,

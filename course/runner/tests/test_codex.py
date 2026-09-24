@@ -31,6 +31,9 @@ def _stub_harbor_codex(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
         async def exec_as_agent(self, environment, command):
             seen.setdefault("commands", []).append(command)  # type: ignore[union-attr]
 
+        async def exec_as_root(self, environment, command):
+            return types.SimpleNamespace(stdout=seen.get("agent_prompt", ""))
+
         def _build_effective_config(self, openai_base_url=None):
             # harbor writes an SSE server as a bare url, which Codex can't use.
             return {
@@ -189,3 +192,19 @@ def test_no_sse_server_means_no_mcp_remote_install(monkeypatch, tmp_path):
 
     asyncio.run(CodexAgent(tmp_path / "t__1" / "agent", extra_env={}).install(object()))
     assert "commands" not in seen
+
+
+def test_codex_gets_the_benchmark_agent_prompt_when_the_task_has_one(
+    monkeypatch, tmp_path
+):
+    import asyncio
+
+    seen = _stub_harbor_codex(monkeypatch)
+    from context_cup_runner.codex import CodexAgent
+
+    agent = CodexAgent(tmp_path / "t__1" / "agent", extra_env={})
+    asyncio.run(agent.run("the task", object(), object()))
+    assert seen["ran"] == "the task"
+    seen["agent_prompt"] = "Workspace: /w\n\n# Task\nthe task\n"
+    asyncio.run(agent.run("the task", object(), object()))
+    assert seen["ran"] == "Workspace: /w\n\n# Task\nthe task"

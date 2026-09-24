@@ -83,7 +83,10 @@ class GeminiAdapter:
                         {
                             "name": schema.name,
                             "description": schema.description,
-                            "parameters": schema.parameters,
+                            # The JSON Schema as MCP gives it: `parameters`
+                            # takes only an OpenAPI subset and rejects keys
+                            # such as additionalProperties.
+                            "parametersJsonSchema": schema.parameters,
                         }
                         for schema in schemas
                     ]

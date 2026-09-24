@@ -178,7 +178,7 @@ describe("agent packages", () => {
     expect(driverProviders("base_codex", packages)).toEqual(["openai"]);
   });
 
-  it("must name a harbor agent and cannot extend an engine", async () => {
+  it("may be a script agent but cannot extend an engine", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cup-agent-"));
     try {
       const pkg = join(dir, "drivers", "bad");
@@ -190,7 +190,10 @@ describe("agent packages", () => {
           contextCup: { kind: "agent" },
         })
       );
-      expect(() => scanPackages(dir)).toThrow(/harbor_agent/);
+      expect(scanPackages(dir).get("@context-cup-drivers/bad")).toMatchObject({
+        kind: "agent",
+        harbor_agent: undefined,
+      });
       writeFileSync(
         join(pkg, "package.json"),
         JSON.stringify({

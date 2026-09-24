@@ -14,7 +14,12 @@ import { JOB_LABEL, SUITE_LABEL } from "./daytona.ts";
 import type { SuiteRun } from "./expand.ts";
 import type { Provider } from "./keys.ts";
 import { MCP_AUTH_DIR, MCP_LOGIN, mcpTokensFile } from "./mcp_auth.ts";
-import { driverChainDirs, findDriver, type CupPackage } from "./packages.ts";
+import {
+  driverChainDirs,
+  findDriver,
+  isHarborAgent,
+  type CupPackage,
+} from "./packages.ts";
 import {
   tau3TaskGlob,
   TOOLATHLON_NOTION_TASKS,
@@ -164,6 +169,13 @@ const RUNNER_AGENTS = {
   toolathlon: "context_cup_runner.toolathlon:ToolathlonAgent",
 } as const;
 
+/** The harbor agents that run a script agent's agent.sh, with the benchmark
+ *  set up for it as the turn loop would set it up. */
+const SCRIPT_AGENTS = {
+  tau3: "context_cup_runner.agent:Tau3ScriptAgent",
+  toolathlon: "context_cup_runner.agent:ToolathlonScriptAgent",
+} as const;
+
 const PROVIDER_KEY_ENV: Record<Provider, string[]> = {
   openai: ["OPENAI_API_KEY"],
   anthropic: ["ANTHROPIC_API_KEY"],
@@ -303,16 +315,19 @@ export function buildHarborCommand(inputs: CommandInputs): HarborCommand {
   // each trial container with the keys from harbor's own process env, so the
   // only way for a driver to call a model is through it.
   // A whole agent (kind: agent) is harbor's own agent class, wrapped by the
-  // runner so its model calls go through the proxy; a turn-protocol driver
-  // runs under our loop, which needs the chain of package directories.
-  const agent =
-    driver.kind === "agent"
-      ? driver.harbor_agent!
+  // runner so its model calls go through the proxy, or a script agent whose
+  // agent.sh the runner's script agent for the benchmark runs; a
+  // turn-protocol driver runs under our loop. Both of the last need the chain
+  // of package directories.
+  const agent = isHarborAgent(driver)
+    ? driver.harbor_agent!
+    : driver.kind === "agent"
+      ? SCRIPT_AGENTS[run.task.runner]
       : RUNNER_AGENTS[run.task.runner];
   const agentEnv: Record<string, string> = {
     // Host paths. harbor layers --agent-env over every exec the agent runs,
     // so the runner keeps a separate CC_DRIVER_CHAIN for the container copies.
-    ...(driver.kind === "agent"
+    ...(isHarborAgent(driver)
       ? {}
       : {
           CC_HOST_DRIVER_CHAIN: driverChainDirs(

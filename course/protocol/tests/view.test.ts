@@ -138,3 +138,20 @@ it("edits the system prompt, tools, and calls", () => {
   expect(JSON.parse(call.arguments)).toEqual({ acct: "B-2" });
   expect(call.id).toBe("fc_1");
 });
+
+it("reads a Gemini tool's JSON Schema and keeps it where it was", () => {
+  const payload = structuredClone(GEMINI);
+  const declaration = payload.tools[0].functionDeclarations[0];
+  declaration.parametersJsonSchema = declaration.parameters;
+  delete declaration.parameters;
+  const conversation = view("gemini", payload);
+  expect(conversation.tools[0]!.parameters).toEqual({
+    type: "object",
+    properties: {},
+  });
+  conversation.tools[0]!.description = "Account balance";
+  const edited = write("gemini", payload, conversation).tools[0]
+    .functionDeclarations[0];
+  expect(edited.parameters).toBeUndefined();
+  expect(edited.parametersJsonSchema).toEqual(declaration.parametersJsonSchema);
+});

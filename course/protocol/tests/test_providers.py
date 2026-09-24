@@ -245,7 +245,10 @@ def test_gemini_round_trip_mints_ids_when_the_api_has_none():
     adapter, payload = build("gemini")
     assert payload["systemInstruction"] == {"parts": [{"text": "be helpful"}]}
     assert payload["generationConfig"] == {"thinkingConfig": {"thinkingBudget": 8192}}
-    assert payload["tools"][0]["functionDeclarations"][0]["name"] == "get_balance"
+    declaration = payload["tools"][0]["functionDeclarations"][0]
+    assert declaration["name"] == "get_balance"
+    # Full JSON Schema, which `parameters` would reject.
+    assert declaration["parametersJsonSchema"] == TOOLS[0]["function"]["parameters"]
     assert [c["role"] for c in payload["contents"]] == ["user", "model", "user"]
 
     extracted = adapter.extract(GEMINI_RESPONSE)

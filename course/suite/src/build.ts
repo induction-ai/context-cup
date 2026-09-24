@@ -8,6 +8,7 @@ import path from "node:path";
 import { execa } from "execa";
 import {
   findDriver,
+  isHarborAgent,
   resolveChain,
   workspacePackages,
   type CupPackage,
@@ -43,13 +44,13 @@ export async function buildChain(
   return built;
 }
 
-/** {@link buildChain} for a driver named as `--driver` names it. A whole agent
- *  has no chain and builds nothing. */
+/** {@link buildChain} for a driver named as `--driver` names it. An agent
+ *  harbor runs through its own class has no chain and builds nothing. */
 export async function buildDriver(
   shortName: string,
   packages: ReadonlyMap<string, CupPackage> = workspacePackages()
 ): Promise<string[]> {
   const driver = findDriver(shortName, packages);
-  if (driver.kind === "agent") return [];
+  if (isHarborAgent(driver)) return [];
   return buildChain(resolveChain(driver.name, packages));
 }

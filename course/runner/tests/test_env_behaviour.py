@@ -189,6 +189,28 @@ def test_a_connection_lost_mid_call_is_rebuilt_and_reported(monkeypatch):
     assert "dropped during search and was rebuilt" in output
 
 
+def test_an_agent_is_kept_off_the_harness_s_tau3_controls():
+    from context_cup_runner.envs.tau3 import HARNESS_TOOL_NAMES
+
+    assert "configure_run" in HARNESS_TOOL_NAMES
+    assert "submit_assistant_message" in HARNESS_TOOL_NAMES
+    assert not {"start_conversation", "send_message_to_user"} & HARNESS_TOOL_NAMES
+
+
+def test_an_agent_s_tau3_run_is_seeded_but_not_started(tmp_path, monkeypatch):
+    session = FakeSession({"configure_run": {"step_count": 0}})
+    env = tau3_env(session, tmp_path)
+
+    async def connect() -> None:
+        env._session = session
+
+    monkeypatch.setattr(env, "_connect", connect)
+    asyncio.run(env.configure_for_agent())
+    assert session.calls == [
+        ("configure_run", {"seed": 1, "max_steps": 5, "max_errors": 10})
+    ]
+
+
 def test_tau3_cuts_a_tool_result_over_the_cap(tmp_path):
     long = "x" * 50
     session = FakeSession(

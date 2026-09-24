@@ -41,6 +41,9 @@ CODEX_VERSION = "0.156.1"
 MCP_REMOTE_VERSION = "0.14.3"
 MCP_REMOTE_DIR = "/tmp/context-cup-mcp-remote"
 MCP_REMOTE_COMMAND = f"{MCP_REMOTE_DIR}/node_modules/.bin/mcp-remote"
+# harbor's Toolathlon setup writes the task's agent prompt (the workspace,
+# how to finish) and the task here; its instruction is the task alone.
+AGENT_PROMPT_FILE = "/workspace/dumps/agent_prompt.md"
 
 
 def proxy_base_url(proxy_url: str, trial_id: str) -> str:
@@ -128,10 +131,21 @@ class CodexAgent(Codex):
             save_bodies=self._extra_env.get("CC_SAVE_BODIES") == "1",
         )
 
+    async def task_instruction(
+        self, instruction: str, environment: BaseEnvironment
+    ) -> str:
+        """The benchmark's agent prompt with the task, when the task image
+        has one (Toolathlon), else harbor's instruction as it is."""
+        found = await self.exec_as_root(
+            environment, command=f"cat {AGENT_PROMPT_FILE} 2>/dev/null || true"
+        )
+        return (found.stdout or "").strip() or instruction
+
     async def run(
         self, instruction: str, environment: BaseEnvironment, context: AgentContext
     ) -> None:
         await wait_for_proxy(self, environment)
+        instruction = await self.task_instruction(instruction, environment)
         try:
             await super().run(instruction, environment, context)
         finally:

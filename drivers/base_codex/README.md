@@ -23,6 +23,11 @@ sent, which shows what it kept in context and where it compacted.
 directories, because Codex owns its conversation. It is compared with other
 drivers on score and cost.
 
+**Its prompt**: harbor's instruction, except on Toolathlon, where that is
+the task alone: there `CodexAgent` hands Codex the task bundle's agent prompt
+(the workspace, how to finish) ahead of the task, as harbor's setup writes it
+to `/workspace/dumps/agent_prompt.md`.
+
 **How it reaches the model**: `CodexAgent` (`course/runner`) subclasses
 harbor's Codex agent. Before harbor installs Codex it sets `OPENAI_BASE_URL`
 to this trial's prefix on the trial's proxy and `OPENAI_API_KEY` to the
@@ -31,7 +36,9 @@ no real key; after, it starts that proxy in the container. It also passes
 the target's reasoning effort to Codex. Codex runs as root, as harbor
 installs it, so unlike a script driver it could read the proxy's keys.
 
-**Make your own**: another whole agent (Claude Code, Gemini CLI) is the same
-kind of package plus a small wrapper class like `CodexAgent` that starts the
-proxy (`context_cup_runner.container`) and points the agent's base-URL
-variable at it.
+**Make your own**: an agent of your own, written from scratch, needs no
+course code: start from [`base_agent`](../base_agent), a script agent. Another
+of harbor's agents (Claude Code, Gemini CLI) is the same kind of package as
+this one plus a small wrapper class like `CodexAgent` that starts the proxy
+(`context_cup_runner.container`) and points the agent's base-URL variable at
+it.

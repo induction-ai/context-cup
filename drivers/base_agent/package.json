@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "name": "@context-cup-drivers/base_agent",
+  "version": "0.1.0",
+  "description": "A whole agent written from scratch: its own loop over the task's MCP tools, clipping tool results over max_bytes like base_python.",
+  "contextCup": {
+    "kind": "agent",
+    "providers": [
+      "openai",
+      "anthropic",
+      "gemini"
+    ],
+    "config": {
+      "max_bytes": 100000
+    }
+  }
+}

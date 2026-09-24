@@ -22,7 +22,9 @@ const zContextCup = z
      *  proxy but owning its own loop and context. */
     kind: z.enum(["driver", "engine", "agent"]),
     extends: z.string().min(1).optional(),
-    /** For `agent`: the harbor agent class as `module:Class`. */
+    /** For `agent`: harbor's own agent class as `module:Class` (Codex).
+     *  Without one, the package is a script agent: its `agent.sh` works the
+     *  task, run by the course's script agent for the benchmark. */
     harbor_agent: z
       .string()
       .regex(/^[\w.]+:\w+$/, "harbor_agent must be module.path:ClassName")
@@ -33,12 +35,6 @@ const zContextCup = z
     config: z.record(z.string(), z.unknown()).optional(),
   })
   .superRefine((cc, ctx) => {
-    if (cc.kind === "agent" && !cc.harbor_agent) {
-      ctx.addIssue({
-        code: "custom",
-        message: "an agent package needs harbor_agent (module:Class)",
-      });
-    }
     if (cc.kind === "agent" && cc.extends) {
       ctx.addIssue({
         code: "custom",
@@ -58,6 +54,12 @@ const zManifest = z.object({
   description: z.string().optional(),
   contextCup: zContextCup.optional(),
 });
+
+/** Whether a package is a whole agent that harbor runs through a class of
+ *  its own (Codex), with no chain of packages for the course to upload. */
+export function isHarborAgent(pkg: CupPackage): boolean {
+  return pkg.kind === "agent" && pkg.harbor_agent !== undefined;
+}
 
 /** A workspace package that takes part in the driver protocol. */
 export type CupPackage = {

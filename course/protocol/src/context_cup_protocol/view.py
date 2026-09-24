@@ -645,6 +645,13 @@ def _gemini_text(part: Any) -> bool:
     )
 
 
+def _gemini_schema_key(declaration: Native) -> str:
+    """Where a declaration keeps its schema: `parameters` (an OpenAPI subset)
+    if it already does, else `parametersJsonSchema`, the one the adapter
+    writes."""
+    return "parameters" if "parameters" in declaration else "parametersJsonSchema"
+
+
 class GeminiCodec:
     """`systemInstruction`, `contents` with parts, `tools` with
     functionDeclarations. Calls without an API id get a minted one, used only
@@ -681,7 +688,7 @@ class GeminiCodec:
             Tool(
                 name=str(d.get("name")),
                 description=str(d.get("description") or ""),
-                parameters=d.get("parameters") or {},
+                parameters=d.get("parametersJsonSchema") or d.get("parameters") or {},
             )
             for d in self._declarations(payload)
         ]
@@ -695,7 +702,7 @@ class GeminiCodec:
                 **base,
                 "name": tool.name,
                 "description": tool.description,
-                "parameters": tool.parameters,
+                _gemini_schema_key(base): tool.parameters,
             },
         )
         entries: list[Any] = []

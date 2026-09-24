@@ -204,6 +204,31 @@ describe("agent-kind drivers", () => {
     expect(command.env.PYTHONPATH).toContain("course/runner/src");
   });
 
+  it("run a script agent's agent.sh through the benchmark's script agent, with its chain", async () => {
+    const withAgent = new Map(packages);
+    withAgent.set("@context-cup-drivers/base_agent", {
+      name: "@context-cup-drivers/base_agent",
+      dir: "/ws/drivers/base_agent",
+      kind: "agent",
+    });
+    const command = buildHarborCommand({
+      run: sampleRun({ driver_name: "base_agent" }),
+      job_id: "j_agent",
+      suite_dir: "/tmp/suite",
+      harbor_env: "docker",
+      concurrency: 1,
+      packages: withAgent,
+    });
+    const agentIndex = command.argv.indexOf("--agent");
+    expect(command.argv[agentIndex + 1]).toBe(
+      "context_cup_runner.agent:Tau3ScriptAgent"
+    );
+    expect(command.argv).toContain(
+      "CC_HOST_DRIVER_CHAIN=/ws/drivers/base_agent"
+    );
+    expect(command.argv.some((a) => /_API_KEY=/.test(a))).toBe(false);
+  });
+
   it("hand the runner the proxy bundle and the save-bodies switch", async () => {
     const command = buildHarborCommand({
       run: sampleRun({ driver_name: "base_codex" }),

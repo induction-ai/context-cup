@@ -128,3 +128,16 @@ def test_system_tools_and_calls_edit() -> None:
         if i.get("call_id") == "call_1" and i.get("type") == "function_call"
     )
     assert json.loads(call["arguments"]) == {"acct": "B-2"} and call["id"] == "fc_1"
+
+
+def test_gemini_tools_read_and_keep_their_json_schema() -> None:
+    payload = copy.deepcopy(GEMINI)
+    declaration = payload["tools"][0]["functionDeclarations"][0]
+    declaration["parametersJsonSchema"] = declaration.pop("parameters")
+    conversation = view("gemini", payload)
+    assert conversation.tools[0].parameters == {"type": "object", "properties": {}}
+    conversation.tools[0].description = "Account balance"
+    out = write("gemini", payload, conversation)
+    edited = out["tools"][0]["functionDeclarations"][0]
+    assert "parameters" not in edited
+    assert edited["parametersJsonSchema"] == declaration["parametersJsonSchema"]

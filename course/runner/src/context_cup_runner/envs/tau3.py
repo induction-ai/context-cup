@@ -51,6 +51,16 @@ ORCHESTRATION_TOOL_NAMES = frozenset(
 """The runtime's own controls, listed beside the domain tools; never offered
 to the model."""
 
+AGENT_FACING_TOOL_NAMES = frozenset(
+    {"start_conversation", "send_message_to_user", "end_conversation"}
+)
+"""The controls harbor's instruction tells a whole agent to use: it talks to
+the user through tools instead of through the harness."""
+
+HARNESS_TOOL_NAMES = ORCHESTRATION_TOOL_NAMES - AGENT_FACING_TOOL_NAMES
+"""The controls only a harness may call. A whole agent that calls one (say
+configure_run) undoes the trial's setup, so it is told not to offer them."""
+
 TAU2_TERMINATION_REASONS = frozenset(
     {
         "user_stop",
@@ -224,10 +234,8 @@ class Tau3Environment:
 
     # -- Environment protocol ---------------------------------------------
 
-    async def open(self) -> EnvironmentStart:
-        await self._connect()
-        listed = await self._session.list_tools()
-        tools = await self._assistant_tools(listed.tools)
+    async def _configure(self) -> None:
+        """The run's seed and caps, before the conversation starts."""
         try:
             status = await self._call_json(
                 "configure_run",
@@ -241,6 +249,21 @@ class Tau3Environment:
                 self._absorb_status(status)
         except Exception as exc:  # noqa: BLE001 - older runtimes have no configure_run
             print(f"[runner] configure_run unavailable: {exc}", flush=True)
+
+    async def configure_for_agent(self) -> None:
+        """Configure the runtime as open() does, and leave the conversation to
+        a whole agent: it calls start_conversation itself."""
+        await self._connect()
+        try:
+            await self._configure()
+        finally:
+            await self._stack.aclose()
+
+    async def open(self) -> EnvironmentStart:
+        await self._connect()
+        listed = await self._session.list_tools()
+        tools = await self._assistant_tools(listed.tools)
+        await self._configure()
         opening = await self._call_text("start_conversation")
         try:
             status = await self._call_json("get_runtime_status")
