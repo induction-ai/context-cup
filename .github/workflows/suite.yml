@@ -5,7 +5,8 @@ run-name: >-
   '' }}${{ inputs.task && format(' task={0}', inputs.task) || '' }}
 
 # One bin/suite run: one suite file, one driver, one target. Results go to the
-# database in DATABASE_URL, and the suite row links back to this run.
+# database in DATABASE_URL, and the suite row links back to this run. The
+# site's deploy migrates that database (render/render.yaml), so this doesn't.
 # The option lists mirror suites/, drivers/, and targets.json;
 # course/suite/tests/workflow.test.ts fails when they drift.
 on:
@@ -151,11 +152,6 @@ jobs:
 
       - name: Setup
         uses: ./.github/actions/setup
-
-      - name: Migrate database
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: bin/db migrate
 
       - name: Free disk space
         run: |

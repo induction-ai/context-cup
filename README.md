@@ -141,8 +141,8 @@ every request and response body under the trial's `agent/bodies/`.
 The **Suite** workflow (`.github/workflows/suite.yml`, run from the Actions
 tab) is `bin/suite` on a hosted runner: pick the suite, driver, and target
 (the suite and driver have no default),
-and optionally a count and tasks. It runs on Daytona by default. It migrates
-the database, runs the suite, deletes the run's Daytona sandboxes (including
+and optionally a count and tasks. It runs on Daytona by default. It runs the
+suite against the deployed database (the site's deploy migrates it), deletes the run's Daytona sandboxes (including
 after a cancel), writes the results table to the run summary, and uploads
 two artifacts: `suite-summary` (results and the suite log) and `suite-logs`
 (all of `.temp/suites/`). Toolathlon runs take turns, restore the notion
