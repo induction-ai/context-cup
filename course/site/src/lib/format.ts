@@ -6,6 +6,22 @@ export function cents(value: number | null | undefined): string {
   return `${value.toFixed(value >= 100 ? 0 : 1)}¢`;
 }
 
+/** Cents as dollars: `$0.42`, `$4.20`, `$42.0`, `$420`. */
+export function dollars(value: number | null | undefined): string {
+  if (value == null) return "–";
+  const d = value / 100;
+  return `$${d.toFixed(d >= 100 ? 0 : d >= 10 ? 1 : 2)}`;
+}
+
+/** A ratio as a signed percentage change to a tenth, since the score bar
+ *  sits at −1.0%: `+4.2%`, `−0.8%`, `±0.0%`. */
+export function change(ratio: number | null | undefined): string {
+  if (ratio == null || !Number.isFinite(ratio)) return "–";
+  const pct = ((ratio - 1) * 100).toFixed(1);
+  if (pct === "0.0" || pct === "-0.0") return "±0.0%";
+  return pct.startsWith("-") ? `−${pct.slice(1)}%` : `+${pct}%`;
+}
+
 export function reward(value: number | null | undefined): string {
   if (value == null) return "–";
   return value.toFixed(2);

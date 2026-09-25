@@ -145,6 +145,54 @@ runs as an unprivileged user that cannot read the keys; each trial's
 `agent/isolation.txt` records the check. Set `CC_SAVE_BODIES=1` to keep
 every request and response body under the trial's `agent/bodies/`.
 
+## Winning
+
+Each benchmark has its own leader, judged on one suite at the reference
+target (`gpt-5.6-sol@medium` today, its GPT-6 successor when that lands),
+against a fixed baseline:
+
+| benchmark  | suite         | baseline score | baseline $ per run |
+| ---------- | ------------- | -------------- | ------------------ |
+| tau3       | `tau_banking` | 0.35           | $50                |
+| Toolathlon | `toolathlon`  | 0.67           | $65                |
+
+A run's cost here is a full benchmark run, every task once: the mean cost
+per task times the suite's task count.
+
+A driver qualifies on a benchmark when both hold:
+
+- **Score**: at least the baseline's.
+- **Cost**: a full benchmark run costs less than the baseline's.
+
+The leader is the qualifying driver with the lowest cost. If none qualifies,
+the benchmark has no leader: matching the baseline's score without spending
+less wins nothing.
+
+Each driver stands on one run: its most recent run of the suite at the
+reference target that is finished, has a `count` of at least 3, and has at
+least 2 done trials (a verdict and no error; retry passes count) in every
+task. Earlier runs, and runs that miss any of these, do not count; a smoke
+suite or any suite other than the two never does. Score and cost are that
+run's suite-level means described above.
+
+Everyone else ranks below the qualifiers, in this order:
+
+1. Qualifiers, cheapest first (the first is the leader).
+2. Drivers that reach the baseline's score but cost as much or more, cheapest
+   first.
+3. Drivers under the baseline's score, best score first.
+4. Drivers with nothing scored.
+
+The results site's `/leaderboard/<suite>` shows this for the two suites: the ranked
+drivers with the baseline as its own row between the qualifiers and the
+rest, and a chart of score against the dollars of a full benchmark run (log
+scale), the qualifying corner shaded. The rule's constants (the suites,
+baselines, eligibility, reference target) live in
+`course/site/src/lib/standings.ts`. On `/suites`, the leaderboard column
+tags each run: on board (the run its driver stands on), superseded
+(qualifies, but a newer run replaces it), or doesn't qualify, with the
+reasons on hover.
+
 ## Running in GitHub Actions
 
 The **Suite** workflow (`.github/workflows/suite.yml`, run from the Actions
@@ -196,7 +244,9 @@ rm -rf /tmp/ci-grant
 pnpm site:dev            # http://localhost:3300
 ```
 
-`/suites` lists every run, newest first, and `/suites/<suite_id>` drills into
+`/leaderboard/tau_banking` and `/leaderboard/toolathlon` rank the drivers
+by the rule under [Winning](#winning); `/leaderboard` forwards to tau's
+until an aggregate board replaces it. `/suites` lists every run, newest first, and `/suites/<suite_id>` drills into
 a run's tasks, jobs, trials, and each trial's model calls. `bin/suite` prints
 the link to its run at start and finish; `SITE_URL` sets the base for those
 links (default `http://localhost:3300`). Runs started in GitHub Actions show

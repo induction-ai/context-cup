@@ -22,6 +22,9 @@ export default function RootLayout({
             Context Cup
           </Link>
           <div className="navbar-nav">
+            <Link className="nav-link" href="/leaderboard">
+              Leaderboard
+            </Link>
             <Link className="nav-link" href="/suites">
               Suites
             </Link>

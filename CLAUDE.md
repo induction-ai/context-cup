@@ -17,6 +17,8 @@ When in doubt, leave it out and ask. Grep for secrets and internal names before 
 
 Context Cup benchmarks context-management strategies. Each **driver** implements a context manager (what to keep, compress, drop, or retrieve as an agent's context grows). The **course** runs every driver through the same AI benchmarks and scores them on accuracy and cost.
 
+Winning, per benchmark, judged on the `tau_banking` and `toolathlon` suites: at the reference target, `gpt-5.6-sol@medium` until GPT-6 replaces it, against a fixed baseline per benchmark (`tau_banking` 0.35 and $50 per full run, `toolathlon` 0.67 and $65). A driver qualifies with a score of at least the baseline's and a full run (mean task cost × tasks) costing less than the baseline's; the leader is the cheapest qualifier, and with none there is no leader. Each driver stands on its latest finished run with `count` ≥ 3 and ≥ 2 done trials in every task; older or thinner runs don't count. The rest rank below: reaches the score but costs more (cheapest first), then under the score (best score first). README "Winning" is the full statement and `course/site/src/lib/standings.ts` the code; keep them in step.
+
 ## Workspace layout
 
 This is a pnpm workspace (TypeScript) with a uv workspace (Python) beside it. `course/*` is the framework, `engines/*` are what drivers build on, `drivers/*` holds one package per strategy, and `suites/*.json` say what a run covers. Course and engine packages are scoped `@context-cup/*`; drivers are `@context-cup-drivers/*`.

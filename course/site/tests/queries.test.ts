@@ -5,7 +5,12 @@ import {
   expect,
   it,
 } from "@context-cup/shared/test_helpers/index.js";
-import { listSuites, loadSuite, loadTrial } from "../src/lib/queries.ts";
+import {
+  listSuites,
+  loadBoard,
+  loadSuite,
+  loadTrial,
+} from "../src/lib/queries.ts";
 
 /** What every trial row carries from its job and suite (the trial table is
  *  denormalized). */
@@ -272,5 +277,162 @@ describe("listSuites paging and sorting", () => {
     expect(byReward.rows.slice(1).every((r) => r.mean_reward === null)).toBe(
       true
     );
+  });
+});
+
+describe("leaderboard queries", () => {
+  const rules = { min_count: 3, min_done: 2 };
+
+  /** One run of suite "board" by `driver` at gpt-5.5@medium. `tasks` maps
+   *  each task to its trials' rewards per pass (null: an errored trial). */
+  async function run(
+    id: string,
+    driver: string,
+    opts: {
+      count?: number;
+      started: string;
+      finished?: boolean;
+      tasks: Record<string, Array<Array<number | null>>>;
+      cost?: number;
+    }
+  ) {
+    const db = getCurrentTransaction();
+    const target = {
+      driver_name: driver,
+      target_name: "gpt-5.5@medium",
+      provider: "openai" as const,
+      model: "gpt-5.5",
+    };
+    await db.insert(suite).values({
+      id,
+      name: "board",
+      key_file: "suites/board.json",
+      ...target,
+      count: opts.count ?? 3,
+      harbor_env: "docker",
+      log_dir: `/tmp/${id}`,
+      started_at: new Date(opts.started),
+      finished_at: opts.finished === false ? null : new Date(opts.started),
+    });
+    for (const [task_name, passes] of Object.entries(opts.tasks)) {
+      for (const [pass, rewards] of passes.entries()) {
+        const job_id = `${id}_${task_name}_${pass}`;
+        await db.insert(job).values({
+          id: job_id,
+          suite_id: id,
+          task_name,
+          runner: "tau3",
+          ...target,
+          count: opts.count ?? 3,
+          pass,
+          concurrency: 1,
+          command: "harbor run …",
+          status: "done",
+          jobs_dir: `/tmp/${id}/harbor`,
+        });
+        for (const [n, reward] of rewards.entries()) {
+          await db.insert(trial).values({
+            id: `${job_id}_${n}`,
+            suite_id: id,
+            job_id,
+            trial_name: `${task_name}__${pass}_${n}`,
+            suite_name: "board",
+            task_name,
+            runner: "tau3",
+            ...target,
+            pass,
+            harbor_env: "docker",
+            reward,
+            error: reward == null ? "boom" : null,
+            cost_cents: reward == null ? null : (opts.cost ?? 10),
+            trial_dir: `/tmp/${job_id}_${n}`,
+          });
+        }
+      }
+    }
+  }
+
+  it("stands each driver on its latest finished run with enough attempts and done trials", async () => {
+    // a's oldest run is its only eligible one: the next has a task with one
+    // done trial, the next a count of 1, the newest has not finished.
+    await run("s_a_old", "a", {
+      started: "2026-09-01T00:00:00Z",
+      tasks: { t1: [[1, 1, 0]], t2: [[1, 0]] },
+      cost: 20,
+    });
+    await run("s_a_thin", "a", {
+      started: "2026-09-02T00:00:00Z",
+      tasks: { t1: [[1, 1, 1]], t2: [[1, null, null]] },
+    });
+    await run("s_a_one", "a", {
+      count: 1,
+      started: "2026-09-03T00:00:00Z",
+      tasks: { t1: [[1]], t2: [[1]] },
+    });
+    await run("s_a_running", "a", {
+      finished: false,
+      started: "2026-09-04T00:00:00Z",
+      tasks: { t1: [[1, 1, 1]], t2: [[1, 1, 1]] },
+    });
+    // Eligible, but s_a_old is newer: superseded.
+    await run("s_a_older", "a", {
+      started: "2026-08-31T00:00:00Z",
+      tasks: { t1: [[0, 0, 0]], t2: [[0, 0, 0]] },
+    });
+    // b's t1 reaches two done trials only with its retry pass.
+    await run("s_b", "b", {
+      started: "2026-09-02T00:00:00Z",
+      tasks: { t1: [[1, null, null], [0]], t2: [[1, 1, 1]] },
+    });
+    // c never has an eligible run.
+    await run("s_c", "c", {
+      started: "2026-09-02T00:00:00Z",
+      tasks: { t1: [[1, null, null]], t2: [[1, 1, 1]] },
+    });
+
+    const { tasks, entries } = await loadBoard(
+      "board",
+      "gpt-5.5@medium",
+      rules
+    );
+    expect(tasks).toBe(2);
+    expect(entries.map((e) => [e.driver_name, e.suite_id])).toEqual([
+      ["a", "s_a_old"],
+      ["b", "s_b"],
+    ]);
+    const [a, b] = entries;
+    expect(a).toMatchObject({ trials: 5, scored: 5, errors: 0 });
+    expect(a!.tasks_scored).toBe(2);
+    // t1 is 2/3, t2 is 1/2; the run is their mean.
+    expect(a!.mean_reward).toBeCloseTo((2 / 3 + 1 / 2) / 2, 6);
+    expect(a!.mean_cost_cents).toBeCloseTo(20, 6);
+    expect(b).toMatchObject({ trials: 7, scored: 5, errors: 2 });
+    // t1 is (1 + 0) / 2 over both passes, t2 is 1.
+    expect(b!.mean_reward).toBeCloseTo(0.75, 6);
+    expect((await loadBoard("board", "gpt-5.5@low", rules)).entries).toEqual(
+      []
+    );
+
+    // The suites index says which run is each driver's entry.
+    const { rows } = await listSuites({
+      sort: { key: "suite", dir: "asc" },
+      page: { page: 1, per: 200 },
+      rules,
+    });
+    expect(
+      Object.fromEntries(
+        rows
+          .filter((r) => r.name === "board")
+          .map((r) => [r.id, [r.min_task_done, r.on_board]])
+      )
+    ).toEqual({
+      s_a_older: [3, false],
+      s_a_old: [2, true],
+      s_a_thin: [1, false],
+      s_a_one: [1, false],
+      s_a_running: [3, false],
+      s_b: [2, true],
+      s_c: [1, false],
+    });
   });
 });

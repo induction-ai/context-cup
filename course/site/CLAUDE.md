@@ -34,6 +34,16 @@ there needs a reason Bootstrap cannot cover; a new class name is a smell.
   trials in all its jobs (a `--retry_errors` pass adds jobs to a task), a
   suite the mean over its tasks (`src/lib/aggregate.ts`, and the SQL in
   `listSuites`).
+- The leaderboard's rule (suites, baselines, reference target,
+  the ranking) is `src/lib/standings.ts`, pure and tested; the page and the
+  chart only draw it. The chart (`src/components/cost_score_chart.tsx`) is
+  SVG with no chart library and a client component: hovering a dot (or its
+  table row, through `BoardFocus` in `src/components/board_focus.tsx`)
+  shows its score and cost, clicking pins the tooltip until a click
+  elsewhere or Escape. Which run a driver stands on is SQL
+  (`eligible` and `onBoard` in `src/lib/queries.ts`); `disqualifications`
+  states the same rule in TypeScript for the `/suites` column, so change
+  them together. Keep all of it in step with README "Winning".
 - Query functions return typed rows; aggregation and formatting are pure
   functions with tests under `tests/`.
 - Tests: `bin/test --project site`. Build check: `pnpm site:build`.

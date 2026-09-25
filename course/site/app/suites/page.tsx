@@ -7,8 +7,13 @@ import {
   targetSpec,
   when,
 } from "@/src/lib/format";
-import { listSuites, SUITE_SORT_KEYS } from "@/src/lib/queries";
+import {
+  listSuites,
+  SUITE_SORT_KEYS,
+  type SuiteSummary,
+} from "@/src/lib/queries";
 import { pageHref, parsePage, parseSort } from "@/src/lib/sort";
+import { disqualifications } from "@/src/lib/standings";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +67,7 @@ export default async function SuitesPage({
                     firstDir={col === "started" ? "desc" : undefined}
                   />
                 ))}
+                <th>leaderboard</th>
                 <th>run</th>
               </tr>
             </thead>
@@ -102,6 +108,9 @@ export default async function SuitesPage({
                     </td>
                     <td className="text-end font-monospace">
                       {cents(s.mean_cost_cents)}
+                    </td>
+                    <td>
+                      <BoardCell suite={s} />
                     </td>
                     <td>
                       {gh ? (
@@ -152,6 +161,55 @@ export default async function SuitesPage({
         </div>
       )}
     </>
+  );
+}
+
+/** Whether the run stands on the leaderboard; hovering the tag says why
+ *  (a `title`, so no client script), and screen readers get the same text. */
+function BoardCell({ suite }: { suite: SuiteSummary }) {
+  const why = disqualifications(suite);
+  if (why.length > 0) {
+    return (
+      <Tag className="text-bg-light border" note={why.join("\n")}>
+        doesn’t qualify
+      </Tag>
+    );
+  }
+  if (suite.on_board) {
+    return (
+      <a
+        href={`/leaderboard/${suite.name}`}
+        className="badge text-bg-success"
+        title="the run this driver stands on"
+      >
+        on board
+      </a>
+    );
+  }
+  return (
+    <Tag
+      className="text-bg-secondary"
+      note="a newer qualifying run replaces it"
+    >
+      superseded
+    </Tag>
+  );
+}
+
+function Tag({
+  className,
+  note,
+  children,
+}: {
+  className: string;
+  note: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className={`badge ${className}`} title={note}>
+      {children}
+      <span className="visually-hidden">: {note.replaceAll("\n", "; ")}</span>
+    </span>
   );
 }
 

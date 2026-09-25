@@ -6,6 +6,11 @@ runs the environment (tools, simulated user, verifier) and scores the result
 on accuracy and cost. This page is for driver authors; the wire-level
 contract is [protocol.md](protocol.md).
 
+The bar to beat is a fixed baseline per benchmark at the reference target:
+match or beat its score while a full run costs less, and the cheapest driver
+that does leads. The full rule is under "Winning" in the
+[README](../README.md#winning).
+
 ## Pick a lane
 
 | lane                                          | `run(ctx)` receives                                                                    | `run(ctx)` returns                                           | copy this                         | pick it when                                                                                                                                           |

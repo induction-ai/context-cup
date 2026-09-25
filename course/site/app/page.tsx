@@ -10,9 +10,14 @@ export default function Home() {
         context grows; the course runs every driver through the same benchmarks
         and scores it on accuracy and cost.
       </p>
-      <Link className="btn btn-primary" href="/suites">
-        Browse suite runs
-      </Link>
+      <div className="d-flex gap-2">
+        <Link className="btn btn-primary" href="/leaderboard">
+          Leaderboard
+        </Link>
+        <Link className="btn btn-outline-secondary" href="/suites">
+          Browse suite runs
+        </Link>
+      </div>
     </div>
   );
 }

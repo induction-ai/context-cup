@@ -5,6 +5,8 @@ import {
 } from "@context-cup/shared/test_helpers/index.js";
 import {
   cents,
+  change,
+  dollars,
   duration,
   elapsed,
   githubRunUrl,
@@ -19,6 +21,14 @@ describe("format", () => {
     expect(cents(null)).toBe("–");
     expect(cents(10.56)).toBe("10.6¢");
     expect(cents(123.4)).toBe("123¢");
+    expect(dollars(null)).toBe("–");
+    expect(dollars(42)).toBe("$0.42");
+    expect(dollars(4210)).toBe("$42.1");
+    expect(dollars(42_000)).toBe("$420");
+    expect(change(1.042)).toBe("+4.2%");
+    expect(change(0.985)).toBe("−1.5%");
+    expect(change(1)).toBe("±0.0%");
+    expect(change(null)).toBe("–");
     expect(tokens(950)).toBe("950");
     expect(tokens(45_807)).toBe("46k");
     expect(tokens(1_250_000)).toBe("1.3M");
