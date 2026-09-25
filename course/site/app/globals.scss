@@ -1,0 +1,354 @@
+// The Context Cup theme is Bootstrap's own variables, set here before the
+// vendored Bootstrap (vendor/bootstrap) reads them. Reach for a variable or a
+// utility class first; the rules after the import are only what Bootstrap has
+// neither for. The fonts come from next/font in app/layout.tsx.
+
+$cc-cream: #f3ebdb;
+$cc-paper: #f8f2e4;
+$cc-sand: #e7dcc5;
+$cc-ink: #151515;
+$cc-red: #cf3a35;
+$cc-gold: #fbe0a0;
+$cc-sky: #93c4e6;
+$cc-navy: #0e1822;
+$cc-navy-line: #26323e;
+$cc-navy-text: #e8e2d4;
+$cc-offset: 4px;
+$cc-display-font: var(--cc-font-display), monospace;
+// Press Start 2P comes in one weight, and its letters are a full em wide, so
+// everything set in it is scaled down.
+$cc-display-weight: 400;
+$cc-display-scale: 0.8;
+
+// Bootstrap's colours, all from the theme: the whites and blacks are paper
+// and ink, the grays run between cream and ink, and the accents come from
+// the hero art (the kart's red, the sea's blue, the sunset's amber). Every
+// shade Bootstrap derives (hovers, tints, subtle backgrounds, focus rings)
+// follows from these.
+$white: $cc-paper;
+$black: $cc-ink;
+$gray-100: mix($cc-ink, $cc-cream, 4%);
+$gray-200: mix($cc-ink, $cc-cream, 9%);
+$gray-300: mix($cc-ink, $cc-cream, 16%);
+$gray-400: mix($cc-ink, $cc-cream, 27%);
+$gray-500: mix($cc-ink, $cc-cream, 42%);
+$gray-600: mix($cc-ink, $cc-cream, 56%);
+$gray-700: mix($cc-ink, $cc-cream, 68%);
+$gray-800: mix($cc-ink, $cc-cream, 80%);
+$gray-900: mix($cc-ink, $cc-cream, 90%);
+
+$primary: $cc-red;
+$secondary: $gray-600;
+$success: #3d7530;
+$info: #6f8fcf;
+$warning: #eea846;
+$danger: #a82c28;
+$light: $cc-paper;
+$dark: $cc-ink;
+
+$font-family-sans-serif: var(--cc-font-mono), ui-monospace, monospace;
+$font-family-monospace: $font-family-sans-serif;
+$headings-font-family: $cc-display-font;
+$headings-font-weight: $cc-display-weight;
+$h1-font-size: 2.5rem * $cc-display-scale;
+$h2-font-size: 2rem * $cc-display-scale;
+$h3-font-size: 1.75rem * $cc-display-scale;
+$h4-font-size: 1.5rem * $cc-display-scale;
+$h5-font-size: 1.25rem * $cc-display-scale;
+$h6-font-size: 1rem * $cc-display-scale;
+// The `fs-*` utilities keep Bootstrap's sizes; they set body text too.
+$font-sizes: (
+  1: 2.5rem,
+  2: 2rem,
+  3: 1.75rem,
+  4: 1.5rem,
+  5: 1.25rem,
+  6: 1rem,
+);
+$display-font-family: $cc-display-font;
+$display-font-weight: $cc-display-weight;
+$display-line-height: 1.1;
+
+$body-bg: $cc-cream;
+$body-color: $cc-ink;
+$body-emphasis-color: $cc-ink;
+$body-secondary-color: rgba($cc-ink, 0.68);
+$body-secondary-bg: $cc-sand;
+$body-tertiary-bg: $cc-paper;
+$component-active-bg: $cc-ink;
+$component-active-color: $cc-paper;
+
+$border-width: 2px;
+$border-color: $cc-ink;
+$border-color-translucent: rgba($cc-ink, 0.2);
+$border-radius: 0;
+$border-radius-sm: 0;
+$border-radius-lg: 0;
+$border-radius-xl: 0;
+$border-radius-xxl: 0;
+$border-radius-pill: 0;
+
+// A hard offset shadow, on `shadow` and on every button.
+$enable-shadows: true;
+$box-shadow: $cc-offset $cc-offset 0 $cc-ink;
+$btn-box-shadow: $box-shadow;
+$btn-active-box-shadow: none;
+$input-box-shadow: none;
+$form-select-box-shadow: none;
+$btn-font-family: $cc-display-font;
+$btn-font-weight: $cc-display-weight;
+$btn-font-size: 1rem * $cc-display-scale;
+$btn-font-size-sm: 0.875rem * $cc-display-scale;
+$btn-font-size-lg: 1.25rem * $cc-display-scale;
+
+$nav-link-color: var(--bs-emphasis-color);
+$nav-link-hover-color: $cc-red;
+$nav-tabs-link-active-border-color: $cc-red;
+$navbar-nav-link-padding-x: 0.9rem;
+$navbar-light-color: $cc-ink;
+$navbar-light-hover-color: $cc-red;
+$navbar-light-active-color: $cc-ink;
+$navbar-light-toggler-border-color: $cc-ink;
+
+$pagination-color: $cc-ink;
+$pagination-bg: $cc-paper;
+$pagination-hover-color: $cc-red;
+$pagination-hover-bg: $cc-sand;
+$pagination-disabled-bg: $cc-cream;
+
+$table-bg: $cc-paper;
+$table-striped-bg-factor: 0.035;
+$table-hover-bg-factor: 0.07;
+$table-border-color: rgba($cc-ink, 0.15);
+
+// `data-bs-theme="dark"` is the navy of the home page's panels.
+$body-bg-dark: $cc-navy;
+$body-color-dark: $cc-navy-text;
+$body-emphasis-color-dark: $cc-paper;
+$border-color-dark: $cc-navy-line;
+$link-color-dark: $cc-sky;
+$link-hover-color-dark: $cc-paper;
+
+@import "../vendor/bootstrap/scss/functions";
+@import "../vendor/bootstrap/scss/variables";
+
+// A leader's row is gold (`table-warning`), the baseline's sky (`table-info`).
+$table-variants: map-merge(
+  $table-variants,
+  (
+    "warning": $cc-gold,
+    "info": $cc-sky,
+  )
+);
+
+@import "../vendor/bootstrap/scss/bootstrap";
+
+// ---- What Bootstrap has no variable for. ----
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6,
+.display-1,
+.navbar-brand,
+.btn {
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+
+.navbar-brand {
+  font-family: $cc-display-font;
+  font-weight: $cc-display-weight;
+}
+
+.display-1 {
+  font-size: clamp(1.75rem, 3.75vw, 3.75rem);
+  letter-spacing: -0.05em;
+}
+
+// Buttons are inked whatever their colour, and a press takes the shadow
+// back.
+.btn {
+  --bs-btn-border-color: #{$cc-ink};
+  --bs-btn-hover-border-color: #{$cc-ink};
+  --bs-btn-active-border-color: #{$cc-ink};
+  --bs-btn-disabled-border-color: #{$cc-ink};
+
+  &:active {
+    transform: translate($cc-offset, $cc-offset);
+  }
+}
+
+// The current page is underlined, or barred on its left where the folded
+// menu stacks the pages.
+.navbar .nav-link.active {
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 $cc-red;
+
+  @include media-breakpoint-down(lg) {
+    box-shadow: inset 3px 0 0 $cc-red;
+  }
+}
+
+@include media-breakpoint-down(lg) {
+  .navbar .nav-link {
+    padding-left: 0.75rem;
+  }
+}
+
+// Tabs are boxed, not only the active one.
+.nav-tabs .nav-link {
+  border-color: var(--bs-border-color);
+}
+
+.table > thead th {
+  background: var(--bs-secondary-bg);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.alert {
+  --bs-alert-border-color: var(--bs-border-color);
+}
+
+.font-monospace,
+.text-end {
+  font-variant-numeric: tabular-nums;
+}
+
+// Error text stays readable inside a table row.
+td.error {
+  max-width: 60ch;
+  white-space: normal;
+  font-size: 0.85em;
+}
+
+details > summary {
+  cursor: pointer;
+}
+
+.cc-pixel {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+}
+
+// A linked card: shaded on hover, its arrow nudging along.
+.cc-card-link {
+  background: var(--bs-tertiary-bg);
+
+  &:hover {
+    background: var(--bs-body-bg);
+  }
+
+  .cc-arrow {
+    transition: transform 0.12s steps(2);
+  }
+
+  &:hover .cc-arrow {
+    transform: translateX($cc-offset);
+  }
+}
+
+.cc-icon-tile {
+  width: 4rem;
+  height: 4rem;
+}
+
+// The home page's hero: the copy, and behind it the art at the hero's full
+// height out to the window's edge (the offsets undo <main>'s padding). The
+// art starts under the stats row, at 25rem, where its dissolve is still open
+// enough that every stat stays on cream; the page hides it below lg. The
+// dissolve is the image's own alpha as a mask at the art's left, reaching
+// 0.64 of the height in, so a cropped edge still dissolves. The image is
+// 1.975 of its height wide with the kart 0.656 of its height from its right:
+// right-aligned while it fits; narrower, the kart stays centred.
+.cc-hero {
+  position: relative;
+  margin-top: -1.5rem;
+}
+
+.cc-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.cc-hero-art {
+  position: absolute;
+  inset: 0 -1rem 0 25rem;
+  overflow: hidden;
+  container-type: size;
+
+  > div {
+    position: absolute;
+    inset: 0;
+    mask:
+      url("/hero.png") left / auto 100% no-repeat,
+      linear-gradient(#000, #000) right / max(0px, calc(100% - 64cqh)) 100%
+        no-repeat;
+  }
+
+  img {
+    position: absolute;
+    top: 0;
+    right: min(0px, calc(50% - 65.6cqh));
+    height: 100%;
+    width: auto;
+    max-width: none;
+  }
+}
+
+// The code sample: numbered lines, coloured tokens.
+.cc-code {
+  margin: 0;
+  padding: 1rem 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  counter-reset: line;
+  overflow-x: auto;
+
+  > span {
+    display: block;
+    padding-right: 1rem;
+    white-space: pre;
+  }
+
+  > span::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 3rem;
+    margin-right: 1rem;
+    padding-right: 0.75rem;
+    text-align: right;
+    color: var(--bs-secondary-color);
+    border-right: 1px solid var(--bs-border-color);
+  }
+}
+
+.cc-tok-keyword {
+  color: #ff7a72;
+}
+
+.cc-tok-name {
+  color: #8fd3ff;
+}
+
+.cc-tok-string {
+  color: #cfdc72;
+}
+
+.cc-tok-comment {
+  color: var(--bs-secondary-color);
+}
+
+.cc-tok-number {
+  color: #f5b86a;
+}

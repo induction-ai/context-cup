@@ -7,3 +7,5 @@ course/db/drizzle
 .venv
 .harbor
 .temp
+# Third-party code, kept exactly as upstream ships it.
+vendor

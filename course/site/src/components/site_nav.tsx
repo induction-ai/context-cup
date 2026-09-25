@@ -22,9 +22,9 @@ export function SiteNav() {
   const current = (href: string) =>
     href === "/" ? path === "/" : path.startsWith(href);
   return (
-    <nav className="navbar navbar-expand-lg border m-3 mb-0 px-3 py-2">
+    <nav className="navbar navbar-expand-lg bg-body-tertiary border m-3 mb-0 px-3 py-2">
       <Link
-        className="navbar-brand d-flex align-items-center gap-2 fs-3 me-4"
+        className="navbar-brand d-flex align-items-center gap-2 fs-4 me-4"
         href="/"
         onClick={close}
       >
@@ -41,7 +41,11 @@ export function SiteNav() {
         aria-label={open ? "Close menu" : "Open menu"}
         onClick={() => setOpen(!open)}
       >
-        <PixelIcon name={open ? "close" : "menu"} size={24} />
+        <PixelIcon
+          name={open ? "close" : "menu"}
+          size={24}
+          className="d-block"
+        />
       </button>
       <div
         id="site-nav"

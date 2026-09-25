@@ -11,6 +11,16 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@context-cup/db", "@context-cup/shared"],
   serverExternalPackages: ["pg"],
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  // Bootstrap 5's Sass (vendor/bootstrap) predates the module system; these
+  // are the deprecations it trips on every build, until Bootstrap 6.
+  sassOptions: {
+    silenceDeprecations: [
+      "import",
+      "global-builtin",
+      "color-functions",
+      "if-function",
+    ],
+  },
 };
 
 export default nextConfig;

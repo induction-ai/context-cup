@@ -64,9 +64,9 @@ export default async function Home() {
             <PixelIcon name="arrow" size={22} />
           </a>
           <div className="d-flex flex-wrap row-gap-3">
-            {stats.map(({ icon, value, label }) => (
+            {stats.map(({ icon, value, label }, i) => (
               <div
-                className="cc-stat d-flex align-items-center gap-2 px-3"
+                className={`d-flex align-items-center gap-2 px-3${i > 0 ? " border-start border-secondary-subtle" : ""}`}
                 key={label}
               >
                 <PixelIcon name={icon} size={30} />
@@ -119,7 +119,10 @@ export default async function Home() {
 
       <section className="row g-4">
         <div className="col-lg-7">
-          <div className="cc-dark h-100 p-2">
+          <div
+            data-bs-theme="dark"
+            className="bg-body text-body border shadow h-100 p-2"
+          >
             <Tabs
               labels={SAMPLE_DRIVER.map((f) => f.file)}
               className="px-1 pt-1"
@@ -145,8 +148,11 @@ export default async function Home() {
           </div>
         </div>
         <div className="col-lg-5">
-          <div className="cc-dark h-100 p-2">
-            <h2 className="h4 text-white px-2 pt-2 mb-3">Top drivers</h2>
+          <div
+            data-bs-theme="dark"
+            className="bg-body text-body border shadow h-100 p-2"
+          >
+            <h2 className="h4 px-2 pt-2 mb-3">Top drivers</h2>
             <Tabs labels={boards.map((b) => b.name)} className="px-1">
               {boards.map((b) => (
                 <TopDrivers key={b.name} name={b.name} board={b} />
@@ -173,10 +179,15 @@ function Feature({
   return (
     <div className="col-lg-4">
       <Link
-        className="cc-box cc-lift cc-card-link d-flex align-items-center gap-3 p-3 h-100"
+        className="cc-card-link border shadow text-reset text-decoration-none d-flex align-items-center gap-3 p-3 h-100"
         href={href}
       >
-        <span className="cc-icon-tile">{icon}</span>
+        <span
+          data-bs-theme="dark"
+          className="cc-icon-tile d-inline-flex align-items-center justify-content-center flex-shrink-0 bg-body text-body"
+        >
+          {icon}
+        </span>
         <span>
           <span className="h5 d-block mb-1">{title}</span>
           <span className="small d-block">{children}</span>
@@ -207,7 +218,7 @@ function TopDrivers({ name, board }: { name: string; board: Board }) {
           yet.
         </p>
       ) : (
-        <div className="table-responsive">
+        <div className="table-responsive" data-bs-theme="light">
           <table className="table table-sm align-middle mb-0">
             <thead>
               <tr>

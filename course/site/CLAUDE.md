@@ -3,15 +3,16 @@
 The results site: Next.js App Router, server components reading Postgres
 through `@context-cup/db`. No client-side data fetching, no API routes.
 
-## Bootstrap, themed
+## Bootstrap first, themed by its variables
 
-The site uses Bootstrap 5 for structure and components
-(`bootstrap/dist/css/bootstrap.min.css`, imported once in `app/layout.tsx`),
-but not for its look: `app/globals.css` re-themes it to the Context Cup
-style (cream paper, ink borders, red accent, square corners, hard offset
-shadows, a pixel display face over a monospace body). Before writing any
-markup or CSS, look for the Bootstrap component or utility that does the job
-and use it; the theme restyles it for you:
+The site is Bootstrap 5, vendored as Sass source in `vendor/bootstrap`
+(5.3.8, exactly as upstream ships it: never edit it, and Prettier skips
+it). `app/globals.scss` sets Bootstrap's own variables to the Context Cup
+theme (cream paper, ink borders, red accent, square corners, a hard offset
+shadow, a pixel display face over a monospace body) and then imports it, so
+every component and utility comes out themed. Before writing any markup or
+CSS, look for the Bootstrap component or utility that does the job and use
+it:
 
 - Layout: `container-fluid`, grid (`row`, `col-*`), spacing utilities (`mt-3`,
   `gap-3`, `mb-0`), `d-flex`, `align-items-*`.
@@ -29,22 +30,27 @@ and use it; the theme restyles it for you:
   columns; heading size utilities (`h3`, `h5`) instead of custom sizes.
   Headings and `display-*` set in the pixel face, uppercase; `text-primary`
   is the brand red.
-- Buttons: `btn btn-primary` (red) and `btn btn-outline-dark`.
+- Surfaces: `border` (2px ink), `shadow` (the hard offset shadow),
+  `bg-body-tertiary` (paper). A navy panel is Bootstrap's dark colour mode:
+  `data-bs-theme="dark"` with `bg-body text-body`, and `data-bs-theme="light"`
+  on anything inside it that stays light (the top drivers' table).
+- Buttons: `btn btn-primary` (red, inked, shadowed).
 
-How the theme works, so a change stays in it:
+Keeping the theme tight:
 
-- Colours, fonts, borders, and radii are Bootstrap's own CSS variables
-  (`--bs-*`), set at the top of `globals.css` from the `--cc-*` palette.
-  Change the palette there, never with a colour inline in a page. Bootstrap
-  components that hard-code their colours (`.btn-*`, `.pagination`,
-  `.table-*` variants) get their component variables overridden below.
-- The fonts are loaded by `next/font` in `app/layout.tsx` (Silkscreen as
-  `--cc-font-display`, IBM Plex Mono as `--cc-font-mono`); the CSS only
-  refers to those variables.
-- What Bootstrap has no component for (the inked boxes, the dark code and
-  standings panels, the icon tiles, the code sample's token colours) is a
-  `cc-` class in `globals.css`. Add one only when no Bootstrap class or
-  variable will do.
+- A change to the look is a Bootstrap variable in `globals.scss`, above the
+  import, not a rule overriding what Bootstrap generated. The palette is the
+  `$cc-*` Sass variables there; never put a colour inline in a page.
+- The rules after the import are only what Bootstrap has no variable for
+  (uppercase headings, inked button borders, the site bar's current-page
+  mark, the hero, the code sample), plus a few `cc-` classes. Add one only
+  when no variable or utility will do.
+- The fonts are loaded by `next/font` in `app/layout.tsx` (Press Start 2P as
+  `--cc-font-display`, IBM Plex Mono as `--cc-font-mono`); the Sass refers
+  only to those variables.
+- Bootstrap 5's Sass trips Dart Sass's deprecations (`@import` and friends);
+  `next.config.ts` silences exactly those. To upgrade Bootstrap, replace
+  `vendor/bootstrap` with the new release's `scss/` and `LICENSE`.
 - Icons are `PixelIcon` (`src/components/pixel_icon.tsx`): rectangles on a
   16-unit grid in `currentColor`. Add a shape there rather than an icon
   library.

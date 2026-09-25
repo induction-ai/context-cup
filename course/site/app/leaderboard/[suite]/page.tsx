@@ -57,11 +57,11 @@ export default async function LeaderboardPage({
         {ELIGIBILITY.min_done} finished trials in every task.
       </p>
 
-      <ul className="nav nav-pills mb-3">
+      <ul className="nav nav-pills gap-2 mb-3">
         {BENCHMARK_SUITES.map((name) => (
           <li className="nav-item" key={name}>
             <a
-              className={`nav-link${name === suite_name ? " active" : ""}`}
+              className={`nav-link border${name === suite_name ? " active" : ""}`}
               href={`/leaderboard/${name}`}
             >
               {name}

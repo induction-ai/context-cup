@@ -1,12 +1,11 @@
 import { SiteNav } from "@/src/components/site_nav";
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Silkscreen } from "next/font/google";
-import "bootstrap/dist/css/bootstrap.min.css";
-import "./globals.css";
+import { IBM_Plex_Mono, Press_Start_2P } from "next/font/google";
+import "./globals.scss";
 
-// Bootstrap's font variables point at these (globals.css).
-const display = Silkscreen({
-  weight: ["400", "700"],
+// Bootstrap's font variables point at these (globals.scss).
+const display = Press_Start_2P({
+  weight: "400",
   subsets: ["latin"],
   variable: "--cc-font-display",
 });
