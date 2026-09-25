@@ -1,7 +1,7 @@
 {
   "concurrency": 64,
   "timeout_minutes": 40,
-  "count": 2,
+  "count": 3,
   "tasks": {
     "banking_001": {
       "runner": "tau3",

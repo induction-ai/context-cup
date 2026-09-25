@@ -1,6 +1,7 @@
 {
   "concurrency": 64,
   "timeout_minutes": 40,
+  "count": 3,
   "tasks": {
     "academic_pdf_report": {
       "runner": "toolathlon"

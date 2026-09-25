@@ -43,14 +43,15 @@ on:
         description: "Target model (targets.json); the driver must support its provider"
         required: true
         type: choice
-        default: gpt-5.5@medium
+        default: gpt-5.6-sol@medium
         options:
           - claude-sonnet-4-6
           - gemini-3.1-pro-preview
           - gpt-5.5@low
           - gpt-5.5@medium
+          - gpt-5.6-sol@medium
       count:
-        description: "Optional: trials per task. Blank = the suite file’s count (else 1)."
+        description: "Trials per task. Blank = the suite file’s count (else 1)."
         required: false
         type: string
         default: ""
