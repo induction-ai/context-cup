@@ -27,8 +27,11 @@ export const suite = pgTable("suite", {
   provider: text().notNull().$type<Provider>(),
   model: text().notNull(),
   reasoning_effort: text(),
-  /** Trials per task (harbor `--n-attempts`). */
+  /** Trials per task (harbor `--n-attempts`); an `--append` may raise it. */
   count: integer().notNull(),
+  /** This and the invocation facts below (harbor_sha, github_run_*,
+   *  harbor_env) are the first invocation's; a trial an `--append` ran
+   *  carries its own. */
   git_sha: text(),
   /** The harbor fork commit the run used (the checkout follows the fork's
    *  main, so this is what makes a run reproducible); null with
@@ -71,7 +74,9 @@ export const job = pgTable(
     /** Trials harbor runs for this job (`--n-attempts`). */
     count: integer().notNull(),
     /** 0 for the suite's first run of the task; n for the job the nth
-     *  `--retry_errors` pass added to make up trials that did not finish. */
+     *  later pass added to make up trials that did not finish (a
+     *  `--retry_errors` pass, or an `--append` run, which numbers on from
+     *  the suite's last pass). */
     pass: integer().notNull().default(0),
     concurrency: integer().notNull(),
     command: text().notNull(),
@@ -115,7 +120,7 @@ export const trial = pgTable(
     provider: text().notNull().$type<Provider>(),
     model: text().notNull(),
     reasoning_effort: text(),
-    /** The job's `--retry_errors` pass (job.pass). */
+    /** The job's pass (job.pass). */
     pass: integer().notNull().default(0),
     harbor_env: text().notNull(),
     git_sha: text(),

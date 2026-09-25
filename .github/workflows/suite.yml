@@ -2,7 +2,8 @@ name: Suite
 run-name: >-
   Suite ${{ inputs.suite }} driver=${{ inputs.driver }} target=${{
   inputs.target }}${{ inputs.count && format(' count={0}', inputs.count) ||
-  '' }}${{ inputs.task && format(' task={0}', inputs.task) || '' }}
+  '' }}${{ inputs.task && format(' task={0}', inputs.task) || '' }}${{
+  inputs.append && format(' append={0}', inputs.append) || '' }}
 
 # One bin/suite run: one suite file, one driver, one target. Results go to the
 # database in DATABASE_URL, and the suite row links back to this run. The
@@ -57,6 +58,11 @@ on:
         default: ""
       task:
         description: "Optional: only these tasks (space-separated). Blank = all in the suite."
+        required: false
+        type: string
+        default: ""
+      append:
+        description: "Optional: a suite id to top up instead of starting a new suite. Runs only the trials each of its tasks still owes to its count; pick the same suite, driver, and target. Blank = a new suite."
         required: false
         type: string
         default: ""
@@ -185,6 +191,7 @@ jobs:
           TASK: ${{ inputs.task }}
           HARBOR_ENV: ${{ inputs.harbor_env || 'daytona' }}
           RETRY_ERRORS: ${{ inputs.retry_errors }}
+          APPEND: ${{ inputs.append }}
         run: |
           args=("$SUITE" --driver "$DRIVER" --target "$TARGET" --harbor_env "$HARBOR_ENV" --log_dir ".temp/suites")
           [ -n "$COUNT" ] && args+=(--count "$COUNT")
@@ -192,6 +199,7 @@ jobs:
           # separate value for the repeatable --task flag.
           [ -n "$TASK" ] && args+=(--task $TASK)
           args+=(--retry_errors "${RETRY_ERRORS:-1}")
+          [ -n "$APPEND" ] && args+=(--append "$APPEND")
           bin/suite "${args[@]}"
 
       - name: Upload suite summaries

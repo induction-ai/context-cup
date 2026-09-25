@@ -124,6 +124,16 @@ jobs; every attempt is kept. Passes are skipped when more than half the
 trials failed, since that points at something a retry would only repeat. The
 run exits non-zero only when a task is still short after the retries.
 
+`--append <suite_id>` tops up a suite that ended short, for instance one that
+missed the leaderboard's two done trials per task. It runs, under the same
+suite, only the trials each of its tasks still owes to reach the suite's
+count, as jobs numbered on from its last pass, and scores the suite over all
+of them. The suite's own driver, target, count, and harbor env are the
+defaults; a `--driver` or `--target` that disagrees is an error, and
+`--count` may raise the count but not lower it. Each new trial records the
+commit and CI run that ran it. `--retry_errors` applies as usual. In CI, pick
+the same suite, driver, and target and put the suite id in `append`.
+
 Output lands in `.temp/suites/<suite_id>/` (`results.json`, `results.txt`,
 `logs/suite.log`, and every trial's artifacts) and in Postgres: `suite`,
 `job`, `trial`, and `model_call` rows.

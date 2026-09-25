@@ -16,6 +16,7 @@ import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import { eq } from "drizzle-orm";
 import pino from "pino";
 import yargs from "yargs";
+import { appendLaunch, assertSameTarget, loadAppendBase } from "./append.ts";
 import { buildDriver } from "./build.ts";
 import {
   daytonaClient,
@@ -48,6 +49,7 @@ import {
   markJobStarted,
   parseJob,
   withMissingTrials,
+  type InvocationFacts,
   type ParsedTrial,
 } from "./ingest.ts";
 import { listSuiteKeys, loadSuiteFile } from "./keys.ts";
@@ -200,8 +202,13 @@ async function main(): Promise<void> {
     })
     .option("harbor_env", {
       choices: ["docker", "daytona"] as const,
-      default: "docker" as HarborEnv,
-      describe: "Where harbor runs the task environment",
+      describe:
+        "Where harbor runs the task environment (default docker; with --append, the suite’s)",
+    })
+    .option("append", {
+      type: "string",
+      describe:
+        "Top up this existing suite (by id) instead of starting one: run only the trials each of its tasks still owes, to its count, under the same suite. Driver, target, and count default to the suite’s",
     })
     .option("retry_errors", {
       type: "number",
@@ -229,9 +236,20 @@ async function main(): Promise<void> {
     .parseSync();
 
   const suite_key = argv.suite_key as string;
-  const harbor_env = argv.harbor_env as HarborEnv;
+  const base = argv.append ? await loadAppendBase(argv.append) : null;
+  const appended = base
+    ? appendLaunch(base.suite, {
+        suite_key,
+        driver: argv.driver,
+        target: argv.target,
+        count: argv.count,
+      })
+    : null;
+  const harbor_env = (argv.harbor_env ??
+    base?.suite.harbor_env ??
+    "docker") as HarborEnv;
   const { path: key_file, file } = loadSuiteFile(suite_key);
-  const count = argv.count ?? file.count ?? 1;
+  const count = appended?.count ?? argv.count ?? file.count ?? 1;
   if (!Number.isInteger(count) || count < 1) {
     throw new Error("--count must be a positive integer");
   }
@@ -240,18 +258,41 @@ async function main(): Promise<void> {
     throw new Error("--retry_errors must be a whole number, 0 or more");
   }
   const launch = await resolveLaunch({
-    driver: argv.driver,
-    target: argv.target,
+    driver: appended?.driver ?? argv.driver,
+    target: appended?.target ?? argv.target,
     targets: loadTargets(),
     packages: workspacePackages(),
     ask: terminalAsker(),
   });
+  if (base) assertSameTarget(base.suite, launch.target);
   const spec = { ...launch, count };
-  const selection: Selection = { task: list(argv.task) };
+  // An append covers the tasks the suite already ran unless --task says.
+  const selection: Selection = {
+    task: list(argv.task) ?? base?.task_names,
+  };
   const runs = interleave(expandSuite(file, spec, selection));
   if (runs.length === 0) throw new Error("The selection expands to no jobs.");
 
-  const suite_id = newId("s");
+  // Every job's trials by task: a retry pass adds a job to the same task,
+  // and an append starts from the ones the suite already has.
+  const trialsByTask = new Map<string, ParsedTrial[]>(base?.trials_by_task);
+  const doneByTask = () =>
+    new Map(
+      [...trialsByTask].map(([task, trials]) => [
+        task,
+        scoredTrials(trials).length,
+      ])
+    );
+  const first_pass = base?.next_pass ?? 0;
+  const owing = base ? interleave(shortfallRuns(runs, doneByTask())) : runs;
+  if (owing.length === 0) {
+    console.log(
+      `suite ${base!.suite.id} already has ${count} done trial(s) in each of its ${runs.length} task(s); nothing to append`
+    );
+    return;
+  }
+
+  const suite_id = base?.suite.id ?? newId("s");
   const suite_dir = path.resolve(
     argv.log_dir ?? path.join(REPO_ROOT, ".temp", "suites"),
     suite_id
@@ -292,7 +333,7 @@ async function main(): Promise<void> {
       command,
     };
   };
-  const entries = runs.map(makeEntry);
+  const entries = owing.map(makeEntry);
 
   const missing = new Set(entries.flatMap((e) => e.command.missing_keys));
   if (missing.size > 0) {
@@ -302,6 +343,11 @@ async function main(): Promise<void> {
   }
 
   if (argv.dry_run) {
+    if (base) {
+      console.log(
+        `append to suite ${suite_id}: ${totalCount(owing)} of ${totalCount(runs)} trial(s) still owed, as pass ${first_pass}`
+      );
+    }
     console.log(
       `suite ${suite_key} (${key_file}): ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}), count ${count}, harbor_env ${harbor_env}, docker cap ${docker_jobs || "none"}`
     );
@@ -332,11 +378,31 @@ async function main(): Promise<void> {
   report(
     `suite ${suite_id}: ${suite_key}, ${entries.length} job(s), driver ${spec.driver_name}, target ${spec.target_name} (${describeTarget(spec.target)}) → ${path.relative(process.cwd(), suite_dir)}`
   );
+  if (base) {
+    report(
+      `appending: ${totalCount(owing)} of ${totalCount(runs)} trial(s) still owed, as pass ${first_pass}`
+    );
+  }
 
   const harbor_sha = prepareHarbor(report);
   report(`results page: ${suiteUrl(suite_id)}`);
-  const started_at = new Date();
+  const invocation: InvocationFacts = {
+    harbor_env,
+    git_sha: git_sha(),
+    harbor_sha,
+    ...githubRun(process.env),
+  };
+  const started_at = base?.suite.started_at ?? new Date();
   await withTransaction(async () => {
+    if (base) {
+      // Unfinished again until this invocation is done with it.
+      await getCurrentTransaction()
+        .update(suiteTable)
+        .set({ count, finished_at: null })
+        .where(eq(suiteTable.id, suite_id));
+      await insertJobs(entries, first_pass);
+      return;
+    }
     await getCurrentTransaction()
       .insert(suiteTable)
       .values({
@@ -349,18 +415,16 @@ async function main(): Promise<void> {
         model: spec.target.model,
         reasoning_effort: spec.target.reasoning_effort ?? null,
         count,
-        git_sha: git_sha(),
-        harbor_sha: harbor_sha,
-        ...githubRun(process.env),
-        harbor_env: harbor_env,
+        ...invocation,
         log_dir: suite_dir,
         started_at: started_at,
       });
-    await insertJobs(entries, 0);
+    await insertJobs(entries, first_pass);
   });
   logger.info({
     event: "suite_start",
     suite_id,
+    append: base !== null,
     key_file,
     harbor_env,
     driver: spec.driver_name,
@@ -403,8 +467,6 @@ async function main(): Promise<void> {
     }
   };
 
-  // Every job's trials by task: a retry pass adds a job to the same task.
-  const trialsByTask = new Map<string, ParsedTrial[]>();
   const queueOptions: SchedulerOptions = {
     suite_concurrency: file.concurrency,
     docker_jobs,
@@ -507,7 +569,7 @@ async function main(): Promise<void> {
         ...trials,
       ]);
       await storing("ingest", () =>
-        ingestJob(suite_id, entry.job_id, result, trials)
+        ingestJob(suite_id, entry.job_id, result, trials, invocation)
       );
       const cell = summarizeCell(entry.run, trials);
       if (parse_error) {
@@ -528,13 +590,6 @@ async function main(): Promise<void> {
   const results = await processQueue(entries, queueOptions);
 
   const expected_trials = totalCount(runs);
-  const doneByTask = () =>
-    new Map(
-      [...trialsByTask].map(([task, trials]) => [
-        task,
-        scoredTrials(trials).length,
-      ])
-    );
   for (let pass = 1; pass <= retry_errors; pass++) {
     // Once results can't be stored, a retry would be lost the same way.
     if (controller.signal.aborted || store_failure !== null) break;
@@ -553,7 +608,7 @@ async function main(): Promise<void> {
     const retries = interleave(owed).map(makeEntry);
     try {
       await storing("retry jobs", () =>
-        withTransaction(() => insertJobs(retries, pass))
+        withTransaction(() => insertJobs(retries, first_pass + pass))
       );
     } catch {
       break; // store_failure says why, after the results files are written

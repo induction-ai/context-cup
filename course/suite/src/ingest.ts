@@ -541,12 +541,25 @@ export function jobStatus(result: JobResult): JobStatus {
   return result.ok ? "done" : "failed";
 }
 
-/** Record a finished job and every trial and model call it produced. */
+/** Where and at what commits a bin/suite invocation ran its trials. */
+export type InvocationFacts = {
+  harbor_env: string;
+  git_sha: string | null;
+  harbor_sha: string | null;
+  github_run_id: string | null;
+  github_run_attempt: number | null;
+  github_repository: string | null;
+};
+
+/** Record a finished job and every trial and model call it produced. A
+ *  trial's invocation facts are its suite's, unless `invocation` says
+ *  otherwise: an --append runs its trials later, from another invocation. */
 export async function ingestJob(
   suite_id: string,
   job_id: string,
   result: JobResult,
-  trials: ParsedTrial[]
+  trials: ParsedTrial[],
+  invocation?: InvocationFacts
 ): Promise<void> {
   await withTransaction(async () => {
     const tx = getCurrentTransaction();
@@ -591,6 +604,7 @@ export async function ingestJob(
         suite_id: suite_id,
         job_id: job_id,
         ...facts,
+        ...invocation,
         trial_name: t.trial_name,
         reward: t.reward,
         score_reason: t.score_reason,
