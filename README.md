@@ -9,141 +9,48 @@ driver through the same AI benchmarks and scores them on two axes:
   driver managing its context.
 - **Cost**: tokens and dollars spent to get there.
 
-## Layout
+The goal is to match a fixed baseline's accuracy for less money.
 
-```
-course/     framework: suite runner, harbor agents, database, scoring
-engines/    what drivers build on: each turns the protocol into a small API
-drivers/    one package per context-management strategy
-suites/     which tasks, drivers, and models a run covers (toolathlon_local: the 35 tasks needing no credentials)
-```
+## The benchmarks
 
-Workspace packages are scoped `@context-cup/*`, for example `@context-cup/db`,
-`@context-cup/engine-python`, while drivers use `@context-cup-drivers/*`, for example
-`@context-cup-drivers/base_python`. How a driver
-plugs in is specified in [docs/protocol.md](docs/protocol.md); to write one,
-start with [docs/drivers.md](docs/drivers.md).
+| benchmark  | suite         | tasks |
+| ---------- | ------------- | ----- |
+| tau3       | `tau_banking` | 97    |
+| Toolathlon | `toolathlon`  | 108   |
 
-## Setup
+The other suites are there to help you test a driver before a full run, and
+never count toward the standings:
 
-Requires Node 24, pnpm 11 (see `.nvmrc` and `packageManager` in
-`package.json`), Python 3.12 (`.python-version`; uv and pyenv both honour
-it), uv, Docker, and a local PostgreSQL server. Trial containers get their
-own uv-managed Python 3.12, whatever the task image ships.
+- `smoke_tau` and `smoke_toolathlon`: one task each, for checking that a
+  driver runs end to end.
+- `toolathlon_local`: the 35 Toolathlon tasks that need no credentials, for
+  a quick read on a driver's score and cost.
 
-```
-cp .env.example .env
-createdb context_cup
-pnpm install
-bin/db migrate
-bin/test
-pnpm typecheck
-```
+## Scoring
 
-## Database
+A trial is one attempt at one task. It is **done** when it reaches a verdict
+without an error; errored or unfinished trials are left out, not counted as
+zero.
 
-`course/db` owns the Postgres schema (drizzle-orm) and its migrations. The
-schema lives in `course/db/src/schema.ts`; `course/shared` holds env loading
-and the test bootstrap that other course packages import.
+- A task's score is the mean reward over its done trials, and its cost the
+  mean price of those trials.
+- A suite's score and cost are the means of its tasks' values.
 
-```
-bin/db generate            write a migration for schema.ts changes
-bin/db migrate             apply pending migrations to DATABASE_URL
-bin/db check               verify migrations, snapshots, and schema.ts agree
-bin/db reset <migration>   drop everything and re-migrate to that point (dev only)
-```
+Every model call a driver makes is in its cost: the main turn, summaries,
+reranking, subagents. Each call is priced under the model it named.
 
-Tests run against one database per vitest worker (`context_cup_test_1`,
-`_2`, ...), created and migrated on the first run. Every test body runs in a
-transaction that rolls back afterwards; set `LEAVEDB=true` to keep the rows
-for inspection.
+## Rules
 
-## Running a suite
-
-A run is one suite file, one driver, and one target model.
-
-```
-bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium
-bin/suite toolathlon_local --driver base_python --target gpt-5.5@medium --count 2
-bin/suite smoke_tau                       # prompts for the driver, then a target it supports
-bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
-```
-
-- `suites/*.json` list the tasks and how hard to run them (concurrency, a
-  default `count`, and `timeout_minutes`; without one, harbor keeps each
-  task's own timeout). Nothing else. Keys are checked strictly, so a typo is
-  an error.
-- `targets.json` at the repo root names the target models: provider, model,
-  reasoning effort, and an optional `concurrency` cap for provider rate
-  limits, merged with the suite's and each task's caps by the scheduler. `--target` refers to a name in it (`TARGETS_FILE`
-  overrides the path).
-- `--driver` is a package under `drivers/`; it must declare support for the
-  target's provider in its `package.json`. `base_passthrough` and
-  `base_python` speak the turn protocol directly; `base_pydantic` is a
-  Pydantic AI agent that owns the model side while the course runs the
-  environment's tools, the baseline for drivers built from Pydantic AI
-  Harness capabilities (`engines/pydantic`); `base_litellm` does the same clipping on litellm chat
-  messages, the baseline for litellm-based drivers (`engines/litellm`);
-  `base_typescript` clips oversized tool results in TypeScript
-  (`engines/typescript`), and `base_aisdk` does the same clipping on the AI SDK, the
-  baseline for AI SDK drivers (`engines/aisdk`); `base_agent` is a whole
-  agent written from scratch, its own loop over the task's MCP tools, the
-  example for agents of your own; `base_codex` is a whole agent
-  run by harbor and compared on score and cost only.
-- `--count` is attempts per task. `--task` narrows to named tasks.
-- `--harbor_env daytona` runs in Daytona sandboxes instead of local Docker
-  (needs `DAYTONA_API_KEY`). Each sandbox is labelled with its suite and job
-  ids and stops itself after two hours.
-  `bin/daytona_sweep suite --suite_id <id>` deletes the sandboxes an interrupted
-  run left behind; `bin/daytona_sweep errors` deletes ones whose build
-  failed, which nothing else reclaims.
-
-Prerequisites: Docker running, uv, Python 3.12, provider keys in `.env`, and
-the harbor fork, which the first run clones into `.harbor/repo`. Toolathlon
-tasks that need credentials read `secrets/toolathlon_auth_configs.zip` when
-present; every task image unzips it into its configs, on Docker and Daytona
-alike.
-
-The notion toolathlon tasks also need a Notion MCP login in `secrets/mcp`,
-and refuse to launch without one:
-
-```
-MCP_REMOTE_CONFIG_DIR=secrets/mcp npx -y mcp-remote@0.1.16 https://mcp.notion.com/mcp
-# approve in the browser, then Ctrl-C once it prints "Proxy established successfully"
-```
-
-Its refresh token rotates on every use. Docker trials mount `secrets/mcp`
-live. Daytona sandboxes cannot mount a host path, so before each notion job
-`bin/suite` refreshes a token with under an hour left and bakes a snapshot
-into the notion tasks' `configs.zip` (`course/suite/src/mcp_auth.ts`).
-
-A task's score is the mean reward over its done trials (a verdict and no
-error; errored or unfinished trials are left out, not counted as zero), its
-cost the mean over those trials' prices, and a suite's score and cost are the
-means of its tasks' values. Nothing is stored; every view computes it.
-
-`--retry_errors N` reruns, after the suite finishes, the trials that did not
-finish, up to N more passes. Each pass adds a job per task still short
-(`job.pass` numbers it), and a task's score covers the done trials of all its
-jobs; every attempt is kept. Passes are skipped when more than half the
-trials failed, since that points at something a retry would only repeat. The
-run exits non-zero only when a task is still short after the retries.
-
-Output lands in `.temp/suites/<suite_id>/` (`results.json`, `results.txt`,
-`logs/suite.log`, and every trial's artifacts) and in Postgres: `suite`,
-`job`, `trial`, and `model_call` rows.
-
-Every model call a trial makes goes through a proxy (`course/proxy`) that
-runs inside that trial's container: `bin/suite` bundles it into one file,
-and the runner uploads it with a `node` binary and starts it as root with
-the provider keys. It forwards to the provider and writes the trial's
-`agent/calls.jsonl`, which is where tokens and cost come from. Before the
-driver sees a reply, it retries rate limits, overloaded and 5xx replies, and
-an unreachable provider up to 4 times (2s to 60s backoff with jitter,
-honouring `Retry-After`); an exhausted quota is never retried. Driver code
-runs as an unprivileged user that cannot read the keys; each trial's
-`agent/isolation.txt` records the check. Set `CC_SAVE_BODIES=1` to keep
-every request and response body under the trial's `agent/bodies/`.
+- **Models**: a driver may call any model from the target's provider, as
+  often as it likes. At `gpt-5.6-sol@medium` that is any OpenAI model. The
+  target is the default, not a requirement: a cheaper OpenAI model for
+  summaries is fair game, an Anthropic or Gemini model is not.
+- **One endpoint**: every model call goes to the base URL the driver is
+  given for that provider, and nowhere else.
+- **No other external calls**: no web search, no outside APIs or services,
+  no downloads while a task runs. Installing the driver's own dependencies
+  during setup is fine; after that, the model endpoint and the task's own
+  tools are the only ways out.
 
 ## Winning
 
@@ -170,10 +77,10 @@ less wins nothing.
 
 Each driver stands on one run: its most recent run of the suite at the
 reference target that is finished, has a `count` of at least 3, and has at
-least 2 done trials (a verdict and no error; retry passes count) in every
-task. Earlier runs, and runs that miss any of these, do not count; a smoke
-suite or any suite other than the two never does. Score and cost are that
-run's suite-level means described above.
+least 2 done trials in every task. Earlier runs, and
+runs that miss any of these, do not count; a smoke suite or any suite other
+than the two never does. Score and cost are that run's suite-level means
+described under [Scoring](#scoring).
 
 Everyone else ranks below the qualifiers, in this order:
 
@@ -183,85 +90,28 @@ Everyone else ranks below the qualifiers, in this order:
 3. Drivers under the baseline's score, best score first.
 4. Drivers with nothing scored.
 
-The results site's `/leaderboard/<suite>` shows this for the two suites: the ranked
-drivers with the baseline as its own row between the qualifiers and the
-rest, and a chart of score against the dollars of a full benchmark run (log
-scale), the qualifying corner shaded. The rule's constants (the suites,
-baselines, eligibility, reference target) live in
-`course/site/src/lib/standings.ts`. On `/suites`, the leaderboard column
-tags each run: on board (the run its driver stands on), superseded
-(qualifies, but a newer run replaces it), or doesn't qualify, with the
-reasons on hover.
+## Entering
 
-## Running in GitHub Actions
+A driver is a package under `drivers/`: either a context manager the harness
+calls on every turn, or a whole agent of your own that works each task end
+to end. [docs/drivers.md](docs/drivers.md) is the guide to writing one: pick
+a lane, copy its base driver, and edit.
 
-The **Suite** workflow (`.github/workflows/suite.yml`, run from the Actions
-tab) is `bin/suite` on a hosted runner: pick the suite, driver, and target
-(the suite and driver have no default),
-and optionally a count and tasks. It runs on Daytona by default. It runs the
-suite against the deployed database (the site's deploy migrates it), deletes the run's Daytona sandboxes (including
-after a cancel), writes the results table to the run summary, and uploads
-two artifacts: `suite-summary` (results and the suite log) and `suite-logs`
-(all of `.temp/suites/`). Toolathlon runs take turns, restore the notion
-login, and write it back when it rotated. The suite row records the
-workflow run id, attempt, and repository, and the results site links back to
-the run. The option lists mirror `suites/`, `drivers/`, and `targets.json`,
-and a test fails when they drift.
-
-**Daytona sweep** runs hourly and deletes context-cup sandboxes
-whose build failed more than 12 hours earlier.
-
-Repository secrets:
-
-| secret                                                  | for                                                                                                            |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                          | the production Postgres; the runner must be able to reach it                                                   |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` | the providers the chosen target and driver call                                                                |
-| `DAYTONA_API_KEY`                                       | Daytona runs and the sweep                                                                                     |
-| `TOOLATHLON_AUTH_CONFIGS_B64`                           | optional: `base64 < secrets/toolathlon_auth_configs.zip \| gh secret set TOOLATHLON_AUTH_CONFIGS_B64`          |
-| `TOOLATHLON_MCP_AUTH_B64`                               | the notion tasks' login; see below                                                                             |
-| `INDUCTION_BOT_APP_ID`, `INDUCTION_BOT_PRIVATE_KEY`     | the induction-bot GitHub App, installed on this repository with Secrets write, to store a rotated notion login |
-
-The repository variable `SITE_URL` points printed links at the deployed
-results site.
-
-CI gets its own Notion login, since a refresh from either copy would spend
-the other's token. To set it:
+Try it on the smoke suites and `toolathlon_local` first. To enter, run both
+benchmark suites with it:
 
 ```
-mkdir /tmp/ci-grant
-MCP_REMOTE_CONFIG_DIR=/tmp/ci-grant npx -y mcp-remote@0.1.16 https://mcp.notion.com/mcp
-# approve, then Ctrl-C once it prints "Proxy established successfully"
-COPYFILE_DISABLE=1 tar czf - -C /tmp/ci-grant . | base64 | gh secret set TOOLATHLON_MCP_AUTH_B64
-rm -rf /tmp/ci-grant
+bin/suite tau_banking --driver <your_driver>
+bin/suite toolathlon --driver <your_driver>
 ```
 
-## Results site
+These run at the reference target with a `count` of 3, which is what the
+standings need. [DEVELOPING.md](DEVELOPING.md) covers setup.
 
-`course/site` is a small Next.js app over the database.
+## Leaderboard
 
-```
-pnpm site:dev            # http://localhost:3300
-```
-
-`/leaderboard/tau_banking` and `/leaderboard/toolathlon` rank the drivers
-by the rule under [Winning](#winning); `/leaderboard` forwards to tau's
-until an aggregate board replaces it. `/suites` lists every run, newest first, and `/suites/<suite_id>` drills into
-a run's tasks, jobs, trials, and each trial's model calls. `bin/suite` prints
-the link to its run at start and finish; `SITE_URL` sets the base for those
-links (default `http://localhost:3300`). Runs started in GitHub Actions show
-a link to the workflow run.
-
-## Deploying
-
-`render/render.yaml` is a Render Blueprint for the site and its Postgres
-database, in one environment. The site builds from the `production` branch;
-`bin/deploy` pushes `origin/main` there (`--commit <sha>` deploys an earlier
-commit of main, `--yes` skips the prompt). Each deploy applies pending
-migrations before it goes live (`pnpm prelaunch`). A package that deploys
-keeps its Render scripts in its own `render/` directory
-(`course/site/render/build.sh`).
-
-The database accepts connections from anywhere, since `bin/suite` writes to
-it from wherever it runs; set the GitHub `DATABASE_URL` secret to its external
-connection string, and the `SITE_URL` variable to the site's address.
+Each benchmark's leaderboard ranks the drivers by the rule under
+[Winning](#winning), with the baseline as its own row between the
+qualifiers and the rest, and plots every driver's score against the cost of
+a full benchmark run. The list of runs shows whether each one is on the
+board, superseded by a newer run, or doesn't qualify, and why.

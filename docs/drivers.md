@@ -110,10 +110,16 @@ bundles them with `driver.ts` on the host before every run (see
   `x-cc-purpose: <label>` (`ctx.llm.completion(purpose=...)` on litellm,
   `ctx.llm.generateText({ purpose })` on the AI SDK);
   unlabelled calls count as `turn`.
-- **You pick your models.** `target` is the run's model and the default, not
-  a rule: call a cheaper model for summaries, or a different one entirely.
-  Name `cc-model` (or omit the model) to get the run's target; a model you
-  name is forwarded unchanged and priced under that name.
+- **You pick your models, from the target's provider.** `target` is the
+  run's model and the default, not a requirement: call a cheaper model from
+  the same provider for summaries, but not another provider's. Name `cc-model`
+  (or omit the model) to get the run's target; a model you name is forwarded
+  unchanged and priced under that name.
+- **No other external calls.** Model calls go only to the base URL you are
+  given. Beyond that, a turn reaches nothing outside the container but the
+  task's own tools: no web search, outside APIs, or downloads. Install your
+  dependencies in `setup.sh`. The full rules are under "Rules" in the
+  [README](../README.md#rules).
 
 ## What persists between turns
 

@@ -11,6 +11,7 @@ import {
 } from "@context-cup/db/connection.js";
 import { suite as suiteTable } from "@context-cup/db/schema.js";
 import { buildProxyBundle } from "@context-cup/proxy/bundle.js";
+import { REFERENCE_TARGET } from "@context-cup/shared/reference_target.js";
 import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import { eq } from "drizzle-orm";
 import pino from "pino";
@@ -174,7 +175,7 @@ async function main(): Promise<void> {
   const argv = yargs(process.argv.slice(2))
     .scriptName("bin/suite")
     .usage(
-      `Usage: $0 <suite_key> --driver <name> --target <name> [options]\n\nRun the tasks of suites/<suite_key>.json with one driver against one target.\nOmit --driver or --target on a terminal to pick from a list.\nAvailable keys: ${listSuiteKeys().join(", ") || "(none)"}`
+      `Usage: $0 <suite_key> --driver <name> [--target <name>] [options]\n\nRun the tasks of suites/<suite_key>.json with one driver against one target.\nThe target defaults to ${REFERENCE_TARGET} when the driver supports it.\nOmit --driver, or --target for a driver that can't run the default, on a terminal to pick from a list.\nAvailable keys: ${listSuiteKeys().join(", ") || "(none)"}`
     )
     .command("$0 <suite_key>", "Run a suite", (y) =>
       y.positional("suite_key", { type: "string", demandOption: true })
@@ -185,7 +186,7 @@ async function main(): Promise<void> {
     })
     .option("target", {
       type: "string",
-      describe: "A target name from targets.json",
+      describe: `A target name from targets.json (default ${REFERENCE_TARGET}, when the driver supports it)`,
     })
     .option("count", {
       type: "number",

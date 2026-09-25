@@ -9,6 +9,8 @@
  *  bar but cost as much or more, cheapest first; then those under the bar,
  *  best score first; then those with nothing scored. */
 
+import { REFERENCE_TARGET } from "@context-cup/shared/reference_target.js";
+
 /** The suite files the competition is judged on, one per benchmark. */
 export const BENCHMARK_SUITES = ["tau_banking", "toolathlon"] as const;
 export type BenchmarkSuite = (typeof BENCHMARK_SUITES)[number];
@@ -28,7 +30,7 @@ export const BASELINES: Record<BenchmarkSuite, Baseline> = {
  *  trials in every task. A driver's latest such run is its entry. */
 export const ELIGIBILITY = { min_count: 3, min_done: 2 };
 /** The target the competition is judged at. */
-export const REFERENCE_TARGET = "gpt-5.6-sol@medium";
+export { REFERENCE_TARGET };
 
 /** One driver's result on a board: its most recent eligible run of the
  *  suite at the target (ELIGIBILITY), scored as a suite is. */

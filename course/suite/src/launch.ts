@@ -1,8 +1,10 @@
 /** Choosing the one driver and one target a suite run uses. Both come from
- *  the command line; when either is missing and a prompt is available, the
- *  user picks from a numbered list. Kept free of terminal code so it can be
- *  tested with an injected asker. */
+ *  the command line. A missing target is the reference target when the
+ *  driver can run it; otherwise, when a prompt is available, the user picks
+ *  from a numbered list, as for a missing driver. Kept free of terminal code
+ *  so it can be tested with an injected asker. */
 
+import { REFERENCE_TARGET } from "@context-cup/shared/reference_target.js";
 import {
   driverProviders,
   driverShortName,
@@ -54,6 +56,8 @@ export async function resolveLaunch(inputs: {
   target?: string;
   targets: TargetsFile;
   packages: ReadonlyMap<string, CupPackage>;
+  /** The target a run gets without --target, when the driver supports it. */
+  default_target?: string;
   /** null when no prompt is possible (not a TTY). */
   ask: Asker | null;
 }): Promise<Launch> {
@@ -76,7 +80,9 @@ export async function resolveLaunch(inputs: {
   const providers = driverProviders(driver_name, packages);
   const usable = targetsForProviders(targets, providers);
 
-  let target_name = inputs.target;
+  const default_target = inputs.default_target ?? REFERENCE_TARGET;
+  let target_name =
+    inputs.target ?? usable.find(([name]) => name === default_target)?.[0];
   if (target_name === undefined) {
     if (usable.length === 0) {
       throw new Error(

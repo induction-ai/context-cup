@@ -104,6 +104,33 @@ describe("resolveLaunch", () => {
     expect(launch.target_name).toBe("claude-sonnet-4-6");
   });
 
+  it("without --target, runs the default target when the driver supports it", async () => {
+    const launch = await resolveLaunch({
+      ...base(),
+      driver: "base_python",
+      default_target: "gpt-5.5@medium",
+      ask: null,
+    });
+    expect(launch.target_name).toBe("gpt-5.5@medium");
+  });
+
+  it("asks for a target when the driver cannot run the default", async () => {
+    const { ask, shown } = scripted([0]);
+    const launch = await resolveLaunch({
+      ...base(),
+      driver: "base_passthrough",
+      default_target: "gemini-3.1-pro-preview",
+      ask,
+    });
+    expect(shown).toEqual([
+      {
+        question: "Target model",
+        names: ["gpt-5.5@medium", "claude-sonnet-4-6"],
+      },
+    ]);
+    expect(launch.target_name).toBe("gpt-5.5@medium");
+  });
+
   it("fails when the driver supports no configured target", async () => {
     const targets = { only: { provider: "gemini" as const, model: "g" } };
     await expect(

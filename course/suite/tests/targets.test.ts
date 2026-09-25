@@ -1,3 +1,4 @@
+import { REFERENCE_TARGET } from "@context-cup/shared/reference_target.js";
 import {
   describe,
   expect,
@@ -66,11 +67,8 @@ describe("targets.json", () => {
     expect(names([])).toEqual([]);
   });
 
-  it("the checked-in targets.json loads and names an openai target", async () => {
-    const targets = loadTargets();
-    expect(Object.values(targets).some((t) => t.provider === "openai")).toBe(
-      true
-    );
+  it("the checked-in targets.json loads and names the reference target", async () => {
+    expect(loadTargets()[REFERENCE_TARGET]).toBeDefined();
   });
 });
 

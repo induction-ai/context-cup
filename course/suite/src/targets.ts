@@ -35,7 +35,7 @@ export function parseTargetsFile(raw: unknown): TargetsFile {
 
 export function loadTargets(file: string = targetsFilePath()): TargetsFile {
   if (!existsSync(file)) {
-    throw new Error(`No targets file at ${file}; see README`);
+    throw new Error(`No targets file at ${file}; see DEVELOPING.md`);
   }
   return parseTargetsFile(JSON.parse(readFileSync(file, "utf8")));
 }
