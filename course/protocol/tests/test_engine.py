@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from context_cup_protocol import TurnInput, TurnOutput, run_engine
 
 
@@ -114,15 +115,19 @@ def test_rejects_a_driver_without_run_or_a_non_response(
 
 def test_finish_turns_the_drivers_result_into_the_response(tmp_path: Path) -> None:
     argv = setup(tmp_path, "def run(ctx):\n    return 'an agent'\n")
-    finish = lambda ctx, result: {"id": "resp_f", "built_from": result}
+
+    def finish(ctx: Ctx, result: object) -> dict[str, object]:
+        return {"id": "resp_f", "built_from": result}
+
     assert run_engine(Ctx, "test", argv, finish=finish) == 0
     assert output(tmp_path).response == {"id": "resp_f", "built_from": "an agent"}
 
 
 def test_an_sdk_response_is_written_with_only_the_fields_the_provider_sent():
 
-    from context_cup_protocol.engine import as_payload
     from pydantic import BaseModel
+
+    from context_cup_protocol.engine import as_payload
 
     class Item(BaseModel):
         type: str

@@ -12,7 +12,6 @@
     ]
   },
   "scripts": {
-    "test": "cd ../.. && uv run pytest engines/litellm -q",
-    "lint": "cd ../.. && uv run ruff check engines/litellm"
+    "test": "cd ../.. && uv run pytest engines/litellm -q"
   }
 }

@@ -41,9 +41,8 @@ Third-party dependencies used by more than one package belong in the pnpm catalo
 ```
 bin/test                   TypeScript test suite (vitest; pass file paths, -t, --project)
 uv run pytest              Python test suite (runner and engines)
-uv run ruff check .        Python lint
-pnpm typecheck             tsc across every package
-pnpm lint / pnpm format    prettier
+bin/format                 format everything in place (prettier, ruff fixes, ruff format)
+bin/lint                   every static check: prettier, ruff format, ruff check, tsc, mypy
 bin/suite <key> --driver <d> --target <t> [--count N] [--dry_run]
                            run a suite file with one driver against one target (targets.json)
 bin/deploy [--yes]         push origin/main to the production branch, which Render deploys
@@ -63,4 +62,4 @@ Tests need a local Postgres. Each vitest worker gets its own database, created a
 - ESM, TypeScript run directly by `tsx` and vitest (no build step). Relative imports carry the `.ts` extension; cross-package imports use the package's `./*.js` export map.
 - Database columns are snake_case, and so is everything in code that names one: schema properties, query results, insert values. A row reads the same in TypeScript as in psql.
 - The `trial` table is fully denormalized: each row carries every fact about its trial (suite, task, benchmark, driver, target, pass, harbor env, commits, CI run), copied from its job and suite when stored, so no question about trials needs a join. A fact added to `job` or `suite` that describes the trial goes on `trial` too.
-- Prettier is the formatter; run `pnpm format` before finishing.
+- Prettier formats TypeScript and the rest of the tree, ruff formats and lints Python. Run `bin/format`, then `bin/lint`, before finishing.

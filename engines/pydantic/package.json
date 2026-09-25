@@ -10,7 +10,6 @@
     ]
   },
   "scripts": {
-    "test": "cd ../.. && uv run pytest engines/pydantic -q",
-    "lint": "cd ../.. && uv run ruff check engines/pydantic"
+    "test": "cd ../.. && uv run pytest engines/pydantic -q"
   }
 }

@@ -9,10 +9,11 @@ from typing import Any
 
 import httpx2
 import pytest
-from context_cup_protocol import Dirs, ProviderClient, ProviderInfo, Target, TurnInput
-from context_cup_pydantic import HISTORY, PydanticContext, finish
 from pydantic_ai import Agent
 from pydantic_ai_harness.compaction import ClearToolResults
+
+from context_cup_protocol import Dirs, ProviderClient, ProviderInfo, Target, TurnInput
+from context_cup_pydantic import HISTORY, PydanticContext, finish
 
 TOOL = {
     "type": "function",
@@ -215,9 +216,5 @@ def test_capabilities_are_applied(tmp_path: Path) -> None:
 
 def test_anything_else_is_a_type_error(tmp_path: Path) -> None:
     ctx = ctx_for(tmp_path, OPENING, [], [])
-    try:
+    with pytest.raises(TypeError, match="capabilities or an Agent"):
         finish(ctx, "capabilities")
-    except TypeError as exc:
-        assert "capabilities or an Agent" in str(exc)
-    else:
-        raise AssertionError("expected TypeError")

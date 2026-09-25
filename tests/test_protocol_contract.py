@@ -11,9 +11,10 @@ import subprocess
 from pathlib import Path
 from typing import get_args
 
+import pytest
+
 import context_cup_protocol as protocol
 import context_cup_runner.protocol as runner_protocol
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 

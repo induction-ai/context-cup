@@ -11,9 +11,7 @@
   "scripts": {
     "build": "tsx src/bundle.ts",
     "test": "../../bin/test --project proxy",
-    "typecheck": "tsc --noEmit",
-    "format": "prettier --write src tests --log-level warn",
-    "lint": "prettier --check src tests"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@context-cup/shared": "workspace:*",

@@ -89,7 +89,7 @@ reaches it as `agent_error`.
 
 ```
 uv run pytest course/runner
-uv run ruff check course/runner
+bin/lint
 ```
 
 The tests drive the loop with a fake two-package chain whose engine answers

@@ -9,6 +9,7 @@ import types
 from pathlib import Path
 
 import pytest
+
 from context_cup_runner.envs.tau3 import extract_policy, is_user_stop, system_prompt
 from context_cup_runner.envs.toolathlon import (
     bundle_stop_tools,

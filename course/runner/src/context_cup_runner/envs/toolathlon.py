@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
+
 from context_cup_protocol import ToolCallRef, Utterance
 
 from ..environment import EnvironmentStart, StepResult, ToolResult

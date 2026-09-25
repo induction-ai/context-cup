@@ -3,8 +3,9 @@ driver is measured against. The Python engine's lane in its smallest form:
 copy this to write a driver that works on the provider's native payload.
 See engines/python/README.md for everything `ctx` holds."""
 
-from context_cup_engine import PythonContext
 from openai import OpenAI  # installed by this driver's setup.sh
+
+from context_cup_engine import PythonContext
 
 
 def run(ctx: PythonContext):

@@ -9,9 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "../../bin/test --project protocol",
-    "format": "prettier --write src tests --log-level warn",
-    "lint": "prettier --check src tests"
+    "test": "../../bin/test --project protocol"
   },
   "dependencies": {
     "esbuild": "catalog:",

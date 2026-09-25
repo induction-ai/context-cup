@@ -12,7 +12,6 @@
     ]
   },
   "scripts": {
-    "test": "cd ../.. && uv run pytest engines/python -q",
-    "lint": "cd ../.. && uv run ruff check engines/python"
+    "test": "cd ../.. && uv run pytest engines/python -q"
   }
 }

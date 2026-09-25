@@ -14,16 +14,6 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 import httpx2
-from context_cup_protocol import (
-    Dirs,
-    Payload,
-    ProviderInfo,
-    Target,
-    TurnInput,
-    load_snapshot,
-    save_snapshot,
-    view,
-)
 from openai.types.shared import ReasoningEffort
 from pydantic_ai import (
     Agent,
@@ -44,6 +34,17 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.tools import ToolDefinition
+
+from context_cup_protocol import (
+    Dirs,
+    Payload,
+    ProviderInfo,
+    Target,
+    TurnInput,
+    load_snapshot,
+    save_snapshot,
+    view,
+)
 
 HISTORY = "pydantic_history"
 """The agent's history and how many conversation messages it accounts for,

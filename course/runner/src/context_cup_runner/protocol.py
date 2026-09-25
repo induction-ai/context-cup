@@ -7,6 +7,8 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
+
 from context_cup_protocol import (
     PLACEHOLDER_KEY,
     PROTOCOL_VERSION,
@@ -25,7 +27,6 @@ from context_cup_protocol import (
 )
 from context_cup_protocol import Target as TargetSpec
 from context_cup_protocol.providers.base import ensure_json_dict
-from pydantic import BaseModel, ConfigDict
 
 __all__ = [
     "PLACEHOLDER_KEY",

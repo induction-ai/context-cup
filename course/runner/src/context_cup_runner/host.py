@@ -16,11 +16,12 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-import context_cup_protocol
 from harbor.agents.capabilities import AgentCapabilities
 from harbor.agents.installed.base import BaseInstalledAgent
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
+
+import context_cup_protocol
 
 from . import __version__
 from .chain import DriverChain

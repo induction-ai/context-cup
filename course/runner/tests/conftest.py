@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from context_cup_protocol import ToolCallRef, Utterance
 from context_cup_runner.chain import DriverChain
 from context_cup_runner.environment import EnvironmentStart, StepResult, ToolResult

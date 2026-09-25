@@ -10,9 +10,7 @@
   },
   "scripts": {
     "test": "../../bin/test --project model-stats",
-    "typecheck": "tsc --noEmit",
-    "format": "prettier --write src --log-level warn",
-    "lint": "prettier --check src"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "tiktoken": "catalog:"

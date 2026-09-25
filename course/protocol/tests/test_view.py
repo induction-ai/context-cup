@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from context_cup_protocol import Message, ToolCall, view, write
 
 # Shared with the TypeScript view's tests (view.test.ts) and the check that

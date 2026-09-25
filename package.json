@@ -14,8 +14,8 @@
     "db": "bin/db",
     "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint",
-    "format": "pnpm -r format",
+    "lint": "bin/lint",
+    "format": "bin/format",
     "site:dev": "pnpm --filter @context-cup/site dev",
     "site:build": "pnpm --filter @context-cup/site build"
   },

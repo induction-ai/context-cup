@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 import pytest
+
 from context_cup_litellm import LitellmContext, engine, finish
 from context_cup_protocol import (
     Dirs,

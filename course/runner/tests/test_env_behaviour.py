@@ -13,6 +13,7 @@ from typing import Any
 
 import anyio
 import pytest
+
 from context_cup_protocol import ToolCallRef
 from context_cup_runner.envs.tau3 import (
     Tau3Environment,

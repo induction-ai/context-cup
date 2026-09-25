@@ -18,6 +18,9 @@ from typing import Any, cast
 
 import httpx
 import litellm
+from litellm.llms.custom_httpx.http_handler import HTTPHandler
+from litellm.types.llms.openai import AllMessageValues
+
 from context_cup_protocol import (
     Conversation,
     Dirs,
@@ -30,8 +33,6 @@ from context_cup_protocol import (
     save_snapshot,
     view,
 )
-from litellm.llms.custom_httpx.http_handler import HTTPHandler
-from litellm.types.llms.openai import AllMessageValues
 
 litellm.suppress_debug_info = True
 

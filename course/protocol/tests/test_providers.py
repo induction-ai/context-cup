@@ -8,6 +8,7 @@ import copy
 import json
 
 import pytest
+
 from context_cup_protocol.providers import ToolCallRef, Utterance, adapter_for
 from context_cup_protocol.providers.base import function_schemas, parse_arguments
 

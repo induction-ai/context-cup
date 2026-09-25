@@ -133,7 +133,7 @@ class OpenAIAdapter:
                     agent.results.append(
                         (str(item.get("call_id") or ""), str(item.get("output") or ""))
                     )
-            elif role == "assistant" or kind == "message" and role != "user":
+            elif role == "assistant" or (kind == "message" and role != "user"):
                 text = _text_of_message_item(item)
                 if agent is None or agent.results:
                     agent = Step(source="agent", message=text)

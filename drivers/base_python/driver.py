@@ -8,8 +8,9 @@ from typing import Any
 
 import httpx
 from anthropic import Anthropic
-from context_cup_engine import PythonContext
 from openai import OpenAI
+
+from context_cup_engine import PythonContext
 
 MARKER = "\n\n[truncated by base_python: {dropped} bytes removed]"
 MARKER_PREFIX = "\n\n[truncated by base_python:"

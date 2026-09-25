@@ -6,10 +6,10 @@ import re
 from pathlib import Path
 
 import pytest
+
 from context_cup_protocol import Utterance
 from context_cup_runner.loop import Trial, TrialError
 from context_cup_runner.protocol import new_turn_id
-
 from tests.conftest import MemoryEnvironment, make_settings, write_script
 
 TURN_ID = re.compile(r"^\d{3}_[a-z0-9]{6}$")
@@ -33,7 +33,7 @@ def test_turn_ids_are_ordered_and_well_formed():
     assert all(TURN_ID.match(i) for i in ids)
     assert ids == sorted(ids)
     assert ids[0].startswith("001_") and ids[3].startswith("999_")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="starts at 1"):
         new_turn_id(0)
 
 
@@ -290,7 +290,7 @@ def test_an_empty_reply_is_discarded_and_other_failures_are_not(workspace, capsy
 
 
 @pytest.mark.parametrize(
-    "steps, expected",
+    ("steps", "expected"),
     [
         ([{"crash": True}, {"crash": True}], "exited 7"),
         ([{"no_output": True}, {"no_output": True}], "no output.json"),

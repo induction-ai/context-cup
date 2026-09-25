@@ -1,0 +1,9 @@
+#!/bin/bash
+# Format the whole tree in place: prettier for everything it knows, ruff for
+# Python (safe lint fixes such as import order first, then the formatter).
+set -e
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+node_modules/.bin/prettier --write . --log-level warn
+uv run --quiet ruff check --fix-only --quiet .
+uv run --quiet ruff format --quiet .

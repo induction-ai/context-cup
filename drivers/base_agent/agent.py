@@ -167,7 +167,7 @@ async def main() -> int:
     config = (manifest.get("contextCup") or {}).get("config") or {}
     max_bytes = int(config.get("max_bytes", 100_000))
     max_steps = int(env.get("CC_MAX_STEPS") or 150)
-    instruction = Path(env["CC_INSTRUCTION_FILE"]).read_text(encoding="utf-8")
+    instruction = Path(env["CC_INSTRUCTION_FILE"]).read_text(encoding="utf-8")  # noqa: ASYNC240 - before any concurrent work
     effort = target.get("reasoning_effort")
 
     # The conversation: this list is what the model sees, and a context
@@ -244,7 +244,7 @@ async def main() -> int:
         # The runner reads the counts into the trial's summary; the messages
         # are kept for whoever reads the trial afterwards.
         result["messages"] = messages
-        Path(env["CC_RESULT_FILE"]).write_text(json.dumps(result, default=str))
+        Path(env["CC_RESULT_FILE"]).write_text(json.dumps(result, default=str))  # noqa: ASYNC240 - after all concurrent work
     return 0
 
 

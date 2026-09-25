@@ -1,0 +1,26 @@
+#!/bin/bash
+# Every static check, TypeScript and Python: formatting, lint, and types.
+# Runs them all and fails at the end if any failed; bin/format fixes most of
+# what the first three report.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+failed=()
+check() {
+  local name="$1"
+  shift
+  echo "==> $name"
+  "$@" || failed+=("$name")
+}
+
+check "prettier" node_modules/.bin/prettier --check . --log-level warn
+check "ruff format" uv run --quiet ruff format --check --quiet .
+check "ruff check" uv run --quiet ruff check --quiet .
+check "tsc" pnpm --silent -r typecheck
+check "mypy" uv run --quiet mypy
+
+if [ ${#failed[@]} -gt 0 ]; then
+  echo "Failed: ${failed[*]}" >&2
+  exit 1
+fi
+echo "All checks passed"
