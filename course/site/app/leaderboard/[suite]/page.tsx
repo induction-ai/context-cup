@@ -46,7 +46,7 @@ export default async function LeaderboardPage({
   return (
     <>
       <h1 className="h3 mb-3">Leaderboard</h1>
-      <p className="text-body-secondary" style={{ maxWidth: "80ch" }}>
+      <p className="text-body-secondary">
         A driver qualifies with a score at least the baseline’s and a full
         benchmark run that costs less; the cheapest qualifier leads. The rest
         rank below: those that reach the baseline’s score but cost more,

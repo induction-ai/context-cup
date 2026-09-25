@@ -416,3 +416,10 @@ export async function loadBoard(
     })),
   };
 }
+
+/** Trials run across every suite, for the home page. */
+export async function countTrials(): Promise<number> {
+  const db = getCurrentTransaction();
+  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(trial);
+  return row?.n ?? 0;
+}

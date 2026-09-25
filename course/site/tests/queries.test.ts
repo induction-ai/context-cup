@@ -6,6 +6,7 @@ import {
   it,
 } from "@context-cup/shared/test_helpers/index.js";
 import {
+  countTrials,
   listSuites,
   loadBoard,
   loadSuite,
@@ -231,6 +232,12 @@ describe("queries", () => {
       [...(data?.calls ?? [])].map((c) => c.sequence).sort((a, b) => a - b)
     );
     expect(await loadTrial("t_nope")).toBeUndefined();
+  });
+
+  it("counts every trial", async () => {
+    expect(await countTrials()).toBe(0);
+    await seed();
+    expect(await countTrials()).toBe(2);
   });
 });
 

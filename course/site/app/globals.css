@@ -1,4 +1,224 @@
-/* Bootstrap does the work; this is only what it lacks. */
+/* The Context Cup theme, over Bootstrap. Bootstrap still does the work
+ * (grid, utilities, navs, tables, alerts); this file points its variables at
+ * the theme, then adds the few pieces it has no component for, all under a
+ * `cc-` prefix. The fonts come from next/font in app/layout.tsx. */
+
+:root,
+[data-bs-theme="light"] {
+  --cc-cream: #f3ebdb;
+  --cc-paper: #f8f2e4;
+  --cc-sand: #e7dcc5;
+  --cc-ink: #151515;
+  --cc-red: #cf3a35;
+  --cc-red-dark: #a82c28;
+  --cc-navy: #0e1822;
+  --cc-navy-line: #26323e;
+  --cc-gold: #fbe0a0;
+  --cc-sky: #93c4e6;
+  --cc-shadow: 4px 4px 0 var(--cc-ink);
+  --cc-display-1: clamp(2.5rem, 5vw, 5rem);
+
+  --bs-body-font-family: var(--cc-font-mono), ui-monospace, monospace;
+  --bs-font-monospace: var(--cc-font-mono), ui-monospace, monospace;
+  --bs-body-bg: var(--cc-cream);
+  --bs-body-bg-rgb: 243, 235, 219;
+  --bs-body-color: var(--cc-ink);
+  --bs-body-color-rgb: 21, 21, 21;
+  --bs-emphasis-color: var(--cc-ink);
+  --bs-emphasis-color-rgb: 21, 21, 21;
+  --bs-heading-color: var(--cc-ink);
+  --bs-secondary-color: rgba(21, 21, 21, 0.68);
+  --bs-secondary-bg: var(--cc-sand);
+  --bs-tertiary-bg: var(--cc-paper);
+  --bs-primary: var(--cc-red);
+  --bs-primary-rgb: 207, 58, 53;
+  --bs-primary-text-emphasis: var(--cc-red-dark);
+  --bs-primary-bg-subtle: #f6d9d3;
+  --bs-primary-border-subtle: var(--cc-red);
+  --bs-link-color: var(--cc-red);
+  --bs-link-color-rgb: 207, 58, 53;
+  --bs-link-hover-color: var(--cc-red-dark);
+  --bs-link-hover-color-rgb: 168, 44, 40;
+  --bs-border-color: var(--cc-ink);
+  --bs-border-color-translucent: rgba(21, 21, 21, 0.2);
+  --bs-border-width: 2px;
+  --bs-border-radius: 0;
+  --bs-border-radius-sm: 0;
+  --bs-border-radius-lg: 0;
+  --bs-border-radius-xl: 0;
+  --bs-border-radius-xxl: 0;
+  --bs-border-radius-pill: 0;
+}
+
+/* Headings and display text in the pixel face. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6,
+.display-1,
+.display-2,
+.display-3,
+.display-4,
+.display-5,
+.display-6,
+.navbar-brand {
+  font-family: var(--cc-font-display), var(--bs-font-monospace);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+
+.display-1 {
+  font-size: var(--cc-display-1);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+/* Buttons: square, inked, with a hard offset shadow that the press takes
+ * back. */
+.btn {
+  --bs-btn-border-width: 2px;
+  --bs-btn-font-family: var(--cc-font-display);
+  --bs-btn-font-weight: 700;
+  text-transform: uppercase;
+  box-shadow: var(--cc-shadow);
+  border-color: var(--cc-ink);
+}
+
+.btn:active {
+  box-shadow: none;
+  transform: translate(4px, 4px);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--cc-red);
+  --bs-btn-border-color: var(--cc-ink);
+  --bs-btn-hover-bg: var(--cc-red-dark);
+  --bs-btn-hover-border-color: var(--cc-ink);
+  --bs-btn-active-bg: var(--cc-red-dark);
+  --bs-btn-active-border-color: var(--cc-ink);
+  --bs-btn-disabled-bg: var(--cc-red);
+  --bs-btn-disabled-border-color: var(--cc-ink);
+  --bs-btn-focus-shadow-rgb: 207, 58, 53;
+}
+
+.btn-outline-dark,
+.btn-outline-secondary {
+  --bs-btn-color: var(--cc-ink);
+  --bs-btn-bg: var(--cc-paper);
+  --bs-btn-border-color: var(--cc-ink);
+  --bs-btn-hover-color: var(--cc-paper);
+  --bs-btn-hover-bg: var(--cc-ink);
+  --bs-btn-hover-border-color: var(--cc-ink);
+  --bs-btn-active-color: var(--cc-paper);
+  --bs-btn-active-bg: var(--cc-ink);
+  --bs-btn-active-border-color: var(--cc-ink);
+}
+
+/* The site bar: a boxed strip, the current page underlined in red. */
+.navbar {
+  --bs-navbar-color: var(--cc-ink);
+  --bs-navbar-hover-color: var(--cc-red);
+  --bs-navbar-active-color: var(--cc-ink);
+  --bs-navbar-nav-link-padding-x: 0.9rem;
+  background: var(--cc-paper);
+}
+
+.navbar-toggler {
+  --bs-navbar-toggler-padding-x: 0.5rem;
+  --bs-navbar-toggler-padding-y: 0.4rem;
+  --bs-navbar-toggler-focus-width: 0;
+  color: var(--cc-ink);
+  border: 2px solid var(--cc-ink);
+  line-height: 0;
+}
+
+.navbar-toggler:focus-visible {
+  outline: 2px solid var(--cc-red);
+  outline-offset: 2px;
+}
+
+.navbar .nav-link.active {
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 var(--cc-red);
+}
+
+/* Folded (below lg), the pages stack: the current one gets a bar on its
+ * left instead of an underline the width of the menu. */
+@media (max-width: 991.98px) {
+  .navbar .nav-link {
+    padding-left: 0.75rem;
+  }
+
+  .navbar .nav-link.active {
+    box-shadow: inset 3px 0 0 var(--cc-red);
+  }
+}
+
+.nav-pills {
+  --bs-nav-pills-link-active-bg: var(--cc-ink);
+  --bs-nav-pills-link-active-color: var(--cc-paper);
+  --bs-nav-link-color: var(--cc-ink);
+  --bs-nav-link-hover-color: var(--cc-red);
+}
+
+.nav-pills .nav-link {
+  border: 2px solid var(--cc-ink);
+  margin-right: 0.5rem;
+}
+
+.pagination {
+  --bs-pagination-color: var(--cc-ink);
+  --bs-pagination-bg: var(--cc-paper);
+  --bs-pagination-border-color: var(--cc-ink);
+  --bs-pagination-hover-color: var(--cc-red);
+  --bs-pagination-hover-bg: var(--cc-sand);
+  --bs-pagination-hover-border-color: var(--cc-ink);
+  --bs-pagination-active-bg: var(--cc-ink);
+  --bs-pagination-active-border-color: var(--cc-ink);
+  --bs-pagination-disabled-bg: var(--cc-cream);
+  --bs-pagination-disabled-border-color: var(--cc-ink);
+}
+
+/* Tables sit on paper; the leader's row is gold, the baseline's sky. */
+.table {
+  --bs-table-bg: var(--cc-paper);
+  --bs-table-striped-bg: rgba(21, 21, 21, 0.035);
+  --bs-table-hover-bg: rgba(21, 21, 21, 0.07);
+  --bs-table-border-color: rgba(21, 21, 21, 0.15);
+}
+
+.table > thead th {
+  background: var(--cc-sand);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table-warning {
+  --bs-table-bg: var(--cc-gold);
+  --bs-table-striped-bg: var(--cc-gold);
+  --bs-table-hover-bg: #f4d48a;
+  --bs-table-color: var(--cc-ink);
+}
+
+.table-info {
+  --bs-table-bg: var(--cc-sky);
+  --bs-table-striped-bg: var(--cc-sky);
+  --bs-table-hover-bg: #82b7dc;
+  --bs-table-color: var(--cc-ink);
+}
+
+.alert {
+  border: 2px solid var(--cc-ink);
+}
 
 /* Numbers line up in columns. */
 .font-monospace,
@@ -15,4 +235,196 @@ td.error {
 
 details > summary {
   cursor: pointer;
+}
+
+/* ---- Pieces Bootstrap has no component for. ---- */
+
+/* An inked box with the hard shadow: the feature cards and the panels. */
+.cc-box {
+  border: 2px solid var(--cc-ink);
+  background: var(--cc-paper);
+}
+
+.cc-lift {
+  box-shadow: var(--cc-shadow);
+}
+
+/* A linked card whose arrow nudges on hover. */
+.cc-card-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cc-card-link:hover {
+  background: var(--cc-cream);
+}
+
+.cc-card-link .cc-arrow {
+  transition: transform 0.12s steps(2);
+}
+
+.cc-card-link:hover .cc-arrow {
+  transform: translateX(4px);
+}
+
+/* The dark square an icon sits in. */
+.cc-icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 4rem;
+  height: 4rem;
+  background: var(--cc-navy);
+  color: var(--cc-paper);
+  --bs-heading-color: var(--cc-paper);
+}
+
+/* Pixel art stays pixels. */
+.cc-pixel {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+}
+
+/* The home page's hero: the copy on the left, the art filling its full
+ * height out to the window's right edge. The art's edge starts under the
+ * stats row (34rem wide), where the dissolve is still open enough at the
+ * bottom (it fills in about 0.35 of the hero's height in) that every stat
+ * stays on cream, and dissolves in:
+ * the image's own pixel dissolve, its alpha used as a mask scaled to the
+ * hero's height, so the headline's end sits on the pale edge and a cropped
+ * edge still dissolves. The art thins as the window narrows, and the page
+ * hides it below Bootstrap's lg breakpoint, where it would sit behind the
+ * body copy. The offsets undo <main>'s padding so the art meets the site
+ * bar and the window's edge. */
+.cc-hero {
+  position: relative;
+  margin-top: -1.5rem;
+}
+
+.cc-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.cc-hero-art {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 25rem;
+  right: -1rem;
+  overflow: hidden;
+  container-type: size;
+}
+
+.cc-hero-art > div {
+  position: absolute;
+  inset: 0;
+  /* The dissolve reaches 0.64 of the image's height in from its left. */
+  mask-image: url("/hero.png"), linear-gradient(#000, #000);
+  mask-size:
+    auto 100%,
+    max(0px, calc(100% - 64cqh)) 100%;
+  mask-position:
+    left center,
+    right center;
+  mask-repeat: no-repeat;
+}
+
+/* The image is 1.975 of its height wide, with the kart 0.656 of its
+ * height in from its right. Right-aligned while the art is wide enough;
+ * narrower, the kart stays at the art's centre and both sides crop. */
+.cc-hero-art img {
+  position: absolute;
+  top: 0;
+  right: min(0px, calc(50% - 65.6cqh));
+  height: 100%;
+  width: auto;
+  max-width: none;
+}
+
+/* The hero's stats row: a rule between each. */
+.cc-stat + .cc-stat {
+  border-left: 2px solid rgba(21, 21, 21, 0.25);
+}
+
+/* The dark panels: the code sample and the top drivers. */
+.cc-dark {
+  --cc-code-fg: #e8e2d4;
+  background: var(--cc-navy);
+  color: var(--cc-code-fg);
+  border: 2px solid var(--cc-ink);
+  box-shadow: var(--cc-shadow);
+}
+
+.cc-dark .nav-tabs {
+  --bs-nav-tabs-border-color: var(--cc-navy-line);
+  --bs-nav-tabs-border-width: 2px;
+  --bs-nav-tabs-link-hover-border-color: var(--cc-navy-line);
+  --bs-nav-tabs-link-active-color: var(--cc-paper);
+  --bs-nav-tabs-link-active-bg: #1a2530;
+  --bs-nav-tabs-link-active-border-color: var(--cc-red);
+  --bs-nav-link-color: #aab3bd;
+  --bs-nav-link-hover-color: var(--cc-paper);
+  gap: 0.25rem;
+}
+
+.cc-dark .nav-tabs .nav-link {
+  border-color: var(--cc-navy-line);
+}
+
+.cc-dark .nav-tabs .nav-link.active {
+  border-color: var(--cc-red);
+}
+
+.cc-dark a {
+  color: var(--cc-sky);
+}
+
+.cc-code {
+  margin: 0;
+  padding: 1rem 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--cc-code-fg);
+  counter-reset: line;
+  overflow-x: auto;
+}
+
+.cc-code > span {
+  display: block;
+  padding-right: 1rem;
+  white-space: pre;
+}
+
+.cc-code > span::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 3rem;
+  margin-right: 1rem;
+  padding-right: 0.75rem;
+  text-align: right;
+  color: #6c7783;
+  border-right: 1px solid var(--cc-navy-line);
+}
+
+.cc-tok-keyword {
+  color: #ff7a72;
+}
+
+.cc-tok-name {
+  color: #8fd3ff;
+}
+
+.cc-tok-string {
+  color: #cfdc72;
+}
+
+.cc-tok-comment {
+  color: #8893a0;
+}
+
+.cc-tok-number {
+  color: #f5b86a;
 }

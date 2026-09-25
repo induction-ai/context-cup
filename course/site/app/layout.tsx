@@ -1,12 +1,25 @@
+import { SiteNav } from "@/src/components/site_nav";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IBM_Plex_Mono, Silkscreen } from "next/font/google";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./globals.css";
+
+// Bootstrap's font variables point at these (globals.css).
+const display = Silkscreen({
+  weight: ["400", "700"],
+  subsets: ["latin"],
+  variable: "--cc-font-display",
+});
+const mono = IBM_Plex_Mono({
+  weight: ["400", "500", "600"],
+  subsets: ["latin"],
+  variable: "--cc-font-mono",
+});
 
 export const metadata: Metadata = {
   title: "Context Cup",
   description:
-    "Results of context-management drivers racing on shared benchmarks",
+    "A competition to build the context engine that matches the baseline for less",
 };
 
 export default function RootLayout({
@@ -15,22 +28,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-scroll-behavior="smooth">
+    <html
+      lang="en"
+      data-scroll-behavior="smooth"
+      className={`${display.variable} ${mono.variable}`}
+    >
       <body>
-        <nav className="navbar navbar-expand border-bottom px-3">
-          <Link className="navbar-brand fw-semibold" href="/">
-            Context Cup
-          </Link>
-          <div className="navbar-nav">
-            <Link className="nav-link" href="/leaderboard">
-              Leaderboard
-            </Link>
-            <Link className="nav-link" href="/suites">
-              Suites
-            </Link>
-          </div>
-        </nav>
-        <main className="container-fluid py-4">{children}</main>
+        <SiteNav />
+        <main className="container-fluid px-3 py-4">{children}</main>
       </body>
     </html>
   );
