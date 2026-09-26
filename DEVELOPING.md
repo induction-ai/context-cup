@@ -78,8 +78,8 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
   target's provider in its `package.json`. `base_passthrough` and
   `base_python` speak the turn protocol directly; `base_pydantic` is a
   Pydantic AI agent that owns the model side while the course runs the
-  environment's tools, the baseline for drivers built from Pydantic AI
-  Harness capabilities (`engines/pydantic`); `base_litellm` does the same clipping on litellm chat
+  environment's tools, doing the same clipping as a capability of its own,
+  the example for drivers built on Pydantic AI (`engines/pydantic`); `base_litellm` does the same clipping on litellm chat
   messages, the baseline for litellm-based drivers (`engines/litellm`);
   `base_typescript` clips oversized tool results in TypeScript
   (`engines/typescript`), and `base_aisdk` does the same clipping on the AI SDK, the

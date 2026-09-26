@@ -410,12 +410,12 @@ proxy.
 
 Drivers shipped with the course are prefixed `base_`, one or two per lane.
 `base_passthrough` sends the context payload unchanged (Python engine).
-`base_python`, `base_litellm`, `base_typescript`, and `base_aisdk` all run
-the same strategy, clipping any tool result over `max_bytes`, one per lane
-(Python, LiteLLM, TypeScript, and AI SDK engines), so the lanes can be
-compared on it. `base_pydantic` runs Pydantic AI with no strategy (Pydantic
-engine), `base_agent` is a whole agent written from scratch that clips the same
-way (script agent), and `base_codex` is OpenAI's Codex CLI (harbor agent).
+`base_python`, `base_litellm`, `base_typescript`, `base_aisdk`, and
+`base_pydantic` all run the same strategy, clipping any tool result over
+`max_bytes`, one per lane (Python, LiteLLM, TypeScript, AI SDK, and Pydantic
+engines), so the lanes can be compared on it. `base_agent` is a whole agent
+written from scratch that clips the same way (script agent), and `base_codex`
+is OpenAI's Codex CLI (harbor agent).
 Contestants pick any other prefix.
 
 ## Agent drivers

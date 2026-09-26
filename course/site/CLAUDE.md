@@ -78,9 +78,11 @@ Keeping the theme tight:
   them together. Keep all of it in step with README "Winning".
 - Query functions return typed rows; aggregation and formatting are pure
   functions with tests under `tests/`.
-- The home page's code sample (`src/lib/sample_driver.ts`) is a real
-  driver against the Python engine's `ctx`, coloured by `src/lib/highlight.ts`;
-  keep it in step with `docs/drivers.md` and `drivers/base_python`.
+- The home page's code samples are the base drivers themselves, one tab
+  per lane, read from `drivers/` when the page renders
+  (`src/lib/sample_driver.ts`) and coloured by `src/lib/highlight.ts`. Add
+  or rename a lane there when `drivers/` changes; its test fails if a file
+  moves.
 - Off-site links (the README's sections, the driver guide) come from
   `src/lib/links.ts`.
 - Tests: `bin/test --project site`. Build check: `pnpm site:build`.

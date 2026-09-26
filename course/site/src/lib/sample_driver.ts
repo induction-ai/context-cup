@@ -1,54 +1,77 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import type { Language } from "./highlight";
 
-/** The home page's code sample: a whole driver on the Python lane, its three
- *  files. It is the `keep_recent` example from docs/drivers.md, written
- *  against the same `ctx` as drivers/base_python; keep it runnable. */
-export const SAMPLE_DRIVER: {
-  file: string;
+/** The home page's code samples: each lane's base driver, one tab per lane,
+ *  read from drivers/ as the repo has it and cut down to its `run` (with its
+ *  tunables shown as their defaults), so the page shows the real code. */
+export const SAMPLE_DRIVERS = [
+  { lane: "Python", path: "drivers/base_python/driver.py" },
+  { lane: "TypeScript", path: "drivers/base_typescript/driver.ts" },
+  { lane: "LiteLLM", path: "drivers/base_litellm/driver.py" },
+  { lane: "AI SDK", path: "drivers/base_aisdk/driver.ts" },
+  { lane: "Pydantic AI", path: "drivers/base_pydantic/driver.py" },
+] as const;
+
+export type SampleDriver = (typeof SAMPLE_DRIVERS)[number] & {
   language: Language;
-  source: string;
-}[] = [
-  {
-    file: "driver.py",
-    language: "python",
-    source: `from openai import OpenAI
+  /** The driver's `run`, as `showDefaults` leaves it. */
+  code: string;
+};
 
-from context_cup_engine import PythonContext
-
-
-def run(ctx: PythonContext):
-    """Every turn: decide what the model sees, then call it."""
-    keep = int(ctx.config.get("keep", 3))
-    conversation = ctx.view()
-    results = [m for m in conversation.messages if m.role == "tool"]
-    # Blank all but the most recent tool results.
-    for message in results[:-keep]:
-        message.text = "[dropped]"
-    ctx.write(conversation)
-    return OpenAI().responses.create(**ctx.context_payload)`,
-  },
-  {
-    file: "package.json",
-    language: "json",
-    source: `{
-  "private": true,
-  "name": "@context-cup-drivers/keep_recent",
-  "version": "0.1.0",
-  "description": "Blanks all but the three most recent tool results.",
-  "contextCup": {
-    "kind": "driver",
-    "extends": "@context-cup/engine-python",
-    "providers": ["openai"],
-    "config": { "keep": 3 }
+/** A driver file's top-level `run`: Python's `def run(` through its
+ *  indented body, or TypeScript's `export … function run(` through the
+ *  closing brace at the start of a line. */
+export function runFunction(source: string, language: Language): string {
+  const lines = source.split("\n");
+  const start = lines.findIndex((line) =>
+    language === "python"
+      ? line.startsWith("def run(")
+      : /^export (async )?function run\(/.test(line)
+  );
+  if (start === -1) throw new Error("no top-level run");
+  let end = start + 1;
+  if (language === "python") {
+    while (
+      end < lines.length &&
+      (lines[end] === "" || /^\s/.test(lines[end]!))
+    ) {
+      end++;
+    }
+  } else {
+    while (end < lines.length && lines[end] !== "}") end++;
+    end++;
   }
-}`,
-  },
-  {
-    file: "setup.sh",
-    language: "bash",
-    source: `#!/usr/bin/env bash
-set -euo pipefail
-# The Python engine installs no provider SDK; bring your own.
-uv pip install --quiet --python "\${CC_CHAIN%%:*}/.venv/bin/python" openai`,
-  },
-];
+  return lines.slice(start, end).join("\n").trimEnd();
+}
+
+/** A sample's tunables as their defaults: a `ctx.config` lookup
+ *  (`int(ctx.config.get("max_bytes", 100_000))`,
+ *  `Number(ctx.config.max_bytes ?? 100_000)`) becomes the default it falls
+ *  back to, and the comment explaining tunables goes. */
+export function showDefaults(code: string): string {
+  return code
+    .replace(
+      /^[ \t]*(#|\/\/) Tunables live in[^\n]*\n(?:[ \t]*(#|\/\/)[^\n]*\n)*?[ \t]*(#|\/\/)[^\n]*manifest edit\.\n/m,
+      ""
+    )
+    .replace(/int\(ctx\.config\.get\("\w+", ([\d_]+)\)\)/g, "$1")
+    .replace(/Number\(ctx\.config\.\w+ \?\? ([\d_]+)\)/g, "$1");
+}
+
+export async function loadSampleDrivers(): Promise<SampleDriver[]> {
+  return Promise.all(
+    SAMPLE_DRIVERS.map(async (d) => {
+      const language: Language = d.path.endsWith(".ts")
+        ? "typescript"
+        : "python";
+      const source = await readFile(path.join(REPO_ROOT, d.path), "utf8");
+      return {
+        ...d,
+        language,
+        code: showDefaults(runFunction(source, language)),
+      };
+    })
+  );
+}

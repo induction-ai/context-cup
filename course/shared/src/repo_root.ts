@@ -15,5 +15,9 @@ export function find_up(marker: string, from: string): string {
 }
 
 /** The pnpm workspace root. Shared files such as `.env` live there, whatever
- * the cwd. */
-export const REPO_ROOT = find_up("pnpm-workspace.yaml", import.meta.dirname);
+ * the cwd. A bundler (the site's Next build) leaves `import.meta.dirname`
+ * undefined; there the search starts from the cwd, inside the workspace. */
+export const REPO_ROOT = find_up(
+  "pnpm-workspace.yaml",
+  import.meta.dirname ?? process.cwd()
+);

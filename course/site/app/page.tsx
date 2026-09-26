@@ -5,7 +5,7 @@ import { count, dollars, reward } from "@/src/lib/format";
 import { highlight } from "@/src/lib/highlight";
 import { DOCS } from "@/src/lib/links";
 import { countTrials, loadBoard } from "@/src/lib/queries";
-import { SAMPLE_DRIVER } from "@/src/lib/sample_driver";
+import { loadSampleDrivers } from "@/src/lib/sample_driver";
 import {
   BASELINES,
   BENCHMARK_SUITES,
@@ -17,7 +17,7 @@ import {
 } from "@/src/lib/standings";
 import Image from "next/image";
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +25,9 @@ export const dynamic = "force-dynamic";
 const TOP = 5;
 
 export default async function Home() {
-  const [trials, ...boards] = await Promise.all([
+  const [trials, drivers, ...boards] = await Promise.all([
     countTrials(),
+    loadSampleDrivers(),
     ...BENCHMARK_SUITES.map(async (name) => {
       const { tasks, entries } = await loadBoard(
         name,
@@ -36,6 +37,8 @@ export default async function Home() {
       return { name, tasks, ...rankBoard(entries, BASELINES[name], tasks) };
     }),
   ]);
+
+  const tallest = Math.max(...drivers.map((d) => d.code.split("\n").length));
 
   const stats: { icon: IconName; value: string; label: string }[] = [
     { icon: "trophy", value: "$100K", label: "Prize pool" },
@@ -123,26 +126,31 @@ export default async function Home() {
             data-bs-theme="dark"
             className="bg-body text-body border shadow h-100 p-2"
           >
-            <Tabs
-              labels={SAMPLE_DRIVER.map((f) => f.file)}
-              className="px-1 pt-1"
-            >
-              {SAMPLE_DRIVER.map((f) => (
-                <pre className="cc-code" key={f.file}>
-                  {highlight(f.source, f.language).map((line, i) => (
-                    <span key={i}>
-                      {line.map((t, j) =>
-                        t.kind ? (
-                          <span className={`cc-tok-${t.kind}`} key={j}>
-                            {t.text}
-                          </span>
-                        ) : (
-                          t.text
-                        )
-                      )}
-                    </span>
-                  ))}
-                </pre>
+            <Tabs labels={drivers.map((d) => d.lane)} className="px-1 pt-1">
+              {drivers.map((d) => (
+                <div key={d.lane}>
+                  <div className="small text-body-secondary font-monospace px-2 pt-2">
+                    {d.path}
+                  </div>
+                  <pre
+                    className="cc-code"
+                    style={{ "--cc-code-lines": tallest } as CSSProperties}
+                  >
+                    {highlight(d.code, d.language).map((line, i) => (
+                      <span key={i}>
+                        {line.map((t, j) =>
+                          t.kind ? (
+                            <span className={`cc-tok-${t.kind}`} key={j}>
+                              {t.text}
+                            </span>
+                          ) : (
+                            t.text
+                          )
+                        )}
+                      </span>
+                    ))}
+                  </pre>
+                </div>
               ))}
             </Tabs>
           </div>

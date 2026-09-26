@@ -7,7 +7,7 @@ $cc-cream: #f3ebdb;
 $cc-paper: #f8f2e4;
 $cc-sand: #e7dcc5;
 $cc-ink: #151515;
-$cc-red: #cf3a35;
+$cc-red: #c83632;
 $cc-gold: #fbe0a0;
 $cc-sky: #93c4e6;
 $cc-navy: #0e1822;
@@ -38,7 +38,7 @@ $gray-800: mix($cc-ink, $cc-cream, 80%);
 $gray-900: mix($cc-ink, $cc-cream, 90%);
 
 $primary: $cc-red;
-$secondary: $gray-600;
+$secondary: $gray-700;
 $success: #3d7530;
 $info: #6f8fcf;
 $warning: #eea846;
@@ -305,7 +305,9 @@ details > summary {
   }
 }
 
-// The code sample: numbered lines, coloured tokens.
+// The code samples: numbered lines, coloured tokens. Every tab is as tall as
+// the tallest sample plus a line (`--cc-code-lines`, set by the page), so
+// switching tabs never moves the page.
 .cc-code {
   margin: 0;
   padding: 1rem 0;
@@ -313,6 +315,7 @@ details > summary {
   line-height: 1.6;
   counter-reset: line;
   overflow-x: auto;
+  min-height: calc((var(--cc-code-lines, 0) + 1) * 1lh + 2rem);
 
   > span {
     display: block;
