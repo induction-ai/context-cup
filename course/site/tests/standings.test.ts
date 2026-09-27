@@ -101,7 +101,7 @@ describe("rankBoard", () => {
 describe("disqualifications", () => {
   const good = {
     name: "tau_banking",
-    target_name: "gpt-5.6-sol@medium",
+    target_name: "gpt-6-sol@medium",
     finished_at: new Date("2026-09-25T00:00:00Z"),
     min_task_done: 2,
   };
@@ -121,7 +121,7 @@ describe("disqualifications", () => {
       })
     ).toEqual([
       "not a benchmark suite",
-      "target isn’t gpt-5.6-sol@medium",
+      "target isn’t gpt-6-sol@medium",
       "not finished",
       "a task has 1 completed trial, needs 2",
     ]);

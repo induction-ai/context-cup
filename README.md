@@ -42,7 +42,7 @@ reranking, subagents. Each call is priced under the model it named.
 ## Rules
 
 - **Models**: a driver may call any model from the target's provider, as
-  often as it likes. At `gpt-5.6-sol@medium` that is any OpenAI model. The
+  often as it likes. At `gpt-6-sol@medium` that is any OpenAI model. The
   target is the default, not a requirement: a cheaper OpenAI model for
   summaries is fair game, an Anthropic or Gemini model is not.
 - **One endpoint**: every model call goes to the base URL the driver is
@@ -55,7 +55,7 @@ reranking, subagents. Each call is priced under the model it named.
 ## Winning
 
 Each benchmark has its own leader, judged on one suite at the reference
-target (`gpt-5.6-sol@medium` today, its GPT-6 successor when that lands),
+target (`gpt-6-sol@medium`),
 against a fixed baseline:
 
 | benchmark  | suite         | baseline score | baseline $ per run |

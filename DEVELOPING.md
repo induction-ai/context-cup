@@ -61,7 +61,7 @@ A run is one suite file, one driver, and one target model.
 ```
 bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium
 bin/suite toolathlon_local --driver base_python --target gpt-5.5@medium --count 2
-bin/suite tau_banking --driver base_python    # at the reference target, gpt-5.6-sol@medium
+bin/suite tau_banking --driver base_python    # at the reference target, gpt-6-sol@medium
 bin/suite smoke_tau                       # prompts for the driver
 bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
 ```
