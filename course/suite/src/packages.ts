@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { readManifest } from "@context-cup/protocol/manifest.js";
 import {
   PROVIDERS,
   zProvider,
@@ -7,10 +8,6 @@ import {
 } from "@context-cup/shared/provider.js";
 import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import z from "zod";
-
-export const PACKAGE_SCOPE = "@context-cup/";
-/** Drivers live in their own scope so contestants' packages read as such. */
-export const DRIVER_SCOPE = "@context-cup-drivers/";
 
 /** The workspace globs that may hold drivers and engines. */
 const PACKAGE_DIRS = ["course", "engines", "drivers"];
@@ -49,12 +46,6 @@ const zContextCup = z
     }
   });
 
-const zManifest = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  contextCup: zContextCup.optional(),
-});
-
 /** Whether a package is a whole agent that harbor runs through a class of
  *  its own (Codex), with no chain of packages for the course to upload. */
 export function isHarborAgent(pkg: CupPackage): boolean {
@@ -63,6 +54,7 @@ export function isHarborAgent(pkg: CupPackage): boolean {
 
 /** A workspace package that takes part in the driver protocol. */
 export type CupPackage = {
+  /** Its folder's name: what `--driver` and `extends` name it by. */
   name: string;
   dir: string;
   kind: "driver" | "engine" | "agent";
@@ -73,7 +65,7 @@ export type CupPackage = {
   description?: string;
 };
 
-/** Every driver and engine package in the workspace, keyed by package name. */
+/** Every driver and engine package in the workspace, keyed by folder name. */
 export function scanPackages(
   root: string = REPO_ROOT
 ): Map<string, CupPackage> {
@@ -83,23 +75,29 @@ export function scanPackages(
     if (!existsSync(groupDir)) continue;
     for (const entry of readdirSync(groupDir)) {
       const dir = path.join(groupDir, entry);
-      const file = path.join(dir, "package.json");
-      if (!statSync(dir).isDirectory() || !existsSync(file)) continue;
-      const manifest = zManifest.parse(JSON.parse(readFileSync(file, "utf8")));
-      if (!manifest.contextCup) continue;
-      if (found.has(manifest.name)) {
+      if (!statSync(dir).isDirectory()) continue;
+      const manifest = readManifest(dir);
+      if (!manifest) continue;
+      const parsed = zContextCup.safeParse(manifest.settings);
+      if (!parsed.success) {
         throw new Error(
-          `Package ${manifest.name} is declared twice: ${found.get(manifest.name)!.dir} and ${dir}`
+          `Package ${entry} (${dir}) has an invalid manifest: ${parsed.error.message}`
         );
       }
-      found.set(manifest.name, {
-        name: manifest.name,
+      const cc = parsed.data;
+      if (found.has(entry)) {
+        throw new Error(
+          `Two packages are named ${entry}: ${found.get(entry)!.dir} and ${dir}; a package is its folder, so folder names must differ`
+        );
+      }
+      found.set(entry, {
+        name: entry,
         dir,
-        kind: manifest.contextCup.kind,
-        extends: manifest.contextCup.extends,
-        harbor_agent: manifest.contextCup.harbor_agent,
-        providers: manifest.contextCup.providers,
-        config: manifest.contextCup.config,
+        kind: cc.kind,
+        extends: cc.extends,
+        harbor_agent: cc.harbor_agent,
+        providers: cc.providers,
+        config: cc.config,
         description: manifest.description,
       });
     }
@@ -111,17 +109,6 @@ let cache: Map<string, CupPackage> | undefined;
 /** {@link scanPackages} once per process. */
 export function workspacePackages(): Map<string, CupPackage> {
   return (cache ??= scanPackages());
-}
-
-/** The suite-file name of a driver: its package name minus the scope. */
-export function driverShortName(packageName: string): string {
-  return packageName.startsWith(DRIVER_SCOPE)
-    ? packageName.slice(DRIVER_SCOPE.length)
-    : packageName;
-}
-
-export function driverPackageName(shortName: string): string {
-  return shortName.startsWith("@") ? shortName : `${DRIVER_SCOPE}${shortName}`;
 }
 
 /** Follow `extends` from a package to its root. Returned root first, leaf
@@ -167,10 +154,10 @@ export function chainProviders(chain: readonly CupPackage[]): Provider[] {
 
 /** The providers a driver supports, resolved through its chain. */
 export function driverProviders(
-  shortName: string,
+  name: string,
   packages: ReadonlyMap<string, CupPackage> = workspacePackages()
 ): Provider[] {
-  const driver = findDriver(shortName, packages);
+  const driver = findDriver(name, packages);
   return chainProviders(resolveChain(driver.name, packages));
 }
 
@@ -181,16 +168,16 @@ export function isRunnable(pkg: CupPackage): boolean {
 
 /** The driver a suite file names, or an error listing the drivers that exist. */
 export function findDriver(
-  shortName: string,
+  name: string,
   packages: ReadonlyMap<string, CupPackage> = workspacePackages()
 ): CupPackage {
-  const pkg = packages.get(driverPackageName(shortName));
+  const pkg = packages.get(name);
   if (!pkg || !isRunnable(pkg)) {
     const drivers = [...packages.values()]
       .filter(isRunnable)
-      .map((p) => driverShortName(p.name));
+      .map((p) => p.name);
     throw new Error(
-      `Unknown driver "${shortName}". Drivers in the workspace: ${drivers.join(", ") || "(none)"}`
+      `Unknown driver "${name}". Drivers in the workspace: ${drivers.join(", ") || "(none)"}`
     );
   }
   return pkg;
@@ -199,9 +186,9 @@ export function findDriver(
 /** The package directories of a driver's chain, root to leaf, as the
  *  `CC_HOST_DRIVER_CHAIN` value. */
 export function driverChainDirs(
-  shortName: string,
+  name: string,
   packages: ReadonlyMap<string, CupPackage> = workspacePackages()
 ): string[] {
-  const driver = findDriver(shortName, packages);
+  const driver = findDriver(name, packages);
   return resolveChain(driver.name, packages).map((p) => p.dir);
 }

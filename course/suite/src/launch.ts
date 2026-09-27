@@ -7,7 +7,6 @@
 import { REFERENCE_TARGET } from "@context-cup/shared/reference_target.js";
 import {
   driverProviders,
-  driverShortName,
   findDriver,
   isRunnable,
   type CupPackage,
@@ -37,7 +36,7 @@ export function driverChoices(
   return [...packages.values()]
     .filter(isRunnable)
     .map((p) => ({
-      name: driverShortName(p.name),
+      name: p.name,
       detail: p.description ?? "",
     }))
     .sort((a, b) => a.name.localeCompare(b.name));

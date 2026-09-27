@@ -101,3 +101,80 @@ def test_the_typescript_view_reads_payloads_as_the_python_one_does() -> None:
                 for m in conversation.messages
             ],
         }, provider
+
+
+def test_both_languages_read_every_manifest_alike(tmp_path: Path) -> None:
+    """The suite and TypeScript engines read manifests with manifest.ts, the
+    runner and Python engines with manifest.py: every package in the repo,
+    and the edge cases, must read the same through both."""
+    tsx = ROOT / "node_modules/.bin/tsx"
+    if not tsx.exists():
+        pytest.skip("pnpm install has not run")
+    cases = {
+        "toml_only": {
+            "pyproject.toml": '[project]\nname = "ignored"\nversion = "2.0"\n'
+            'description = "From TOML."\ndependencies = []\n'
+            '[tool.context-cup]\nkind = "driver"\nextends = "python"\n'
+            'providers = ["openai"]\n[tool.context-cup.config]\nmax_bytes = 100_000\n'
+        },
+        "both": {
+            "package.json": json.dumps(
+                {"version": "1", "contextCup": {"kind": "agent", "config": {"k": 1}}}
+            ),
+            "pyproject.toml": '[tool.context-cup]\nkind = "driver"\n',
+        },
+        "json_without_block": {
+            "package.json": json.dumps({"name": "x"}),
+            "pyproject.toml": '[project]\nversion = "3"\n[tool.context-cup]\nkind = "engine"\n',
+        },
+        "neither": {"pyproject.toml": '[project]\nname = "plain"\n'},
+        "tool_not_a_table": {"pyproject.toml": 'tool = "not a table"\n'},
+        "project_not_a_table": {
+            "pyproject.toml": 'project = 1\n[tool.context-cup]\nkind = "driver"\n'
+        },
+    }
+    for name, files in cases.items():
+        (tmp_path / name).mkdir()
+        for file, text in files.items():
+            (tmp_path / name / file).write_text(text)
+    real = [
+        d
+        for group in ("course", "engines", "drivers")
+        for d in sorted((ROOT / group).iterdir())
+        if d.is_dir()
+    ]
+    dirs = [str(d) for d in [*real, *(tmp_path / n for n in cases)]]
+    out = subprocess.run(
+        [str(tsx), str(ROOT / "tests/manifest_dump.ts")],
+        input=json.dumps(dirs),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    typescript = json.loads(out.stdout)
+    for d in dirs:
+        manifest = protocol.read_manifest(Path(d))
+        python = (
+            None
+            if manifest is None
+            else {
+                k: v
+                for k, v in {
+                    "settings": manifest.settings,
+                    "version": manifest.version,
+                    "description": manifest.description,
+                }.items()
+                if v is not None
+            }
+        )
+        assert typescript[d] == python, d
+    assert typescript[str(tmp_path / "both")]["settings"]["kind"] == "agent"
+    assert typescript[str(tmp_path / "json_without_block")]["version"] == "3"
+    assert typescript[str(tmp_path / "neither")] is None
+    assert typescript[str(tmp_path / "tool_not_a_table")] is None
+    assert typescript[str(tmp_path / "project_not_a_table")] == {
+        "settings": {"kind": "driver"}
+    }
+    assert (
+        typescript[str(ROOT / "drivers/base_python")]["settings"]["extends"] == "python"
+    )

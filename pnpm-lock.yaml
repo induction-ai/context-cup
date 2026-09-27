@@ -187,6 +187,9 @@ importers:
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
+      smol-toml:
+        specifier: ^1.9.0
+        version: 1.9.0
       zod:
         specifier: 'catalog:'
         version: 4.6.5
@@ -326,6 +329,9 @@ importers:
       '@context-cup/model-stats':
         specifier: workspace:*
         version: link:../model-stats
+      '@context-cup/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@context-cup/proxy':
         specifier: workspace:*
         version: link:../proxy
@@ -373,8 +379,6 @@ importers:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@24.13.6)(vite@8.3.0(@types/node@24.13.6)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.105.0)(tsx@4.23.15))
 
-  drivers/base_agent: {}
-
   drivers/base_aisdk:
     dependencies:
       '@context-cup/engine-aisdk':
@@ -395,14 +399,6 @@ importers:
         version: 5.9.3
 
   drivers/base_codex: {}
-
-  drivers/base_litellm: {}
-
-  drivers/base_passthrough: {}
-
-  drivers/base_pydantic: {}
-
-  drivers/base_python: {}
 
   drivers/base_typescript:
     dependencies:
@@ -465,12 +461,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@24.13.6)(vite@8.3.0(@types/node@24.13.6)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.105.0)(tsx@4.23.15))
-
-  engines/litellm: {}
-
-  engines/pydantic: {}
-
-  engines/python: {}
 
   engines/typescript:
     dependencies:
@@ -2513,6 +2503,10 @@ packages:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
 
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
+    engines: {node: '>= 18'}
+
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
 
@@ -4513,6 +4507,8 @@ snapshots:
   siginfo@2.0.0: {}
 
   signal-exit@4.1.0: {}
+
+  smol-toml@1.9.0: {}
 
   sonic-boom@4.2.1:
     dependencies:

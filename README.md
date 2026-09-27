@@ -76,8 +76,8 @@ the benchmark has no leader: matching the baseline's score without spending
 less wins nothing.
 
 Each driver stands on one run: its most recent run of the suite at the
-reference target that is finished, has a `count` of at least 3, and has at
-least 2 done trials in every task. Earlier runs, and
+reference target that is finished and has at least 2 done trials in every
+task, retry passes included. Earlier runs, and
 runs that miss any of these, do not count; a smoke suite or any suite other
 than the two never does. Score and cost are that run's suite-level means
 described under [Scoring](#scoring).
@@ -105,8 +105,11 @@ bin/suite tau_banking --driver <your_driver>
 bin/suite toolathlon --driver <your_driver>
 ```
 
-These run at the reference target with a `count` of 3, which is what the
-standings need. [DEVELOPING.md](DEVELOPING.md) covers setup.
+These run at the reference target, 3 attempts per task, so that each task
+has room for the 2 completed trials the standings need (see
+[Winning](#winning)). A task still short of 2 after the run can be topped up
+with `--append <suite_id>` rather than run again. [DEVELOPING.md](DEVELOPING.md)
+covers setup.
 
 ## Leaderboard
 

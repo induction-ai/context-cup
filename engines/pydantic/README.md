@@ -25,7 +25,7 @@ Everything on it is read only as far as your driver is concerned.
 | `ctx.first`            | `bool`         | `True`                                                                           | true on the trial's first turn                                                                         |
 | `ctx.provider`         | `ProviderInfo` | `name="openai"`, `api_key="cc-proxy"`, `client.base_url="…/t/<trial>/openai/v1"` | fixed for the trial                                                                                    |
 | `ctx.target`           | `Target`       | `model="gpt-5.5"`, `reasoning_effort="medium"`                                   | fixed for the trial                                                                                    |
-| `ctx.config`           | `dict`         | `{"keep_pairs": 3}`                                                              | your `package.json` `contextCup.config`                                                                |
+| `ctx.config`           | `dict`         | `{"keep_pairs": 3}`                                                              | your manifest's `config` (`[tool.context-cup.config]`)                                                 |
 | `ctx.dirs`             | `Dirs`         | `turn="/logs/agent/turns/003_k3v9xq"`, `state="/logs/agent/driver_state"`        | `turn` new each turn; the engine keeps the agent's history in `state/pydantic_history/`                |
 | `ctx.context_payload`  | `dict`         | the course's native OpenAI request body                                          | informational: the agent's real context is its own history, not this                                   |
 | `ctx.original_payload` | `dict`         | the full record, same shape                                                      | the course's record, appended each turn                                                                |
@@ -90,7 +90,8 @@ def run(ctx):
 ```
 
 A capability that needs a package beyond `pydantic-ai-slim[openai]` and
-`pydantic-ai-harness` goes in your driver's `setup.sh`:
-`uv pip install --python "${CC_CHAIN%%:*}/.venv/bin/python" <package>`.
+`pydantic-ai-harness` goes in your driver's own `pyproject.toml`, pinned by
+the `uv.lock` beside it; the runner installs it into this engine's venv
+(see "Dependencies" in [docs/drivers.md](../../docs/drivers.md#dependencies)).
 
 Tests: `uv run pytest engines/pydantic`.

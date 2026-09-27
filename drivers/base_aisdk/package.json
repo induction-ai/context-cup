@@ -6,7 +6,7 @@
   "type": "module",
   "contextCup": {
     "kind": "driver",
-    "extends": "@context-cup/engine-aisdk",
+    "extends": "aisdk",
     "providers": [
       "openai",
       "anthropic",

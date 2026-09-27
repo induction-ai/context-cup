@@ -3,7 +3,7 @@ driver is measured against. The Python engine's lane in its smallest form:
 copy this to write a driver that works on the provider's native payload.
 See engines/python/README.md for everything `ctx` holds."""
 
-from openai import OpenAI  # installed by this driver's setup.sh
+from openai import OpenAI  # installed by the engine
 
 from context_cup_engine import PythonContext
 

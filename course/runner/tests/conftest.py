@@ -94,7 +94,7 @@ print("turn", inp["turn_index"], "state", json.dumps(inp["state"]))
 @pytest.fixture
 def workspace(tmp_path: Path) -> dict[str, Path]:
     """A two-package chain: an engine with run.sh and a leaf driver."""
-    engine_dir = tmp_path / "engine"
+    engine_dir = tmp_path / "engine-fake"
     engine_dir.mkdir()
     (engine_dir / "fake_engine.py").write_text(FAKE_ENGINE)
     (engine_dir / "package.json").write_text(
@@ -109,7 +109,7 @@ def workspace(tmp_path: Path) -> dict[str, Path]:
     (engine_dir / "teardown.sh").write_text(
         'echo "engine teardown" > "$CC_STATE_DIR/engine_teardown"\n'
     )
-    driver_dir = tmp_path / "driver"
+    driver_dir = tmp_path / "test_driver"
     driver_dir.mkdir()
     (driver_dir / "package.json").write_text(
         json.dumps(

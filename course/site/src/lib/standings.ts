@@ -25,10 +25,10 @@ export const BASELINES: Record<BenchmarkSuite, Baseline> = {
   toolathlon: { score: 0.67, run_cents: 6500 },
 };
 
-/** A run stands on a board only once finished, with at least `min_count`
- *  attempts per task (the suite's `count`) and at least `min_done` done
- *  trials in every task. A driver's latest such run is its entry. */
-export const ELIGIBILITY = { min_count: 3, min_done: 2 };
+/** A run stands on a board only once finished, with at least `min_done`
+ *  done trials in every task, retry passes included. A driver's latest such
+ *  run is its entry. */
+export const ELIGIBILITY = { min_done: 2 };
 /** The target the competition is judged at. */
 export { REFERENCE_TARGET };
 
@@ -150,7 +150,6 @@ export function rankBoard(
 export type RunFacts = {
   name: string;
   target_name: string;
-  count: number;
   finished_at: Date | null;
   /** The fewest done trials any of its tasks has; null with no tasks. */
   min_task_done: number | null;
@@ -161,7 +160,7 @@ export type RunFacts = {
  *  and target the competition is judged on. */
 export function disqualifications(
   run: RunFacts,
-  rules: { min_count: number; min_done: number } = ELIGIBILITY
+  rules: { min_done: number } = ELIGIBILITY
 ): string[] {
   const why: string[] = [];
   if (!(BENCHMARK_SUITES as readonly string[]).includes(run.name)) {
@@ -170,15 +169,12 @@ export function disqualifications(
   if (run.target_name !== REFERENCE_TARGET) {
     why.push(`target isn’t ${REFERENCE_TARGET}`);
   }
-  if (run.count < rules.min_count) {
-    why.push(`count ${run.count}, needs ${rules.min_count}`);
-  }
   if (!run.finished_at) why.push("not finished");
   if (run.min_task_done == null) {
     why.push("no tasks");
   } else if (run.min_task_done < rules.min_done) {
     why.push(
-      `a task has ${run.min_task_done} finished ${run.min_task_done === 1 ? "trial" : "trials"}, needs ${rules.min_done}`
+      `a task has ${run.min_task_done} completed ${run.min_task_done === 1 ? "trial" : "trials"}, needs ${rules.min_done}`
     );
   }
   return why;

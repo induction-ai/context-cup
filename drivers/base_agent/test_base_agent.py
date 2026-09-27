@@ -55,9 +55,6 @@ REPLIES = [
 
 def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
     (tmp_path / "server.py").write_text(SERVER)
-    (tmp_path / "package.json").write_text(
-        json.dumps({"contextCup": {"config": {"max_bytes": 10}}})
-    )
     (tmp_path / "instruction.md").write_text("Add 2 and 3.")
     servers = [
         {
@@ -70,6 +67,7 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
     for name, value in {
         "CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "gpt-5.5"}),
         "CC_DRIVER_DIR": str(tmp_path),
+        "CC_CONFIG": json.dumps({"max_bytes": 10}),
         "CC_INSTRUCTION_FILE": str(tmp_path / "instruction.md"),
         "CC_MCP_SERVERS_JSON": json.dumps(servers),
         "CC_RESULT_FILE": str(tmp_path / "result.json"),

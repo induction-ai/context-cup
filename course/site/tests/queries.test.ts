@@ -288,7 +288,7 @@ describe("listSuites paging and sorting", () => {
 });
 
 describe("leaderboard queries", () => {
-  const rules = { min_count: 3, min_done: 2 };
+  const rules = { min_done: 2 };
 
   /** One run of suite "board" by `driver` at gpt-5.5@medium. `tasks` maps
    *  each task to its trials' rewards per pass (null: an errored trial). */
@@ -359,9 +359,9 @@ describe("leaderboard queries", () => {
     }
   }
 
-  it("stands each driver on its latest finished run with enough attempts and done trials", async () => {
-    // a's oldest run is its only eligible one: the next has a task with one
-    // done trial, the next a count of 1, the newest has not finished.
+  it("stands each driver on its latest finished run with enough done trials", async () => {
+    // a's oldest run is its only eligible one: the next two each have a task
+    // with one done trial, the newest has not finished.
     await run("s_a_old", "a", {
       started: "2026-09-01T00:00:00Z",
       tasks: { t1: [[1, 1, 0]], t2: [[1, 0]] },
@@ -386,10 +386,12 @@ describe("leaderboard queries", () => {
       started: "2026-08-31T00:00:00Z",
       tasks: { t1: [[0, 0, 0]], t2: [[0, 0, 0]] },
     });
-    // b's t1 reaches two done trials only with its retry pass.
+    // b's t1 reaches two done trials only with its retry pass; a count of 2
+    // is enough.
     await run("s_b", "b", {
+      count: 2,
       started: "2026-09-02T00:00:00Z",
-      tasks: { t1: [[1, null, null], [0]], t2: [[1, 1, 1]] },
+      tasks: { t1: [[1, null], [0]], t2: [[1, 1]] },
     });
     // c never has an eligible run.
     await run("s_c", "c", {
@@ -413,7 +415,7 @@ describe("leaderboard queries", () => {
     // t1 is 2/3, t2 is 1/2; the run is their mean.
     expect(a!.mean_reward).toBeCloseTo((2 / 3 + 1 / 2) / 2, 6);
     expect(a!.mean_cost_cents).toBeCloseTo(20, 6);
-    expect(b).toMatchObject({ trials: 7, scored: 5, errors: 2 });
+    expect(b).toMatchObject({ trials: 5, scored: 4, errors: 1 });
     // t1 is (1 + 0) / 2 over both passes, t2 is 1.
     expect(b!.mean_reward).toBeCloseTo(0.75, 6);
     expect((await loadBoard("board", "gpt-5.5@low", rules)).entries).toEqual(

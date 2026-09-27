@@ -1,6 +1,7 @@
-"""A driver chain: package directories root to leaf, each a pnpm package
-whose package.json carries a `contextCup` block, with optional setup.sh /
-run.sh / teardown.sh (docs/protocol.md).
+"""A driver chain: package directories root to leaf, each named by its folder
+and set up by one manifest, a `package.json` `contextCup` block or a
+`pyproject.toml` `[tool.context-cup]` table, with optional setup.sh / run.sh /
+teardown.sh (docs/protocol.md).
 
 The suite resolves `extends` on the host and hands the runner the chain as
 CC_DRIVER_CHAIN, colon separated. Inside the container the same variable
@@ -9,7 +10,6 @@ names the uploaded copies.
 
 from __future__ import annotations
 
-import json
 import os
 import pwd
 import shlex
@@ -18,11 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
-def short_name(package_name: str) -> str:
-    """`@context-cup-drivers/base_python` is the driver `base_python`: the
-    scope is dropped whichever it is."""
-    return package_name.rsplit("/", 1)[-1]
+from context_cup_protocol import Manifest, read_manifest
 
 
 @dataclass(frozen=True)
@@ -35,22 +31,13 @@ class Package:
 
     @classmethod
     def load(cls, package_dir: Path) -> Package:
-        manifest = package_dir / "package.json"
-        try:
-            spec = json.loads(manifest.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            spec = {}
-        if not isinstance(spec, dict):
-            raise TypeError(f"{manifest} must hold a JSON object")
-        block = spec.get("contextCup")
-        block = block if isinstance(block, dict) else {}
-        config = block.get("config")
+        manifest = read_manifest(package_dir) or Manifest()
         return cls(
             dir=package_dir,
-            name=short_name(str(spec.get("name") or package_dir.name)),
-            kind=str(block.get("kind") or "driver"),
-            version=str(spec["version"]) if spec.get("version") is not None else None,
-            config=config if isinstance(config, dict) else {},
+            name=package_dir.name,
+            kind=str(manifest.settings.get("kind") or "driver"),
+            version=manifest.version,
+            config=manifest.config,
         )
 
     def script(self, name: str) -> Path | None:

@@ -102,7 +102,6 @@ describe("disqualifications", () => {
   const good = {
     name: "tau_banking",
     target_name: "gpt-5.6-sol@medium",
-    count: 3,
     finished_at: new Date("2026-09-25T00:00:00Z"),
     min_task_done: 2,
   };
@@ -117,19 +116,17 @@ describe("disqualifications", () => {
       disqualifications({
         name: "smoke_tau",
         target_name: "gpt-5.5@medium",
-        count: 1,
         finished_at: null,
         min_task_done: 1,
       })
     ).toEqual([
       "not a benchmark suite",
       "target isn’t gpt-5.6-sol@medium",
-      "count 1, needs 3",
       "not finished",
-      "a task has 1 finished trial, needs 2",
+      "a task has 1 completed trial, needs 2",
     ]);
     expect(disqualifications({ ...good, min_task_done: 0 })).toEqual([
-      "a task has 0 finished trials, needs 2",
+      "a task has 0 completed trials, needs 2",
     ]);
     expect(disqualifications({ ...good, min_task_done: null })).toEqual([
       "no tasks",

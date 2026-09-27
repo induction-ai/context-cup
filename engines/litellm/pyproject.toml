@@ -18,3 +18,9 @@ packages = ["src/context_cup_litellm"]
 
 [tool.uv.sources]
 context-cup-protocol = { workspace = true }
+
+# The engine's settings for the course (docs/protocol.md): a package is
+# named by its folder.
+[tool.context-cup]
+kind = "engine"
+providers = ["openai", "anthropic", "gemini"]

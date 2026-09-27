@@ -80,7 +80,7 @@ it("runs a driver that edits through the view", async () => {
     JSON.stringify(payload).replace("y".repeat(50), "clipped")
   );
   expect(out.driver).toEqual({
-    name: "fixture",
+    name: "fixture_driver",
     engine: "typescript",
     version: "0.0.1",
   });

@@ -230,7 +230,7 @@ class LitellmContext:
       target; every argument can be overridden.
     - `state`: the driver's, any JSON, `{}` on turn one; persists.
     - `first`, `provider`, `target`, `dirs`, `config` (the manifest's
-      `contextCup.config`), and `turn`, the whole `input.json`: read only.
+      `[tool.context-cup.config]`), and `turn`, the whole `input.json`: read only.
     - `context_payload`, `original_payload`: the native bodies the messages
       are built from; informational.
 

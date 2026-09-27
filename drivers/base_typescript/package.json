@@ -6,7 +6,7 @@
   "type": "module",
   "contextCup": {
     "kind": "driver",
-    "extends": "@context-cup/engine-typescript",
+    "extends": "typescript",
     "providers": [
       "openai",
       "anthropic",

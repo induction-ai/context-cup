@@ -19,7 +19,7 @@ class Ctx:
 
 
 def setup(tmp_path: Path, body: str) -> list[str]:
-    driver = tmp_path / "driver"
+    driver = tmp_path / "d"
     driver.mkdir()
     (driver / "package.json").write_text(
         json.dumps(

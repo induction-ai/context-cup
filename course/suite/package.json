@@ -15,6 +15,7 @@
   "dependencies": {
     "@context-cup/db": "workspace:*",
     "@context-cup/model-stats": "workspace:*",
+    "@context-cup/protocol": "workspace:*",
     "@context-cup/proxy": "workspace:*",
     "@context-cup/shared": "workspace:*",
     "drizzle-orm": "catalog:",

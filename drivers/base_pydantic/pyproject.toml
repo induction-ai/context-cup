@@ -1,0 +1,14 @@
+[project]
+name = "base-pydantic"
+version = "0.1.0"
+description = "Clips any tool result larger than max_bytes before it reaches the model, as a Pydantic AI Agent."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.context-cup]
+kind = "driver"
+extends = "pydantic"
+providers = ["openai"]
+
+[tool.context-cup.config]
+max_bytes = 100_000

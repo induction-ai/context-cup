@@ -54,9 +54,13 @@ the details.
 
 ```
 drivers/base_python/
-  package.json
+  pyproject.toml the manifest (a TypeScript package's is package.json), and
+                 the driver's Python dependencies, installed by the runner
+                 into the engine's venv once per trial
+  uv.lock        with dependencies: the versions they are pinned to
   build.sh       optional  runs once per suite run on the host, before any trial
-  setup.sh       optional  runs once per trial, after the parent's setup.sh
+  setup.sh       optional  runs once per trial, after the parent's setup.sh,
+                           for what a dependency list cannot express
   run.sh         optional  runs once per turn: run.sh <input.json> <output.json>
   teardown.sh    optional  runs once per trial, before the parent's teardown.sh
   driver.py      what the inherited run.sh expects: for the python engine,
@@ -64,42 +68,71 @@ drivers/base_python/
                  returns the provider's response
 
 engines/python/
-  package.json   { "name": "@context-cup/engine-python", … }
-  setup.sh       a venv with the protocol library and the engine; no SDKs
+  pyproject.toml the engine as a Python package, and its manifest
+  setup.sh       a venv with the protocol library, the engine, and the
+                 openai and anthropic SDKs and httpx
   run.sh         exec .venv/bin/python -m context_cup_engine --driver "$CC_DRIVER_DIR" \
                    --input "$1" --output "$2"
 
 engines/typescript/
-  package.json   { "name": "@context-cup/engine-typescript", … }
+  package.json   the engine as an npm package, and its manifest
   build.sh       bundle the engine, the leaf's driver.ts, and their npm packages
                    into $CC_DRIVER_DIR/bundle/turn.mjs
   run.sh         exec "$CC_NODE" "$CC_DRIVER_DIR/bundle/turn.mjs" --driver "$CC_DRIVER_DIR" \
                    --input "$1" --output "$2"
 ```
 
-`package.json` carries the protocol fields under `contextCup`:
+**A package is its folder.** `drivers/base_python` is the driver
+`base_python` and `engines/python` the engine `python`, whatever a `name`
+field says; folder names are unique across `course/`, `engines/`, and
+`drivers/`. A package's manifest is in its language's format, one of:
 
-```json
-{
-  "private": true,
-  "name": "@context-cup-drivers/base_python",
-  "version": "0.1.0",
-  "description": "Clip any tool result over max_bytes.",
-  "contextCup": {
-    "kind": "driver",
-    "extends": "@context-cup/engine-python",
-    "providers": ["openai", "anthropic", "gemini"],
-    "config": { "max_bytes": 100000 }
+- a `pyproject.toml` with a `[tool.context-cup]` table, for a Python
+  package:
+
+  ```toml
+  [project]
+  name = "base-python"
+  version = "0.1.0"
+  description = "Clip any tool result over max_bytes."
+  requires-python = ">=3.12,<3.13"
+  dependencies = []
+
+  [tool.context-cup]
+  kind = "driver"
+  extends = "python"
+  providers = ["openai", "anthropic", "gemini"]
+
+  [tool.context-cup.config]
+  max_bytes = 100_000
+  ```
+
+- a `package.json` with a `contextCup` block, for a TypeScript package:
+
+  ```json
+  {
+    "private": true,
+    "name": "@context-cup-drivers/base_typescript",
+    "version": "0.1.0",
+    "description": "Clip any tool result over max_bytes.",
+    "contextCup": {
+      "kind": "driver",
+      "extends": "typescript",
+      "providers": ["openai", "anthropic", "gemini"],
+      "config": { "max_bytes": 100000 }
+    }
   }
-}
-```
+  ```
 
-- `kind` is `driver` or `engine`. `bin/suite --driver` names a driver by the
-  part of the package name after `@context-cup-drivers/`. Engines and course packages
-  stay under `@context-cup/`.
-- `extends` is the package name of the parent, resolved through the pnpm
-  workspace (`course/*`, `engines/*`, `drivers/*`). Absent for a root
-  package. Chains may be any depth: an engine can extend an engine.
+A folder with both is read from `package.json`. The description and version
+come from the same file. One reader per language implements this,
+`context_cup_protocol.read_manifest` and `@context-cup/protocol`'s
+`readManifest`, and `tests/test_protocol_contract.py` checks they agree.
+
+- `kind` is `driver`, `engine`, or `agent` (see Agent drivers).
+  `bin/suite --driver` takes a driver's folder name.
+- `extends` is the parent's folder name. Absent for a root package. Chains
+  may be any depth: an engine can extend an engine, a driver a driver.
 - `providers` lists the providers the package can drive, from `openai`,
   `anthropic`, `gemini`. A driver with a client for each can list all three;
   one built on a single SDK lists one. When absent, the package supports
@@ -109,18 +142,36 @@ engines/typescript/
 - `config` is free-form and is passed to the driver by whichever engine runs
   it.
 - Ordinary `dependencies` and `scripts` are for the host side only:
-  `pnpm install` never runs inside a trial container, so anything the driver
-  needs at run time is installed by `setup.sh`, or bundled on the host by
-  `build.sh` (how the TypeScript engines ship a driver's npm packages).
+  `pnpm install` never runs inside a trial container, so a driver's npm
+  packages are bundled on the host by `build.sh` (how the TypeScript engines
+  ship them). A Python driver's run-time packages are its `pyproject.toml`
+  (below); anything else it needs is installed by `setup.sh`.
 
-**Resolution, root to leaf.** Given the chain `[engine-python, base_python]`:
+**Python dependencies.** A driver or script agent that needs Python packages
+beyond its engine's lists them in a `pyproject.toml` of its own, the
+standard `[project] dependencies`, and commits the `uv.lock` beside it
+(`uv add <package>` in its directory keeps both). The runner installs them
+before the package's `setup.sh`: into the engine's venv, or, for a script
+agent, into a venv it makes at `$CC_SELF_DIR/.venv`. The `pyproject.toml`
+lists the packages in `[project] dependencies`; the `[tool.context-cup]`
+table beside them is the manifest.
 
-| phase    | what runs                                                   |
-| -------- | ----------------------------------------------------------- |
-| build    | every `build.sh` in the chain, root first, on the host      |
-| setup    | every `setup.sh` in the chain, root first                   |
-| turn     | the `run.sh` nearest the leaf; parents' run.sh are shadowed |
-| teardown | every `teardown.sh` in the chain, leaf first                |
+Every install in a trial is pinned. On the host, the runner exports the
+workspace's `uv.lock` (what the runner and the engines install) and each
+package's own `uv.lock` as constraints the container's uv reads, so every
+trial of one commit gets the same versions. Where a driver's lock and the
+workspace's overlap, the workspace's versions win; a package whose
+`uv.lock` is missing or out of date with its `pyproject.toml` fails on the
+host, before any container starts.
+
+**Resolution, root to leaf.** Given the chain `[python, base_python]`:
+
+| phase    | what runs                                                           |
+| -------- | ------------------------------------------------------------------- |
+| build    | every `build.sh` in the chain, root first, on the host              |
+| setup    | each package's Python dependencies, then its `setup.sh`, root first |
+| turn     | the `run.sh` nearest the leaf; parents' run.sh are shadowed         |
+| teardown | every `teardown.sh` in the chain, leaf first                        |
 
 `bin/suite` runs the build phase once per run, before the first trial,
 from each package's directory with `CC_DRIVER_DIR`, `CC_SELF_DIR`, and
@@ -144,6 +195,7 @@ Scripts see:
 | `CC_PYTHON`       | setup.sh only: the runner's own Python 3.12, a uv venv; engines make their own |
 | `CC_NODE`         | the runner's `node` (24), the same binary the proxy runs on                    |
 | `CC_PROTOCOL_DIR` | setup.sh only: the uploaded protocol library to install                        |
+| `UV_CONSTRAINT`   | setup.sh only, in an engine's chain: the workspace's pinned versions           |
 | `CC_TURN_DIR`     | run.sh only: the current turn directory                                        |
 
 Python in a trial container is always a uv-managed 3.12. The runner uploads a
@@ -157,7 +209,9 @@ for the container's architecture and libc at `CC_NODE` before any
 `setup.sh`, and never uses the task image's own. It comes without npm; a
 TypeScript engine bundles on the host instead.
 
-A `setup.sh` that fails ends the trial before the first turn. A `run.sh`
+A dependency install or a `setup.sh` that fails ends the trial before the
+first turn; the output of each is in the agent log directory as
+`dependencies_<package>.txt` and `setup_<package>.txt`. A `run.sh`
 that exits non-zero fails the turn (see retries below).
 
 ## Turn directory
@@ -427,18 +481,24 @@ servers, as harbor's own agents do. The course's turn loop, `input.json`, and
 `output.json` do not apply. An agent package takes one of two forms.
 
 **A script agent** (no `harbor_agent`) is an agent written from scratch, in
-any language. The package ships `agent.sh`, and optionally `setup.sh` and
-`build.sh`, which run as they do for any driver:
+any language. The package ships `agent.sh` and a manifest, and optionally
+`setup.sh` and `build.sh`, which run as they do for any driver. A Python
+agent's manifest is its `pyproject.toml`, whose dependencies the runner
+installs into `$CC_SELF_DIR/.venv`:
 
-```json
-{
-  "name": "@context-cup-drivers/base_agent",
-  "contextCup": {
-    "kind": "agent",
-    "providers": ["openai", "anthropic", "gemini"],
-    "config": { "max_bytes": 100000 }
-  }
-}
+```toml
+[project]
+name = "base-agent"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["litellm==1.83.0", "mcp>=1.25,<2"]
+
+[tool.context-cup]
+kind = "agent"
+providers = ["openai", "anthropic", "gemini"]
+
+[tool.context-cup.config]
+max_bytes = 100_000
 ```
 
 The course's script agent for the benchmark (`context_cup_runner.agent`:
@@ -460,12 +520,13 @@ placeholder keys, `agent.sh` gets:
 | `CC_MAX_STEPS`        | the course's step cap for the benchmark                                                                                                                                  |
 | `CC_AGENT_DIR`        | the trial's agent log directory                                                                                                                                          |
 | `CC_RESULT_FILE`      | where the agent may write its result                                                                                                                                     |
+| `CC_CONFIG`           | the `config` of the agent's manifest, as JSON                                                                                                                            |
 | `CC_SYSTEM_PROMPT`    | the benchmark's system prompt, when it has one outside the instruction                                                                                                   |
 | `CC_HARNESS_TOOLS`    | comma-separated MCP tools the harness owns (tau3's runtime controls): listed by the server, never to be offered to the model, since calling one undoes the trial's setup |
 
 The agent works the task and exits; a non-zero exit fails the trial, and its
-output is the trial's `runner.txt`. It reads its own `config` from
-`$CC_DRIVER_DIR/package.json`. In `CC_RESULT_FILE` it may write, all
+output is the trial's `runner.txt`. Its manifest's `config` arrives as
+JSON in `CC_CONFIG`, whichever file the manifest is in. In `CC_RESULT_FILE` it may write, all
 optional, `stop_reason`, `turns` (model calls that were steps of the task),
 `env_tool_calls`, and `payload`, its conversation as the provider's native
 request body; the runner writes `summary.json` from them and, from
@@ -477,7 +538,7 @@ course (Codex):
 
 ```json
 {
-  "name": "@context-cup-drivers/base_codex",
+  "name": "base_codex",
   "contextCup": {
     "kind": "agent",
     "harbor_agent": "context_cup_runner.codex:CodexAgent",

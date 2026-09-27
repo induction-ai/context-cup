@@ -40,55 +40,86 @@ such tools; the whole text is saved under the agent log directory's
 
 Copy the base driver of your lane to `drivers/<your_name>/` and edit.
 
-`package.json` holds everything the course reads about a driver:
+Your driver's name is its folder's: `drivers/keep_recent` is the driver
+`bin/suite --driver keep_recent` runs. The `base_` prefix is reserved for the
+course's own drivers.
 
-```json
-{
-  "private": true,
-  "name": "@context-cup-drivers/keep_recent",
-  "version": "0.1.0",
-  "description": "Blanks all but the three most recent tool results.",
-  "contextCup": {
-    "kind": "driver",
-    "extends": "@context-cup/engine-python",
-    "providers": ["openai"],
-    "config": { "keep": 3 }
-  }
-}
+Its manifest holds everything else the course reads about it, in its
+language's format. A Python driver's is its `pyproject.toml`:
+
+```toml
+[project]
+name = "keep-recent"
+version = "0.1.0"
+description = "Blanks all but the three most recent tool results."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.context-cup]
+kind = "driver"
+extends = "python"
+providers = ["openai"]
+
+[tool.context-cup.config]
+keep = 3
 ```
 
-- `name`: scoped `@context-cup-drivers/`; the part after the slash is what
-  `bin/suite --driver` takes. The `base_` prefix is reserved for the course's
-  own drivers.
-- `extends`: the engine, which decides what `ctx` is and what `run` returns.
+A TypeScript driver's is its `package.json`, with the same fields in a
+`contextCup` block (see `drivers/base_typescript`).
+
+- `extends`: the engine's folder name (`python`, `litellm`, `pydantic`,
+  `typescript`, `aisdk`), which decides what `ctx` is and what `run`
+  returns.
 - `providers`: the providers your driver can drive. `bin/suite` refuses a
   target on any other provider. Omitted, it inherits the engine's list.
 - `config`: free-form; it arrives as `ctx.config`. Keep tunables here so a
   variant is a manifest edit, not a code change.
+- `description`: what `bin/suite` shows when it asks which driver to run.
+  The `[project] name` is only for uv; the course never reads it.
 
 `driver.py` defines `run(ctx)` (`driver.ts` exports it, on the TypeScript
 lanes). It may import sibling files in its own directory, and
 `context_cup_protocol` (`@context-cup/protocol` in TypeScript, the protocol
 library), and nothing else from the course.
 
-`setup.sh` (optional) installs what your driver needs into the engine's
-venv, once per trial container. The Python engine installs no provider SDK,
-so its drivers always have one:
+### Dependencies
+
+Every engine installs what its lane calls with: the Python engine the
+`openai` and `anthropic` SDKs and `httpx`, the LiteLLM and Pydantic engines
+their libraries, the TypeScript engines their npm packages. For anything
+more, declare it; the course installs it.
+
+A Python driver lists extra packages in a `pyproject.toml` of its own and
+commits the `uv.lock` beside it. `base_python` ships an empty one, so a
+driver copied from it only needs `uv add`:
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-uv pip install --quiet --python "${CC_CHAIN%%:*}/.venv/bin/python" openai
+cd drivers/<your_name>
+uv add --no-sync tiktoken   # lists it and writes uv.lock; commit both
 ```
 
-`${CC_CHAIN%%:*}` is the first package of your chain, the engine, whose venv
-runs your code. `uv` is on `PATH` in every setup script; the container's own
-Python is never used.
+Without one yet (a driver copied from another lane), make it first, as a
+project of its own rather than a member of the course's uv workspace, on
+the Python 3.12 trials run:
+`uv init --bare --no-workspace --python 3.12 --name <your-name>`. A
+`pyproject.toml` with an empty `dependencies` list installs nothing.
 
-A TypeScript driver needs no `setup.sh`: list its npm packages in
-`package.json` `dependencies`, `pnpm install`, and the engine's `build.sh`
-bundles them with `driver.ts` on the host before every run (see
+The runner installs them into the engine's venv at the start of every
+trial, at the versions `uv.lock` pins, alongside the engine's own pinned
+versions; where the two overlap, the engine's versions win. A missing or stale
+`uv.lock` fails on the host before any trial starts. To run the driver's
+tests locally, install the same packages into the workspace's venv:
+`uv pip install -r drivers/<your_name>/pyproject.toml`.
+
+A TypeScript driver lists its npm packages in `package.json`
+`dependencies` and runs `pnpm install`; the engine's `build.sh` bundles them
+with `driver.ts` on the host before every run (see
 [engines/typescript](../engines/typescript)).
+
+`setup.sh` (optional) is left for what a package list cannot express:
+system packages, files, permissions. It runs as root once per trial
+container, after the dependencies; `uv` is on `PATH`, and the container's
+own Python is never used.
 
 ## Models, keys, and accounting
 

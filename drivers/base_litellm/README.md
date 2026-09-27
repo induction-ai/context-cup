@@ -20,4 +20,4 @@ bin/suite smoke_tau --driver base_litellm --target claude-sonnet-4-6
 **Make your own**: copy the directory, edit `ctx.context_messages` in `run`,
 and return `ctx.llm.completion()`. Whatever the list holds when `run` returns
 persists. Keep each tool call with its result; a provider rejects either
-half on its own. Put tunables in `contextCup.config`.
+half on its own. Put tunables in `[tool.context-cup.config]`.

@@ -3,6 +3,7 @@ and the engines: the models of `input.json` and `output.json`, one adapter
 per provider for native payloads, and a provider-neutral view of them."""
 
 from .engine import EngineContext, run_engine
+from .manifest import Manifest, read_manifest, read_pyproject
 from .models import (
     PLACEHOLDER_KEY,
     PROTOCOL_VERSION,
@@ -38,6 +39,7 @@ __all__ = [
     "DriverInfo",
     "EngineContext",
     "Extracted",
+    "Manifest",
     "Message",
     "Payload",
     "Provider",
@@ -57,6 +59,8 @@ __all__ = [
     "adapter_for",
     "function_schemas",
     "load_snapshot",
+    "read_manifest",
+    "read_pyproject",
     "run_engine",
     "save_snapshot",
     "view",

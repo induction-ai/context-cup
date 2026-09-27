@@ -32,7 +32,7 @@ class PythonContext:
     - `first`, `provider` (name, placeholder key, proxy base URL), `target`
       (model, reasoning effort), `dirs` (`turn`, new each turn; `state`,
       kept for the trial; `workspace`), `turn_id`, `config` (the manifest's
-      `contextCup.config`), and `turn`, the whole `input.json`.
+      `[tool.context-cup.config]`), and `turn`, the whole `input.json`.
     - `view()` / `write(conversation)`: read `context_payload` as a
       provider-neutral conversation and put edits back.
 

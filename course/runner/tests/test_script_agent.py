@@ -12,6 +12,7 @@ AGENT = """#!/usr/bin/env bash
 set -euo pipefail
 echo "$CC_INSTRUCTION_FILE|$OPENAI_BASE_URL|$OPENAI_API_KEY|$CC_MAX_STEPS" > "$CC_AGENT_DIR/seen.txt"
 echo "${CC_SYSTEM_PROMPT:-none}" > "$CC_AGENT_DIR/system.txt"
+echo "$CC_CONFIG" > "$CC_AGENT_DIR/config.txt"
 cat > "$CC_RESULT_FILE" <<'JSON'
 {"stop_reason": "agent_done", "turns": 1, "env_tool_calls": 0,
  "payload": {"model": "gpt-5.5", "input": [
@@ -26,10 +27,10 @@ exit "${AGENT_EXIT:-0}"
 def setup(tmp_path: Path) -> dict[str, str]:
     package = tmp_path / "base_agent"
     package.mkdir()
-    (package / "package.json").write_text(
-        json.dumps(
-            {"name": "@context-cup-drivers/base_agent", "contextCup": {"kind": "agent"}}
-        )
+    (package / "pyproject.toml").write_text(
+        '[project]\nname = "base-agent"\n'
+        '[tool.context-cup]\nkind = "agent"\n'
+        "[tool.context-cup.config]\nmax_bytes = 10\n"
     )
     (package / "agent.sh").write_text(AGENT)
     agent_dir = tmp_path / "agent"
@@ -65,6 +66,7 @@ def test_the_agent_gets_the_task_and_the_proxy_and_its_result_is_kept(
         [],
     )
     assert summary["driver"]["name"] == "base_agent"
+    assert json.loads((agent_dir / "config.txt").read_text()) == {"max_bytes": 10}
     trajectory = json.loads((agent_dir / "trajectory.json").read_text())
     assert [s["source"] for s in trajectory["steps"]] == ["user", "agent"]
 

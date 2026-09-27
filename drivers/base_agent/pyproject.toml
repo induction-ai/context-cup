@@ -1,0 +1,15 @@
+# The agent's own dependencies, which the runner installs into a venv of its
+# own (`$CC_SELF_DIR/.venv`), pinned by uv.lock beside this file.
+[project]
+name = "base-agent"
+version = "0.1.0"
+description = "A whole agent written from scratch: its own loop over the task's MCP tools, clipping tool results over max_bytes like base_python."
+requires-python = ">=3.12,<3.13"
+dependencies = ["litellm==1.83.0", "mcp>=1.25,<2"]
+
+[tool.context-cup]
+kind = "agent"
+providers = ["openai", "anthropic", "gemini"]
+
+[tool.context-cup.config]
+max_bytes = 100_000

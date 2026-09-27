@@ -3,6 +3,7 @@ host agents' settings, with harbor stubbed out."""
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 import types
@@ -127,13 +128,13 @@ def test_host_agent_env_and_tau3_seed(monkeypatch, tmp_path: Path):
     assert (env["CC_DRIVER_USER"], env["CC_DRIVER_DROP"]) == ("ccdriver", "setpriv")
     assert (
         env["CC_DRIVER_CHAIN"]
-        == "/installed-agent/chain/00_python:/installed-agent/chain/01_base_x"
+        == "/installed-agent/chain/python:/installed-agent/chain/base_x"
     )
     script_env = agent.script_env(agent.host_chain(), 0)
-    assert script_env["CC_SELF_DIR"] == "/installed-agent/chain/00_python"
-    assert script_env["CC_DRIVER_DIR"] == "/installed-agent/chain/01_base_x"
+    assert script_env["CC_SELF_DIR"] == "/installed-agent/chain/python"
+    assert script_env["CC_DRIVER_DIR"] == "/installed-agent/chain/base_x"
     assert script_env["CC_STATE_DIR"] == "/logs/agent/driver_state"
-    staged = agent.stage_package(leaf, 1)
+    staged = agent.stage_package(leaf)
     assert (staged / "run.sh").exists() and not (staged / "node_modules").exists()
 
     seed_a = agent.trial_seed()
@@ -144,6 +145,70 @@ def test_host_agent_env_and_tau3_seed(monkeypatch, tmp_path: Path):
         mcp_servers=[server],
     )
     assert other.trial_seed() != seed_a
+
+
+def test_declared_dependencies_install_pinned_into_the_chains_venv(
+    monkeypatch, tmp_path: Path
+):
+    _stub_harbor(monkeypatch)
+    # A fresh import: the package attribute may still hold an earlier copy.
+    host = importlib.import_module("context_cup_runner.host")
+    from context_cup_runner.tau3 import Tau3Agent
+
+    monkeypatch.setattr(host, "workspace_pins", lambda: "openai==1.0\n")
+    monkeypatch.setattr(host, "package_pins", lambda project: "tiktoken==0.8\n")
+
+    def package(name: str, kind: str, *, pyproject: bool) -> Path:
+        directory = tmp_path / name
+        directory.mkdir()
+        (directory / "package.json").write_text(
+            json.dumps({"name": name, "contextCup": {"kind": kind}})
+        )
+        if pyproject:
+            (directory / "pyproject.toml").write_text(
+                "[project]\nname = 'x'\ndependencies = ['tiktoken']\n"
+            )
+        return directory
+
+    def agent_for(*dirs: Path) -> Tau3Agent:
+        extra = {
+            "CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "m"}),
+            "CC_HOST_DRIVER_CHAIN": ":".join(str(d) for d in dirs),
+        }
+        logs = tmp_path / "job" / f"t__{len(dirs)}" / "agent"
+        return Tau3Agent(logs, extra_env=extra, mcp_servers=[])
+
+    # A driver on an engine: into the engine's venv, pinned by its own lock
+    # and the workspace's, and every setup.sh sees the workspace's pins.
+    engine = package("python", "engine", pyproject=True)
+    driver = package("keep", "driver", pyproject=True)
+    agent = agent_for(engine, driver)
+    chain = agent.host_chain()
+    staged = agent.stage_pins(chain)
+    assert sorted(p.name for p in staged.iterdir()) == ["packages", "workspace.txt"]
+    assert (staged / "packages" / "keep.txt").read_text() == "tiktoken==0.8\n"
+    assert agent.script_env(chain, 0)["UV_CONSTRAINT"] == host.WORKSPACE_PINS
+    chain_dir = "/installed-agent/chain"
+    assert agent.dependencies_command(chain, 1) == (
+        f"{host.UV_BIN} pip install --quiet "
+        f"--python {chain_dir}/python/.venv/bin/python "
+        f"-r {chain_dir}/keep/pyproject.toml "
+        f"--constraint {host.PACKAGE_PINS}/keep.txt "
+        f"--constraint {host.WORKSPACE_PINS}"
+    )
+
+    # A script agent: a venv of its own, made first, pinned by its lock only.
+    solo = package("solo", "agent", pyproject=True)
+    agent = agent_for(solo)
+    chain = agent.host_chain()
+    assert "UV_CONSTRAINT" not in agent.script_env(chain, 0)
+    assert agent.dependencies_command(chain, 0) == (
+        f"{host.UV_BIN} venv --quiet --python 3.12 {chain_dir}/solo/.venv && "
+        f"{host.UV_BIN} pip install --quiet "
+        f"--python {chain_dir}/solo/.venv/bin/python "
+        f"-r {chain_dir}/solo/pyproject.toml "
+        f"--constraint {host.PACKAGE_PINS}/solo.txt"
+    )
 
 
 def test_toolathlon_agent_settings(monkeypatch, tmp_path: Path):

@@ -264,12 +264,12 @@ details > summary {
 
 // The home page's hero: the copy, and behind it the art at the hero's full
 // height out to the window's edge (the offsets undo <main>'s padding). The
-// art starts under the stats row, at 25rem, where its dissolve is still open
-// enough that every stat stays on cream; the page hides it below lg. The
-// dissolve is the image's own alpha as a mask at the art's left, reaching
-// 0.64 of the height in, so a cropped edge still dissolves. The image is
-// 1.975 of its height wide with the kart 0.656 of its height from its right:
-// right-aligned while it fits; narrower, the kart stays centred.
+// art keeps the image's shape (936 by 474) and starts no further left than
+// 25rem, under the stats row, where its dissolve is still open enough that
+// every stat stays on cream; the page hides it below lg. Narrower than the
+// image, it crops around the kart, about two thirds across. Its left edge
+// is the image's own alpha as a mask, scaled to its height, so a cropped
+// edge still dissolves.
 .cc-hero {
   position: relative;
   margin-top: -1.5rem;
@@ -282,26 +282,21 @@ details > summary {
 
 .cc-hero-art {
   position: absolute;
-  inset: 0 -1rem 0 25rem;
+  top: 0;
+  bottom: 0;
+  right: -1rem;
+  aspect-ratio: 936 / 474;
+  max-width: calc(100% - 24rem);
   overflow: hidden;
-  container-type: size;
-
-  > div {
-    position: absolute;
-    inset: 0;
-    mask:
-      url("/hero.png") left / auto 100% no-repeat,
-      linear-gradient(#000, #000) right / max(0px, calc(100% - 64cqh)) 100%
-        no-repeat;
-  }
+  -webkit-mask: url("/hero.png") left top / auto 100% no-repeat;
+  mask: url("/hero.png") left top / auto 100% no-repeat;
 
   img {
-    position: absolute;
-    top: 0;
-    right: min(0px, calc(50% - 65.6cqh));
+    display: block;
+    width: 100%;
     height: 100%;
-    width: auto;
-    max-width: none;
+    object-fit: cover;
+    object-position: 67% center;
   }
 }
 

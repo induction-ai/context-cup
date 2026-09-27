@@ -17,6 +17,9 @@ placeholder keys, and:
   CC_MCP_SERVERS_JSON   the task's MCP servers: [{name, transport, url,
                         command, args}], the tools the agent works with
   CC_TARGET_JSON        {provider, model, reasoning_effort}
+  CC_CONFIG             the `config` of the agent's manifest, as JSON, so an
+                        agent in any language reads its tunables without
+                        parsing a package.json or pyproject.toml
   CC_MAX_STEPS          the course's step cap for the benchmark
   CC_AGENT_DIR          the trial's agent log directory
   CC_RESULT_FILE        where the agent may write its result (below)
@@ -118,6 +121,7 @@ def run(env: dict[str, str]) -> int:
             **proxy_env(env.get("CC_PROXY_URL") or "http://127.0.0.1:18080", trial_id),
             "CC_AGENT_DIR": str(agent_dir),
             "CC_RESULT_FILE": str(result_file),
+            "CC_CONFIG": json.dumps(package.config),
             **setup,
         },
     )

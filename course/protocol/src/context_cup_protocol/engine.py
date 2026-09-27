@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import json
 import sys
 import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
+from .manifest import Manifest, read_manifest
 from .models import DriverInfo, Payload, TurnInput, TurnOutput
 
 
@@ -26,9 +26,9 @@ Finish = Callable[[Any, Any], Any]
 drivers return something else (a configured agent, say)."""
 
 
-def load_driver(driver_dir: Path) -> tuple[dict[str, Any], Any]:
-    """The driver's package.json and its imported driver.py."""
-    manifest: dict[str, Any] = json.loads((driver_dir / "package.json").read_text())
+def load_driver(driver_dir: Path) -> tuple[Manifest, Any]:
+    """The driver's manifest and its imported driver.py."""
+    manifest = read_manifest(driver_dir) or Manifest()
     spec = importlib.util.spec_from_file_location("driver", driver_dir / "driver.py")
     if spec is None or spec.loader is None:
         raise ImportError(f"no driver.py in {driver_dir}")
@@ -63,16 +63,16 @@ def run_turn(
 ) -> TurnOutput:
     manifest, module = load_driver(driver_dir)
     Path(turn.dirs.state).mkdir(parents=True, exist_ok=True)
-    ctx = make_ctx(turn, dict((manifest.get("contextCup") or {}).get("config") or {}))
+    ctx = make_ctx(turn, manifest.config)
     result = module.run(ctx)
     response = as_payload(finish(ctx, result) if finish else result)
-    name = str(manifest.get("name") or driver_dir.name).rsplit("/", 1)[-1]
+    name = driver_dir.resolve().name
     return TurnOutput(
         turn_id=turn.turn_id,
         response=response,
         context_payload=ctx.context_payload,
         state=ctx.state,
-        driver=DriverInfo(name=name, engine=engine, version=manifest.get("version")),
+        driver=DriverInfo(name=name, engine=engine, version=manifest.version),
     )
 
 
@@ -86,9 +86,10 @@ def run_engine(
     a traceback on stderr and exit 1.
 
     An engine's entry point is a call to this. It reads `input.json`, loads
-    the driver's `package.json` and `driver.py` (the driver's directory goes
-    on `sys.path`, so it may import sibling files), creates the state
-    directory, and builds `ctx` with `make_ctx(turn, contextCup.config)`. It
+    the driver's manifest (`read_manifest`) and `driver.py` (the driver's
+    directory goes on `sys.path`, so it may import sibling files), creates the
+    state directory, and builds `ctx` with `make_ctx(turn, config)`, the
+    manifest's `config`. It
     calls `run(ctx)`, passes the result through `finish(ctx, result)` when
     the engine gives one, and takes it as the response: a dict, or an SDK
     object dumped with only the fields the provider sent. `output.json` gets

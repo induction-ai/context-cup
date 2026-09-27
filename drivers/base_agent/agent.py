@@ -163,8 +163,9 @@ async def main() -> int:
     env = os.environ
     target = json.loads(env["CC_TARGET_JSON"])
     provider = target["provider"]
-    manifest = json.loads((Path(env["CC_DRIVER_DIR"]) / "package.json").read_text())
-    config = (manifest.get("contextCup") or {}).get("config") or {}
+    # The runner hands over the manifest's `config` (pyproject.toml's
+    # [tool.context-cup.config]) as JSON.
+    config = json.loads(env.get("CC_CONFIG") or "{}")
     max_bytes = int(config.get("max_bytes", 100_000))
     max_steps = int(env.get("CC_MAX_STEPS") or 150)
     instruction = Path(env["CC_INSTRUCTION_FILE"]).read_text(encoding="utf-8")  # noqa: ASYNC240 - before any concurrent work

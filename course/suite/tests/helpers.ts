@@ -63,28 +63,28 @@ export function sampleRun(overrides: Partial<SuiteRun> = {}): SuiteRun {
 export function samplePackages(): Map<string, CupPackage> {
   const pkgs: CupPackage[] = [
     {
-      name: "@context-cup/engine-python",
+      name: "python",
       dir: "/ws/engines/python",
       kind: "engine",
       providers: ["openai", "anthropic"],
     },
     {
-      name: "@context-cup-drivers/base_passthrough",
+      name: "base_passthrough",
       dir: "/ws/drivers/base_passthrough",
       kind: "driver",
-      extends: "@context-cup/engine-python",
+      extends: "python",
     },
     {
-      name: "@context-cup-drivers/base_python",
+      name: "base_python",
       dir: "/ws/drivers/base_python",
       kind: "driver",
-      extends: "@context-cup/engine-python",
+      extends: "python",
       providers: ["openai"],
       config: { max_bytes: 100000 },
       description: "Clips oversized tool results.",
     },
     {
-      name: "@context-cup-drivers/base_codex",
+      name: "base_codex",
       dir: "/ws/drivers/base_codex",
       kind: "agent",
       harbor_agent: "context_cup_runner.codex:CodexAgent",

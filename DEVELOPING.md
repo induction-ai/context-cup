@@ -12,9 +12,11 @@ drivers/    one package per context-management strategy
 suites/     which tasks, drivers, and models a run covers (toolathlon_local: the 35 tasks needing no credentials)
 ```
 
-Workspace packages are scoped `@context-cup/*`, for example `@context-cup/db`,
-`@context-cup/engine-python`, while drivers use `@context-cup-drivers/*`, for example
-`@context-cup-drivers/base_python`. How a driver
+The course names every driver and engine by its folder: `drivers/base_python`
+is the driver `base_python`, `engines/python` the engine `python`. A Python
+package's manifest is its `pyproject.toml`, a TypeScript package's its
+`package.json` (whose npm name, `@context-cup/*` or `@context-cup-drivers/*`,
+only pnpm reads). How a driver
 plugs in is specified in [docs/protocol.md](docs/protocol.md); to write one,
 start with [docs/drivers.md](docs/drivers.md).
 
@@ -75,7 +77,7 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
   (`REFERENCE_TARGET` in `course/shared/src/reference_target.ts`) when the
   driver supports its provider, and otherwise prompts for one.
 - `--driver` is a package under `drivers/`; it must declare support for the
-  target's provider in its `package.json`. `base_passthrough` and
+  target's provider in its manifest. `base_passthrough` and
   `base_python` speak the turn protocol directly; `base_pydantic` is a
   Pydantic AI agent that owns the model side while the course runs the
   environment's tools, doing the same clipping as a capability of its own,

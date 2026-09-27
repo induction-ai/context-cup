@@ -527,13 +527,19 @@ name = "context-cup-engine"
 version = "0.1.0"
 source = { editable = "engines/python" }
 dependencies = [
+    { name = "anthropic" },
     { name = "context-cup-protocol" },
+    { name = "httpx" },
+    { name = "openai" },
     { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", specifier = ">=1.8" },
     { name = "context-cup-protocol", editable = "course/protocol" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "openai", specifier = ">=3.19" },
     { name = "pydantic", specifier = ">=2" },
 ]
 

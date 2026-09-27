@@ -11,7 +11,7 @@ only scores it.
 - **Kind**: `agent`, a script agent: no `harbor_agent`; the course sets the
   benchmark up as its turn loop would (tau3's seed, Toolathlon's agent
   prompt) and runs `agent.sh` once per trial, as the unprivileged
-  `ccdriver`, after `setup.sh`. See "Agent drivers" in
+  `ccdriver`, after its dependencies are installed. See "Agent drivers" in
   [docs/protocol.md](../../docs/protocol.md) for what it is handed.
 - **Providers**: `openai`, `anthropic`, `gemini`. The conversation is one
   plain list of chat messages, and [LiteLLM](https://github.com/BerriAI/litellm)
@@ -26,9 +26,10 @@ only scores it.
   course reserves for the harness (`CC_HARNESS_TOOLS`, tau3's runtime
   controls), which would undo the trial's setup.
 - **Config**: `max_bytes` (default `100000`), the largest tool result sent
-  whole, read from its own `package.json`.
-- **Files**: `agent.py` (the agent), `agent.sh` (runs it), `setup.sh` (a venv
-  with LiteLLM and the MCP client), `test_base_agent.py`
+  whole, from `[tool.context-cup.config]`, handed over as `CC_CONFIG`.
+- **Files**: `agent.py` (the agent), `agent.sh` (runs it), `pyproject.toml`
+  and `uv.lock` (LiteLLM and the MCP client, which the runner installs into
+  a venv at `$CC_SELF_DIR/.venv`), `test_base_agent.py`
   (`uv run pytest drivers/base_agent`).
 
 ```
@@ -48,5 +49,5 @@ summarise the old part with a cheaper model (`litellm.acompletion` with
 `extra_headers={"x-cc-purpose": "summarize"}` labels that call in the
 accounting), or keep notes outside it. Anything else, from a planner to
 subagents, is yours to add. An agent in another language needs only a
-different `agent.sh` and `setup.sh`: the contract is environment variables,
-MCP servers, and the proxy.
+different `agent.sh`, with a `setup.sh` to install its toolchain: the
+contract is environment variables, MCP servers, and the proxy.

@@ -1,0 +1,24 @@
+# Python packages this driver needs beyond its engine's (the openai and
+# anthropic SDKs, and httpx). The runner installs them into the engine's venv
+# at the start of every trial, at the versions the uv.lock beside this file
+# pins. base_python needs none; to add one, from this directory:
+#
+#   uv add --no-sync tiktoken
+#
+# which lists it under `dependencies` and writes uv.lock; commit both. This is
+# a project of its own, not a member of the course's uv workspace. See
+# "Dependencies" in docs/drivers.md.
+[project]
+name = "base-python"
+version = "0.1.0"
+description = "Clips any tool result larger than max_bytes before it reaches the model."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.context-cup]
+kind = "driver"
+extends = "python"
+providers = ["openai", "anthropic", "gemini"]
+
+[tool.context-cup.config]
+max_bytes = 100_000

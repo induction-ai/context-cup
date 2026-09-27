@@ -59,7 +59,7 @@ class PydanticContext:
     engine builds, connects, and runs the agent (see `finish`).
 
     - `first`, `provider`, `target`, `dirs`, `config` (the manifest's
-      `contextCup.config`), and `turn`, the whole `input.json`: read only.
+      `[tool.context-cup.config]`), and `turn`, the whole `input.json`: read only.
     - `context_payload`, `original_payload`: the course's native request
       bodies, informational only. The agent's real context is its own
       history, kept in `dirs.state/pydantic_history/`.

@@ -4,6 +4,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { manifestConfig, readManifest } from "./manifest.ts";
 import {
   parseTurnInput,
   PROTOCOL_VERSION,
@@ -34,12 +35,6 @@ export type EngineOptions<C extends EngineContext> = {
   argv?: string[];
 };
 
-type Manifest = {
-  name?: string;
-  version?: string;
-  contextCup?: { config?: Record<string, unknown> };
-};
-
 /** What `run` returned, as JSON: a plain object, or an SDK response whose
  *  JSON form is one. */
 export function asPayload(value: unknown): Payload {
@@ -65,34 +60,29 @@ export async function runTurn<C extends EngineContext>(
       `${path.join(driverDir, "driver.ts")} must export run(ctx)`
     );
   }
-  const manifest = JSON.parse(
-    await readFile(path.join(driverDir, "package.json"), "utf8")
-  ) as Manifest;
+  const manifest = readManifest(driverDir);
   await mkdir(turn.dirs.state, { recursive: true });
-  const ctx = options.makeContext(turn, {
-    ...(manifest.contextCup?.config ?? {}),
-  });
+  const ctx = options.makeContext(turn, manifestConfig(manifest));
   const result = await driver.run(ctx);
   const response = asPayload(finish ? await finish(ctx, result) : result);
-  const name = String(manifest.name || path.basename(driverDir))
-    .split("/")
-    .at(-1)!;
+  const name = path.basename(path.resolve(driverDir));
   return {
     protocol: PROTOCOL_VERSION,
     turn_id: turn.turn_id,
     response,
     context_payload: ctx.contextPayload,
     state: ctx.state ?? null,
-    driver: { name, engine, version: manifest.version ?? null },
+    driver: { name, engine, version: manifest?.version ?? null },
   };
 }
 
 /** `--driver DIR --input in.json --output out.json`: one turn, exit code 0,
  *  or a stack trace on stderr and exit code 1.
  *
- *  An engine's entry point is a call to this. It reads `input.json`, the
- *  driver's `package.json`, creates the state directory, and builds `ctx`
- *  with `makeContext(turn, contextCup.config)`. It calls `run(ctx)`, passes
+ *  An engine's entry point is a call to this. It reads `input.json` and the
+ *  driver's manifest (`readManifest`), creates the state directory, and
+ *  builds `ctx` with `makeContext(turn, config)`, the manifest's `config`. It
+ *  calls `run(ctx)`, passes
  *  the result through `finish(ctx, result)` when the engine gives one, and
  *  takes it as the response. `output.json` gets that response plus
  *  `ctx.contextPayload` and `ctx.state` as they stand after the call. Any

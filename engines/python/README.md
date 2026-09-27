@@ -26,7 +26,7 @@ def run(ctx):
 | `ctx.first`            | `bool`                   | `True`                                                                                                                          | read only; true on the trial's first turn                                                                                             |
 | `ctx.provider`         | `ProviderInfo`           | `name="openai"`, `api_key="cc-proxy"`, `client.base_url="http://127.0.0.1:18080/t/<trial>/openai/v1"`, `client.api="responses"` | read only, fixed for the trial                                                                                                        |
 | `ctx.target`           | `Target`                 | `model="gpt-5.5"`, `reasoning_effort="medium"`                                                                                  | read only, fixed for the trial; already applied in the first payload                                                                  |
-| `ctx.config`           | `dict`                   | `{"max_bytes": 100000}`                                                                                                         | read only; your `package.json` `contextCup.config`                                                                                    |
+| `ctx.config`           | `dict`                   | `{"max_bytes": 100000}`                                                                                                         | read only; your manifest's `config` (`[tool.context-cup.config]`)                                                                     |
 | `ctx.dirs`             | `Dirs`                   | `turn="/logs/agent/turns/003_k3v9xq"`, `state="/logs/agent/driver_state"`, `workspace=None`                                     | `turn` is new each turn; files in `state` survive the trial; `workspace` is the task's working directory on Toolathlon                |
 | `ctx.turn_id`          | `str`                    | `"003_k3v9xq"`                                                                                                                  | new each turn, also each retry                                                                                                        |
 | `ctx.turn`             | `TurnInput`              | the whole `input.json`, e.g. `ctx.turn.turn_index`, `ctx.turn.limits["max_steps"]`                                              | read only                                                                                                                             |
@@ -53,15 +53,14 @@ the proxy has already counted them.
 
 The engine runs the turn mechanics: reads `input.json`, loads your
 `driver.py`, writes `output.json` with your response, `ctx.context_payload`,
-and `ctx.state`. It installs no provider SDK and makes no call: your
-`setup.sh` installs the client, and the runner has already pointed every SDK
-at the proxy (`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`,
-`GOOGLE_GEMINI_BASE_URL`, placeholder keys).
-
-```bash
-# drivers/<name>/setup.sh
-uv pip install --quiet --python "${CC_CHAIN%%:*}/.venv/bin/python" openai
-```
+and `ctx.state`. It makes no call itself, but installs the clients a driver
+calls with: the `openai` and `anthropic` SDKs, and `httpx` for Gemini's
+REST API. The runner has already pointed every SDK at the proxy
+(`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `GOOGLE_GEMINI_BASE_URL`,
+placeholder keys), so they need no configuration. Anything else your driver
+imports goes in its own `pyproject.toml`, pinned by the `uv.lock` beside
+it, and the runner installs it into this engine's venv (see "Dependencies"
+in [docs/drivers.md](../../docs/drivers.md#dependencies)).
 
 ## A worked example
 

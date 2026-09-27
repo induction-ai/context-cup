@@ -84,13 +84,11 @@ export default async function Home() {
           </div>
         </div>
         <div className="cc-hero-art d-none d-lg-block">
-          <div>
-            <Image
-              src={hero}
-              alt="A pixel-art kart racing under the Context Cup banner on a coastal road at sunset"
-              priority
-            />
-          </div>
+          <Image
+            src={hero}
+            alt="A pixel-art kart racing under the Context Cup banner on a coastal road at sunset"
+            priority
+          />
         </div>
       </section>
 

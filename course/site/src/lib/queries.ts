@@ -252,8 +252,6 @@ export async function loadTrial(
 
 /** What a run needs to stand on a leaderboard. */
 export type Eligibility = {
-  /** Attempts per task (the suite's `count`). */
-  min_count: number;
   /** Done trials (a reward and no error) every task needs, retry passes
    *  included. */
   min_done: number;
@@ -262,7 +260,7 @@ export type Eligibility = {
 /** The fewest done trials (a reward and no error) any of a run's tasks
  *  has, retry passes included; null for a run with no jobs. */
 /** The suite columns the eligibility rule reads, from `suite` or an alias. */
-type SuiteCols = Record<"id" | "count" | "finished_at", AnyPgColumn>;
+type SuiteCols = Record<"id" | "finished_at", AnyPgColumn>;
 
 function minTaskDone(s: SuiteCols): SQL<number | null> {
   return sql<number | null>`(
@@ -277,15 +275,11 @@ function minTaskDone(s: SuiteCols): SQL<number | null> {
   )`;
 }
 
-/** A run that can stand on a leaderboard: finished, at least `min_count`
- *  attempts per task, and at least `min_done` done trials in every one of
- *  its tasks. `standings.ts` states the same rule over a run's facts. */
-function eligible(
-  { min_count, min_done }: Eligibility,
-  s: SuiteCols = suite
-): SQL {
-  return sql`(${s.count} >= ${min_count}
-    and ${s.finished_at} is not null
+/** A run that can stand on a leaderboard: finished, with at least
+ *  `min_done` done trials in every one of its tasks. `standings.ts` states
+ *  the same rule over a run's facts. */
+function eligible({ min_done }: Eligibility, s: SuiteCols = suite): SQL {
+  return sql`(${s.finished_at} is not null
     and coalesce(${minTaskDone(s)}, 0) >= ${min_done})`;
 }
 

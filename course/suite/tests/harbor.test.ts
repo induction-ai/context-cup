@@ -206,8 +206,8 @@ describe("agent-kind drivers", () => {
 
   it("run a script agent's agent.sh through the benchmark's script agent, with its chain", async () => {
     const withAgent = new Map(packages);
-    withAgent.set("@context-cup-drivers/base_agent", {
-      name: "@context-cup-drivers/base_agent",
+    withAgent.set("base_agent", {
+      name: "base_agent",
       dir: "/ws/drivers/base_agent",
       kind: "agent",
     });

@@ -21,8 +21,6 @@ from harbor.agents.installed.base import BaseInstalledAgent
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
-import context_cup_protocol
-
 from . import __version__
 from .chain import DriverChain
 from .container import (
@@ -39,16 +37,31 @@ from .container import (
     upload_node,
     wait_for_proxy,
 )
+from .pins import (
+    WORKSPACE,
+    check_python_root,
+    declares_dependencies,
+    engine_chain,
+    package_pins,
+    without_pinned,
+    workspace_pins,
+)
 from .uv_bootstrap import cached_uv_binary, uv_target_triple
 
 REMOTE_PACKAGE = f"{INSTALL_ROOT}/context_cup_runner"
 # The shared protocol library (course/protocol), installed into the runner's
 # venv here and into engine venvs by their setup.sh via CC_PROTOCOL_DIR.
 REMOTE_PROTOCOL = f"{INSTALL_ROOT}/protocol"
-PROTOCOL_DIR = Path(context_cup_protocol.__file__).resolve().parents[2]
+PROTOCOL_DIR = WORKSPACE / "course" / "protocol"
 REMOTE_CHAIN = f"{INSTALL_ROOT}/chain"
 REMOTE_STATE = f"{AGENT_DIR}/driver_state"
 REMOTE_INSTRUCTION = f"{INSTALL_ROOT}/instruction.md"
+# Versions exported from the uv.lock files on the host (pins.py), read by the
+# container's uv as constraints: the workspace's, and one per package that
+# declares its own dependencies.
+REMOTE_PINS = f"{INSTALL_ROOT}/pins"
+WORKSPACE_PINS = f"{REMOTE_PINS}/workspace.txt"
+PACKAGE_PINS = f"{REMOTE_PINS}/packages"
 
 IN_CONTAINER_DEPS = ["pydantic>=2", "mcp>=1.25,<2"]
 
@@ -127,11 +140,10 @@ class CourseAgent(BaseInstalledAgent):
         return chain
 
     def remote_chain_dirs(self, chain: DriverChain) -> list[str]:
-        """Where each package lands in the container: indexed so order is
-        visible and two packages with one basename cannot collide."""
-        return [
-            f"{REMOTE_CHAIN}/{i:02d}_{p.dir.name}" for i, p in enumerate(chain.packages)
-        ]
+        """Where each package lands in the container: under its own folder
+        name, which is its name there too (the suite refuses two packages
+        with one), in CC_CHAIN's order."""
+        return [f"{REMOTE_CHAIN}/{p.dir.name}" for p in chain.packages]
 
     def remote_chain_value(self, chain: DriverChain) -> str:
         return ":".join(self.remote_chain_dirs(chain))
@@ -147,6 +159,10 @@ class CourseAgent(BaseInstalledAgent):
             "CC_PROTOCOL_DIR": REMOTE_PROTOCOL,
         }
         env.update(UV_ENV)
+        if engine_chain(chain):
+            # Whatever a setup.sh installs into the engine's venv stays on the
+            # versions the workspace pins.
+            env["UV_CONSTRAINT"] = WORKSPACE_PINS
         env["CC_PYTHON"] = RUNNER_PYTHON
         env["CC_NODE"] = NODE_BIN
         env["PATH"] = (
@@ -157,15 +173,11 @@ class CourseAgent(BaseInstalledAgent):
     def trial_id(self) -> str:
         return str(self.logs_dir.parent.name)
 
-    def stage_package(self, package_dir: Path, index: int | str) -> Path:
+    def stage_package(self, package_dir: Path, name: str | None = None) -> Path:
         """A copy without host-only clutter (node_modules and friends), so the
-        upload carries the scripts and sources, not a pnpm tree."""
-        staged = (
-            Path(self.logs_dir)
-            / "setup"
-            / "chain"
-            / (f"{index:02d}_{package_dir.name}" if isinstance(index, int) else index)
-        )
+        upload carries the scripts and sources, not a pnpm tree. Staged under
+        the package's folder name unless given another."""
+        staged = Path(self.logs_dir) / "setup" / "chain" / (name or package_dir.name)
         if staged.exists():
             shutil.rmtree(staged)
         shutil.copytree(
@@ -175,6 +187,46 @@ class CourseAgent(BaseInstalledAgent):
             symlinks=False,
         )
         return staged
+
+    def stage_pins(self, chain: DriverChain) -> Path:
+        """The pin files for this trial: the workspace's, and one per package
+        that declares its own dependencies, named like its chain directory."""
+        check_python_root(chain)
+        staged = Path(self.logs_dir) / "setup" / "pins"
+        if staged.exists():
+            shutil.rmtree(staged)
+        (staged / "packages").mkdir(parents=True)
+        workspace = workspace_pins()
+        (staged / "workspace.txt").write_text(workspace)
+        for package in chain.packages:
+            if declares_dependencies(package):
+                pins = package_pins(package.dir)
+                if engine_chain(chain):
+                    pins = without_pinned(pins, workspace)
+                (staged / "packages" / f"{package.dir.name}.txt").write_text(pins)
+        return staged
+
+    def dependencies_command(self, chain: DriverChain, index: int) -> str:
+        """Install package `index`'s declared dependencies into the chain's
+        venv (the engine's, or a script agent's own, made here), pinned by
+        its lock and, in an engine's venv, by the workspace's."""
+        dirs = self.remote_chain_dirs(chain)
+        venv = f"{dirs[0]}/.venv"
+        pins = f"{PACKAGE_PINS}/{Path(dirs[index]).name}.txt"
+        # Both explicitly: a --constraint flag replaces UV_CONSTRAINT from the
+        # environment rather than adding to it.
+        constraints = [pins, WORKSPACE_PINS] if engine_chain(chain) else [pins]
+        make_venv = (
+            f"{UV_BIN} venv --quiet --python {PYTHON_VERSION} {venv} && "
+            if index == 0
+            else ""
+        )
+        return (
+            make_venv
+            + f"{UV_BIN} pip install --quiet --python {venv}/bin/python "
+            + f"-r {dirs[index]}/pyproject.toml "
+            + " ".join(f"--constraint {c}" for c in constraints)
+        )
 
     async def install(self, environment: BaseEnvironment) -> None:
         chain = self.host_chain()
@@ -191,10 +243,11 @@ class CourseAgent(BaseInstalledAgent):
         await environment.upload_dir(
             self.stage_package(PROTOCOL_DIR, "protocol"), REMOTE_PROTOCOL
         )
-        for index, (package, remote) in enumerate(
-            zip(chain.packages, self.remote_chain_dirs(chain), strict=True)
+        for package, remote in zip(
+            chain.packages, self.remote_chain_dirs(chain), strict=True
         ):
-            await environment.upload_dir(self.stage_package(package.dir, index), remote)
+            await environment.upload_dir(self.stage_package(package.dir), remote)
+        await environment.upload_dir(self.stage_pins(chain), REMOTE_PINS)
         await self._open_install_root(environment)
 
         platform = await probe_platform(self, environment)
@@ -207,16 +260,27 @@ class CourseAgent(BaseInstalledAgent):
             command=(
                 f"{UV_BIN} venv --quiet --python {PYTHON_VERSION} {RUNNER_VENV} && "
                 f"{UV_BIN} pip install --quiet --no-sources --python {RUNNER_PYTHON} "
-                f"{REMOTE_PROTOCOL} {deps} && "
+                f"--constraint {WORKSPACE_PINS} {REMOTE_PROTOCOL} {deps} && "
                 f"mkdir -p {REMOTE_STATE} && chmod 777 {REMOTE_STATE}"
             ),
             env=UV_ENV,
             timeout_sec=900,
         )
-        # Every setup.sh, root first, from its own directory.
+        # Root first: each package's declared dependencies, then its setup.sh,
+        # from its own directory.
         for index, (package, remote) in enumerate(
             zip(chain.packages, self.remote_chain_dirs(chain), strict=True)
         ):
+            if declares_dependencies(package):
+                await self.exec_as_root(
+                    environment,
+                    command=(
+                        f"{self.dependencies_command(chain, index)} 2>&1 "
+                        f"| tee {AGENT_DIR}/dependencies_{package.name}.txt"
+                    ),
+                    env=self.script_env(chain, index),
+                    timeout_sec=900,
+                )
             if package.script("setup.sh") is None:
                 continue
             await self.exec_as_root(

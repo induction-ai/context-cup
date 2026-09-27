@@ -12,7 +12,9 @@ view.
   SDKs, and a direct POST for Gemini).
 - **Config**: `max_bytes` (default `100000`), the largest tool result sent
   whole.
-- **Files**: `driver.py`, `setup.sh` (installs `openai`, `anthropic`, `httpx`).
+- **Files**: `driver.py`, `test_base_python.py` (`uv run pytest drivers`),
+  and `pyproject.toml`, an empty dependency list with how to add one. No
+  `setup.sh`: the engine installs `openai`, `anthropic`, and `httpx`.
 
 ```
 bin/suite smoke_tau --driver base_python --target gpt-5.5@medium
@@ -22,4 +24,4 @@ bin/suite toolathlon_local --driver base_python --target claude-sonnet-4-6
 **Make your own**: copy the directory and change the loop in `run`: any
 edit to `conversation.messages` (text, removals, additions) goes back with
 `ctx.write(conversation)`. Keep each tool call with its result; a provider
-rejects either half on its own. Put tunables in `contextCup.config`.
+rejects either half on its own. Put tunables in `[tool.context-cup.config]`.

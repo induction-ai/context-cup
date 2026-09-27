@@ -21,8 +21,8 @@ def clip(text: str, max_bytes: int) -> str:
 
 
 def run(ctx: Any) -> Any:
-    # Tunables live in package.json's contextCup.config, so a variant is a
-    # manifest edit.
+    # Tunables live in pyproject.toml's [tool.context-cup.config], so a variant
+    # is a manifest edit.
     max_bytes = int(ctx.config.get("max_bytes", 100_000))
     # `ctx.context_messages` is litellm chat messages: turn one, the whole
     # conversation; after that, last turn's list as this driver left it plus

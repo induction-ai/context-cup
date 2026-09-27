@@ -46,8 +46,8 @@ def call(ctx: PythonContext) -> Any:
 
 
 def run(ctx: PythonContext) -> Any:
-    # Tunables live in package.json's contextCup.config, so a variant is a
-    # manifest edit.
+    # Tunables live in pyproject.toml's [tool.context-cup.config], so a variant
+    # is a manifest edit.
     max_bytes = int(ctx.config.get("max_bytes", 100_000))
     # The view reads the native payload as system text, messages, and tools,
     # the same for OpenAI, Anthropic, and Gemini. What it doesn't model

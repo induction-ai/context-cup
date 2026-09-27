@@ -3,7 +3,14 @@ name = "context-cup-engine"
 version = "0.1.0"
 description = "Python engine: implements the driver protocol so a driver is one small module"
 requires-python = ">=3.12"
-dependencies = ["context-cup-protocol", "pydantic>=2"]
+dependencies = [
+  "context-cup-protocol",
+  "pydantic>=2",
+  # The provider clients a driver calls with; Gemini is a POST with httpx.
+  "anthropic>=1.8",
+  "httpx>=0.28",
+  "openai>=3.19",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -14,3 +21,9 @@ packages = ["src/context_cup_engine"]
 
 [tool.uv.sources]
 context-cup-protocol = { workspace = true }
+
+# The engine's settings for the course (docs/protocol.md): a package is
+# named by its folder.
+[tool.context-cup]
+kind = "engine"
+providers = ["openai", "anthropic", "gemini"]
