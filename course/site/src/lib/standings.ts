@@ -21,7 +21,7 @@ export type Baseline = { score: number; run_cents: number };
 
 /** Each benchmark's bar at the reference target. */
 export const BASELINES: Record<BenchmarkSuite, Baseline> = {
-  tau_banking: { score: 0.35, run_cents: 5000 },
+  tau_banking: { score: 0.44, run_cents: 4000 },
   toolathlon: { score: 0.67, run_cents: 6500 },
 };
 

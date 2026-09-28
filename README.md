@@ -60,7 +60,7 @@ against a fixed baseline:
 
 | benchmark  | suite         | baseline score | baseline $ per run |
 | ---------- | ------------- | -------------- | ------------------ |
-| tau3       | `tau_banking` | 0.35           | $50                |
+| tau3       | `tau_banking` | 0.44           | $40                |
 | Toolathlon | `toolathlon`  | 0.67           | $65                |
 
 A run's cost here is a full benchmark run, every task once: the mean cost
