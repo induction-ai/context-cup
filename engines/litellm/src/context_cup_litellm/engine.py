@@ -202,6 +202,9 @@ class LLM:
         effort = ctx.target.reasoning_effort
         if effort and effort != "none" and model == ctx.target.model:
             params["reasoning_effort"] = effort
+            # Kept past drop_params for a model newer than litellm's own map,
+            # which would otherwise drop the effort without a word.
+            params["allowed_openai_params"] = ["reasoning_effort"]
         headers = {"x-cc-purpose": purpose, **(kwargs.pop("extra_headers", None) or {})}
         body = dict(kwargs.pop("extra_body", None) or {})
         if provider == "openai":

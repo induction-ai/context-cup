@@ -16,7 +16,7 @@ only scores it.
 - **Providers**: `openai`, `anthropic`, `gemini`. The conversation is one
   plain list of chat messages, and [LiteLLM](https://github.com/BerriAI/litellm)
   carries it to whichever provider the run targets, through the trial's
-  proxy. Each reply goes back into the list as LiteLLM's own message, which
+  proxy (OpenAI's through its Responses API, like every other driver). Each reply goes back into the list as LiteLLM's own message, which
   keeps Gemini's thought signatures and Anthropic's thinking blocks; OpenAI's
   encrypted reasoning has no chat form and is not carried.
 - **Prompt**: the benchmark's system prompt when the course hands one over

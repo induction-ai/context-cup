@@ -87,7 +87,7 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
     assert asyncio.run(agent.main()) == 0
 
     first = sent[0]
-    assert first["model"] == "openai/gpt-5.5"
+    assert first["model"] == "openai/responses/gpt-5.5"
     assert first["api_base"] == "http://proxy/t/trial/openai/v1"
     assert first["api_key"] == "cc-proxy"
     assert first["messages"] == [

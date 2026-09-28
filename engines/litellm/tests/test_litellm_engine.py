@@ -168,7 +168,10 @@ def payload_after_a_tool_round(provider: Provider) -> dict[str, Any]:
 
 
 def context(
-    provider: Provider, tmp_path: Path, effort: str | None = None
+    provider: Provider,
+    tmp_path: Path,
+    effort: str | None = None,
+    model: str | None = None,
 ) -> LitellmContext:
     payload = payload_after_a_tool_round(provider)
     turn = TurnInput(
@@ -183,7 +186,7 @@ def context(
                 base_url=f"{ROOT}/{provider}{VERSION[provider]}", api=API[provider]
             ),
         ),
-        target=Target(model=MODEL[provider], reasoning_effort=effort),
+        target=Target(model=model or MODEL[provider], reasoning_effort=effort),
         context_payload=payload,
         original_payload=payload,
         state=None,
@@ -253,6 +256,14 @@ def test_reasoning_effort_comes_from_the_target(
     ctx = context("openai", tmp_path, effort="low")
     ctx.llm.completion()
     assert json.loads(sent[-1].content)["reasoning"]["effort"] == "low"
+
+
+def test_reasoning_effort_survives_a_model_litellm_does_not_know(
+    sent: list[httpx.Request], tmp_path: Path
+) -> None:
+    ctx = context("openai", tmp_path, effort="medium", model="gpt-6-sol")
+    ctx.llm.completion()
+    assert json.loads(sent[-1].content)["reasoning"]["effort"] == "medium"
 
 
 def test_overrides_win_and_another_provider_still_goes_through_the_proxy(

@@ -137,6 +137,12 @@ class Tools:
         return f"Error: {text}" if result.isError else text
 
 
+# LiteLLM's model prefix per provider. OpenAI goes through its Responses
+# bridge: newer OpenAI models refuse function tools with reasoning effort on
+# chat completions.
+ROUTE = {"openai": "openai/responses/", "anthropic": "anthropic/", "gemini": "gemini/"}
+
+
 def connection(provider: str) -> dict[str, str]:
     """Where LiteLLM sends a call for the run's provider: the trial's proxy,
     with the placeholder key."""
@@ -195,12 +201,17 @@ async def main() -> int:
             empty = 0
             while result["turns"] < max_steps:
                 response = await complete(
-                    model=f"{provider}/{target['model']}",
+                    model=ROUTE[provider] + target["model"],
                     messages=messages,
                     tools=tools.schemas or None,
                     **connection(provider),
                     **(
-                        {"reasoning_effort": effort}
+                        # Kept past drop_params for a model newer than
+                        # LiteLLM's own map, which would drop it silently.
+                        {
+                            "reasoning_effort": effort,
+                            "allowed_openai_params": ["reasoning_effort"],
+                        }
                         if effort and effort != "none"
                         else {}
                     ),
