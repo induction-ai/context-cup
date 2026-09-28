@@ -71,7 +71,7 @@ on:
         description: "After the suite finishes, rerun the trials that failed, up to this many more passes (0 = off). Skipped when more than half the trials failed."
         required: false
         type: number
-        default: 2
+        default: 3
       harbor_env:
         description: "Where harbor tasks run their environment"
         required: false
@@ -199,7 +199,7 @@ jobs:
           # Unquoted expansion is intentional: each blank-free token becomes a
           # separate value for the repeatable --task flag.
           [ -n "$TASK" ] && args+=(--task $TASK)
-          args+=(--retry_errors "${RETRY_ERRORS:-2}")
+          args+=(--retry_errors "${RETRY_ERRORS:-3}")
           [ -n "$APPEND" ] && args+=(--append "$APPEND")
           bin/suite "${args[@]}"
 

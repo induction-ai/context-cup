@@ -316,8 +316,11 @@ details > summary {
 .cc-hero-art {
   position: absolute;
   top: 0;
-  bottom: 0;
   right: -1rem;
+  // An explicit height, not `bottom: 0`: with an auto height the ratio
+  // carries max-width over to the height, and the art shrinks instead of
+  // cropping.
+  height: 100%;
   aspect-ratio: 936 / 474;
   max-width: calc(100% - 24rem);
   overflow: hidden;
