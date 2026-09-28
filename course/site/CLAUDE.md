@@ -85,4 +85,9 @@ Keeping the theme tight:
   moves.
 - Off-site links (the README's sections, the driver guide) come from
   `src/lib/links.ts`.
+- Metadata: the root layout sets the site-wide defaults (`metadataBase`
+  from `SITE_URL`, the title template), and each page sets its own title
+  and description. The favicon, touch icon, and social card are generated
+  by `app/icon.tsx`, `app/apple-icon.tsx`, and `app/opengraph-image.tsx`
+  from `src/lib/brand.tsx`, whose colours copy the `$cc-*` palette.
 - Tests: `bin/test --project site`. Build check: `pnpm site:build`.

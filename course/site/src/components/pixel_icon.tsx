@@ -15,7 +15,7 @@ function checker(x: number, y: number, cols: number, rows: number, size = 3) {
   return cells;
 }
 
-const ICONS = {
+export const ICONS = {
   flag: checker(0, 2, 4, 3, 4),
   trophy: [
     [2, 1, 12, 2],

@@ -20,10 +20,29 @@ import {
 } from "@/src/lib/format";
 import { loadSuite, type TrialRow } from "@/src/lib/queries";
 import { parseSort, sortRows } from "@/src/lib/sort";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 
 export const dynamic = "force-dynamic";
+
+// One query per request, shared by the title and the page.
+const suiteById = cache(loadSuite);
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const data = await suiteById((await params).id);
+  if (!data) return {};
+  const { suite } = data;
+  return {
+    title: `Suite - ${suite.name} ${suite.id}`,
+    description: `${suite.driver_name} on ${suite.name}: every task, job, and trial of the run.`,
+  };
+}
 
 const TASK_COLUMNS = [
   "task",
@@ -67,7 +86,7 @@ export default async function SuitePage({
     key: "task",
     dir: "asc",
   });
-  const data = await loadSuite(id);
+  const data = await suiteById(id);
   if (!data) notFound();
   const { suite, jobs, trials } = data;
 

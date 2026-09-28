@@ -1,5 +1,6 @@
 import { SiteNav } from "@/src/components/site_nav";
-import type { Metadata } from "next";
+import { COLORS, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/src/lib/brand";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Press_Start_2P } from "next/font/google";
 import "./globals.scss";
 
@@ -15,11 +16,19 @@ const mono = IBM_Plex_Mono({
   variable: "--cc-font-mono",
 });
 
+// The favicon, touch icon, and social card are app/icon.tsx,
+// app/apple-icon.tsx, and app/opengraph-image.tsx; Next links them. The Open
+// Graph and Twitter titles and descriptions follow each page's own.
 export const metadata: Metadata = {
-  title: "Context Cup",
-  description:
-    "A competition to build the context engine that matches the baseline for less",
+  metadataBase: SITE_URL,
+  title: { default: SITE_NAME, template: `${SITE_NAME} - %s` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US" },
+  twitter: { card: "summary_large_image" },
 };
+
+export const viewport: Viewport = { themeColor: COLORS.cream };
 
 export default function RootLayout({
   children,

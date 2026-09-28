@@ -14,10 +14,23 @@ import {
   REFERENCE_TARGET,
   type Standing,
 } from "@/src/lib/standings";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ suite: string }>;
+}): Promise<Metadata> {
+  const { suite } = await params;
+  return {
+    title: `Leaderboard - ${suite}`,
+    description: `Context engines on ${suite}, ranked by cost among those that match the baseline’s score.`,
+  };
+}
 
 export default async function LeaderboardPage({
   params,

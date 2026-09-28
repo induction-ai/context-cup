@@ -15,11 +15,16 @@ import {
   type Baseline,
   type Board,
 } from "@/src/lib/standings";
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Fragment, type CSSProperties } from "react";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: { absolute: "Context Cup - Every token matters" },
+};
 
 /** Drivers shown per board before the rest fold into a “more” row. */
 const TOP = 5;

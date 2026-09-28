@@ -14,9 +14,12 @@ import {
 } from "@/src/lib/queries";
 import { pageHref, parsePage, parseSort } from "@/src/lib/sort";
 import { disqualifications } from "@/src/lib/standings";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Suites" };
 
 const NUMERIC: ReadonlySet<string> = new Set([
   "tasks",

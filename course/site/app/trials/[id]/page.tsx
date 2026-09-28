@@ -9,10 +9,29 @@ import {
   when,
 } from "@/src/lib/format";
 import { loadTrial, type ModelCallRow } from "@/src/lib/queries";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 
 export const dynamic = "force-dynamic";
+
+// One query per request, shared by the title and the page.
+const trialById = cache(loadTrial);
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const data = await trialById((await params).id);
+  if (!data) return {};
+  const { trial, suite } = data;
+  return {
+    title: `Trial - ${trial.trial_name}`,
+    description: `A trial of ${suite.driver_name} on ${suite.name}: its outcome and every model call.`,
+  };
+}
 
 export default async function TrialPage({
   params,
@@ -20,7 +39,7 @@ export default async function TrialPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await loadTrial(id);
+  const data = await trialById(id);
   if (!data) notFound();
   const { trial, job, suite, calls } = data;
   const rewardClass =
