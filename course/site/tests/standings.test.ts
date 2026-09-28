@@ -34,13 +34,13 @@ describe("rankBoard", () => {
   it("leads with the cheapest driver that reaches the baseline's score for a cheaper run", async () => {
     const board = rankBoard(
       [
-        // Matching the baseline's score is enough.
-        e("edge", 0.6, 90),
+        // Matching the baseline's score is enough, judged to two decimals.
+        e("edge", 0.595, 90),
         e("cheap", 0.6, 50),
         // Better score but dearer than cheap: qualifies, ranked by cost.
         e("strong", 0.8, 70),
-        // Anything under it is not, however cheap.
-        e("close", 0.599, 10),
+        // Anything that rounds under it is not, however cheap.
+        e("close", 0.5949, 10),
       ],
       base,
       10

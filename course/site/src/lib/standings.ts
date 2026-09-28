@@ -2,8 +2,8 @@
  *  board: every driver's score and cost on one benchmark suite at the
  *  reference target.
  *
- *  A driver qualifies when its score is at least the baseline's and a full
- *  benchmark run costs less than the baseline's.
+ *  A driver qualifies when its score, rounded to two decimals, is at least
+ *  the baseline's and a full benchmark run costs less than the baseline's.
  *  The leader is the cheapest qualifier; with none, there is no leader.
  *  Everyone else ranks below the qualifiers: first those that clear the score
  *  bar but cost as much or more, cheapest first; then those under the bar,
@@ -80,6 +80,12 @@ export type Board = {
  *  meets it. */
 const EPS = 1e-9;
 
+/** A score as it is judged and shown: to two decimals, halves up. The slack
+ *  keeps a mean like 0.435, stored as 0.43499…, rounding up. */
+export function roundScore(score: number): number {
+  return Math.round(score * 100 + EPS * 100) / 100;
+}
+
 export function rankBoard(
   entries: Entry[],
   baseline: Baseline | null,
@@ -94,7 +100,7 @@ export function rankBoard(
   const classify = (e: Entry): Exclude<StandingKind, "leader"> => {
     if (e.mean_reward == null) return "unscored";
     if (bar == null || budget == null) return "no_bar";
-    if (e.mean_reward < bar - EPS) return "below_bar";
+    if (roundScore(e.mean_reward) < bar - EPS) return "below_bar";
     const run = runCents(e);
     return run != null && run < budget - EPS ? "qualifies" : "costs_more";
   };

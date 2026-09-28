@@ -60,13 +60,13 @@ export default async function LeaderboardPage({
     <>
       <h1 className="h3 mb-3">Leaderboard</h1>
       <p className="text-body-secondary">
-        A driver qualifies with a score at least the baseline’s and a full
-        benchmark run that costs less; the cheapest qualifier leads. The rest
-        rank below: those that reach the baseline’s score but cost more,
-        cheapest first, then those under it, best score first. Each driver
-        stands on its most recent finished run of the suite at{" "}
-        <span className="font-monospace">{REFERENCE_TARGET}</span> with at least{" "}
-        {ELIGIBILITY.min_done} completed trials in every task.
+        A driver qualifies with a score, to two decimals, at least the
+        baseline’s and a full benchmark run that costs less; the cheapest
+        qualifier leads. The rest rank below: those that reach the baseline’s
+        score but cost more, cheapest first, then those under it, best score
+        first. Each driver stands on its most recent finished run of the suite
+        at <span className="font-monospace">{REFERENCE_TARGET}</span> with at
+        least {ELIGIBILITY.min_done} completed trials in every task.
       </p>
 
       <ul className="nav nav-pills gap-2 mb-3">

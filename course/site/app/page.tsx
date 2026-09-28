@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 };
 
 /** Drivers shown per board before the rest fold into a “more” row. */
-const TOP = 5;
+const TOP = 12;
 
 export default async function Home() {
   const [trials, drivers, ...boards] = await Promise.all([

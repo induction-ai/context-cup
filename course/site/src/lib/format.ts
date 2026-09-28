@@ -1,6 +1,8 @@
 /** Display helpers. Everything the pages print goes through here so numbers
  *  and dates look the same on every table. */
 
+import { roundScore } from "./standings.ts";
+
 export function cents(value: number | null | undefined): string {
   if (value == null) return "–";
   return `${value.toFixed(value >= 100 ? 0 : 1)}¢`;
@@ -22,9 +24,11 @@ export function change(ratio: number | null | undefined): string {
   return pct.startsWith("-") ? `−${pct.slice(1)}%` : `+${pct}%`;
 }
 
+/** A score as the standings judge it (`roundScore`), so a score shown as
+ *  the bar's always meets it. */
 export function reward(value: number | null | undefined): string {
   if (value == null) return "–";
-  return value.toFixed(2);
+  return roundScore(value).toFixed(2);
 }
 
 export function count(value: number | null | undefined): string {

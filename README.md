@@ -68,7 +68,7 @@ per task times the suite's task count.
 
 A driver qualifies on a benchmark when both hold:
 
-- **Score**: at least the baseline's.
+- **Score**: rounded to two decimals, at least the baseline's.
 - **Cost**: a full benchmark run costs less than the baseline's.
 
 The leader is the qualifying driver with the lowest cost. If none qualifies,
