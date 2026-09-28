@@ -169,6 +169,24 @@ h6,
   font-weight: $cc-display-weight;
 }
 
+// The wordmark shrinks with the site bar, flag and all, so it and the menu
+// toggle share one row on a phone. It is 11.2em wide with its flag, and the
+// toggle and the gaps take the bar's other 4.25rem (plus a hair), so it is
+// sized from the bar's own width, which makes the bar a size container. It
+// reaches its full 1.5rem from about a 26rem screen.
+.navbar {
+  container-type: inline-size;
+}
+
+.cc-brand {
+  font-size: clamp(0.75rem, (100cqi - 4.375rem) / 11.2, 1.5rem);
+
+  svg {
+    width: 1.4em;
+    height: 1.4em;
+  }
+}
+
 .display-1 {
   font-size: clamp(1.75rem, 3.75vw, 3.75rem);
   letter-spacing: -0.05em;
@@ -278,6 +296,21 @@ details > summary {
 .cc-hero-copy {
   position: relative;
   z-index: 1;
+}
+
+// The hero's stats: a divider before each, clipped wherever a stat starts
+// a line (the first, and any that wraps), so dividers only ever sit
+// between two stats. CSS can't pick out a line's first item, so every stat
+// has one and the row shifts left by its width under an overflow clip.
+.cc-stats {
+  overflow: hidden;
+
+  > div {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 1rem;
+    margin-left: calc(-1 * var(--bs-border-width));
+  }
 }
 
 .cc-hero-art {

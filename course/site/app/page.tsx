@@ -66,21 +66,23 @@ export default async function Home() {
             Enter the cup
             <PixelIcon name="arrow" size={22} />
           </a>
-          <div className="d-flex flex-wrap row-gap-3">
-            {stats.map(({ icon, value, label }, i) => (
-              <div
-                className={`d-flex align-items-center gap-2 px-3${i > 0 ? " border-start border-secondary-subtle" : ""}`}
-                key={label}
-              >
-                <PixelIcon name={icon} size={30} />
-                <div>
-                  <div className="h5 mb-0">{value}</div>
-                  <div className="small text-uppercase text-body-secondary">
-                    {label}
+          <div className="cc-stats">
+            <div>
+              {stats.map(({ icon, value, label }) => (
+                <div
+                  className="d-flex align-items-center gap-2 px-3 border-start border-secondary-subtle"
+                  key={label}
+                >
+                  <PixelIcon name={icon} size={30} />
+                  <div>
+                    <div className="h5 mb-0">{value}</div>
+                    <div className="small text-uppercase text-body-secondary">
+                      {label}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
         <div className="cc-hero-art d-none d-lg-block">
@@ -198,7 +200,11 @@ function Feature({
           <span className="h5 d-block mb-1">{title}</span>
           <span className="small d-block">{children}</span>
         </span>
-        <PixelIcon name="arrow" size={26} className="cc-arrow ms-auto" />
+        <PixelIcon
+          name="arrow"
+          size={26}
+          className="cc-arrow flex-shrink-0 ms-auto"
+        />
       </Link>
     </div>
   );
