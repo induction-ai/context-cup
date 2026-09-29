@@ -10,6 +10,17 @@ export type ServiceMap<M extends string, T> = Partial<
   Record<Service, Record<M, T>>
 >;
 
+// --- Model names (src/models.ts) ---
+export type {
+  ClientGeminiModelName,
+  ClientModelName,
+  KnownAnthropicModelName,
+  KnownFireworksModelName,
+  KnownGeminiModelName,
+  KnownModelName,
+  KnownOpenAIModelName,
+} from "../model_names.ts";
+
 // --- data/fetch_models.json ---
 export type FetchModelsFile = ServiceMap<ModelKey, Record<string, unknown>>;
 

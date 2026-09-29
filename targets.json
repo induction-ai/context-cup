@@ -1,4 +1,9 @@
 {
+  "gpt-6.1-sol@medium": {
+    "provider": "openai",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "medium"
+  },
   "gpt-6-sol@medium": {
     "provider": "openai",
     "model": "gpt-6-sol",
@@ -18,6 +23,10 @@
     "provider": "openai",
     "model": "gpt-5.5",
     "reasoning_effort": "low"
+  },
+  "claude-sonnet-5-5": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-5-5"
   },
   "claude-sonnet-4-6": {
     "provider": "anthropic",

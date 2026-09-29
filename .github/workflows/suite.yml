@@ -47,11 +47,13 @@ on:
         default: gpt-6-sol@medium
         options:
           - claude-sonnet-4-6
+          - claude-sonnet-5-5
           - gemini-3.1-pro-preview
           - gpt-5.5@low
           - gpt-5.5@medium
           - gpt-5.6-sol@medium
           - gpt-6-sol@medium
+          - gpt-6.1-sol@medium
       count:
         description: "Trials per task. Blank = the suite file’s count (else 1)."
         required: false

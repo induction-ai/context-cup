@@ -3,7 +3,14 @@
 
 import { get_encoding, type Tiktoken } from "tiktoken";
 import modelStats from "./data/model_stats.json" with { type: "json" };
-import type { CostEntry } from "./data/types.ts";
+import type {
+  ClientModelName,
+  CostEntry,
+  KnownAnthropicModelName,
+  KnownFireworksModelName,
+  KnownGeminiModelName,
+  KnownOpenAIModelName,
+} from "./data/types.ts";
 import { DollarAmount } from "./dollar_amount.ts";
 import { TokenCount } from "./token_count.ts";
 import {
@@ -12,7 +19,16 @@ import {
   type TokenUsageCounts,
 } from "./usage_counts.ts";
 
-export type { CostEntry } from "./data/types.ts";
+export type {
+  ClientGeminiModelName,
+  ClientModelName,
+  CostEntry,
+  KnownAnthropicModelName,
+  KnownFireworksModelName,
+  KnownGeminiModelName,
+  KnownModelName,
+  KnownOpenAIModelName,
+} from "./data/types.ts";
 
 // --- Types ---
 
@@ -20,6 +36,13 @@ export type Service = "openai" | "anthropic" | "gemini" | "fireworks";
 export type ModelKey = string; // TODO: brand this?
 export type ModelFamily = string; // TODO: brand this?
 type ServiceMap<M extends string, T> = Partial<Record<Service, Record<M, T>>>;
+
+export type KnownModelNameByService = {
+  openai: KnownOpenAIModelName;
+  anthropic: KnownAnthropicModelName;
+  gemini: KnownGeminiModelName;
+  fireworks: KnownFireworksModelName;
+};
 
 export type PricingTier = 0 | 1;
 export type CostServiceTier = "standard" | "priority";
@@ -83,7 +106,7 @@ function stripToFamily(id: string): string {
 }
 
 // Ordered fallback targets per provider — first is the default baseline.
-const POPULAR_MODELS: Record<Service, string[]> = {
+const POPULAR_MODELS: { [S in Service]: KnownModelNameByService[S][] } = {
   openai: [
     "gpt-4o",
     "gpt-4o-mini",
@@ -95,6 +118,8 @@ const POPULAR_MODELS: Record<Service, string[]> = {
     "gpt-4",
   ],
   anthropic: [
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
     "claude-sonnet-4-6",
     "claude-opus-4-6",
     "claude-haiku-4-5-20251001",
@@ -137,7 +162,7 @@ function baselineFromPopular(provider: Service, available: string[]): string {
 // Prefix-based provider inference for models that aren't in our data.
 // Known models are routed via the flat lookup map; this only kicks in
 // for unknown ids that still need a fallback target.
-function inferServiceFromPrefix(model: string): Service | undefined {
+function inferServiceFromPrefix(model: ClientModelName): Service | undefined {
   if (model.startsWith("claude-")) return "anthropic";
   if (model.startsWith("gemini-") || model.startsWith("deep-research-"))
     return "gemini";
@@ -155,13 +180,16 @@ function inferServiceFromPrefix(model: string): Service | undefined {
 }
 
 // Pull version-like numbers from an id, skipping dates, build suffixes,
-// and size annotations. stripToFamily handles most date variants; the
-// < 100 cap catches MMDD-style suffixes (e.g. gpt-3.5-turbo-instruct-0914);
-// the negative lookahead rejects context/parameter-size markers like 16k,
-// 70b, etc. Realistic model versions are single- or two-digit
-// (gpt-5, claude-3.5, gemini-3.1).
+// and size annotations. Anthropic writes minor versions with a hyphen, so
+// a lone digit pair like claude-opus-4-8 reads as 4.8. The < 100 cap drops
+// MMDD-style suffixes (gpt-3.5-turbo-instruct-0914) and the lookahead drops
+// size markers like 16k and 70b.
 function extractVersions(id: string): number[] {
-  const matches = stripToFamily(id).match(/\d+(?:\.\d+)?(?![kKbBmM])/g) ?? [];
+  const dotted = stripToFamily(id).replace(
+    /(?<![\d.])(\d)-(\d)(?![\d.])/g,
+    "$1.$2"
+  );
+  const matches = dotted.match(/\d+(?:\.\d+)?(?![kKbBmM])/g) ?? [];
   const out: number[] = [];
   for (const m of matches) {
     const n = parseFloat(m);
@@ -220,7 +248,7 @@ function scoreCandidate(
 
 function fallbackModel(
   provider: Service,
-  model: string,
+  model: ClientModelName,
   available: string[]
 ): string | undefined {
   if (!available.length) return undefined;
@@ -257,9 +285,10 @@ function fallbackModel(
   }
 
   const baseline = baselineFromPopular(provider, available);
+  const popular: readonly string[] = POPULAR_MODELS[provider];
   const popRank = (id: string) => {
-    const i = POPULAR_MODELS[provider].indexOf(id);
-    return i === -1 ? POPULAR_MODELS[provider].length : i;
+    const i = popular.indexOf(id);
+    return i === -1 ? popular.length : i;
   };
 
   let best = baseline;
@@ -317,7 +346,7 @@ for (const provider of [
 
 // Identify the provider for any model id. Direct/variant/family-strip hits
 // cover every known model; unknown ids fall back to prefix inference.
-export function pickService(model: ModelKey): Service | undefined {
+export function pickService(model: ClientModelName): Service | undefined {
   const direct = FLAT_LOOKUP.get(model);
   if (direct) return direct.provider;
   const family = stripToFamily(model);
@@ -339,7 +368,7 @@ interface ResolvedModel extends Resolution {
 // provider prefix matches) and then scored against that provider's
 // families. Never throws — callers should check `matched` to detect when
 // the lookup fell back.
-export function resolveModel(model: ModelKey): ResolvedModel {
+export function resolveModel(model: ClientModelName): ResolvedModel {
   // 1. Direct hit on family or listed variant
   const direct = FLAT_LOOKUP.get(model);
   if (direct) return { entry: direct, matched: true };
@@ -376,7 +405,7 @@ export function resolveModel(model: ModelKey): ResolvedModel {
 // True only when `model` resolves to a known catalog entry (direct, variant,
 // or family-strip hit) — not a guessed fallback. Callers use this to validate
 // user-supplied model ids without hardcoding their own model lists.
-export function isKnownModel(model: ModelKey): boolean {
+export function isKnownModel(model: ClientModelName): boolean {
   return resolveModel(model).matched;
 }
 
@@ -396,7 +425,7 @@ interface RateOptions {
   tier1Start: number | undefined;
   promptSize: number;
   serviceTier: CostServiceTier;
-  model: string;
+  model: ClientModelName;
 }
 
 function pickRate({
@@ -565,7 +594,9 @@ export function getTokenCost(
  * to stored cost breakdowns so rows stay self-describing as pricing tables
  * change. Write fields are absent when the model has no write SKU.
  */
-export function cacheRateMultipliers(model: string): CacheRateMultipliers {
+export function cacheRateMultipliers(
+  model: ClientModelName
+): CacheRateMultipliers {
   const c = resolveModel(model).entry.costs;
   const input = c.input_tier0_cents_million_tokens;
   const result: CacheRateMultipliers = {};
@@ -597,12 +628,14 @@ export interface CachingInfoResultTokens extends Resolution {
   caching: CachingEntryTokens;
 }
 
-export function getCachingInfo(model: ModelKey): CachingInfoResult {
+export function getCachingInfo(model: ClientModelName): CachingInfoResult {
   const { entry, matched } = resolveModel(model);
   return { caching: entry.caching, matched };
 }
 
-export function getCachingInfoTokens(model: ModelKey): CachingInfoResultTokens {
+export function getCachingInfoTokens(
+  model: ClientModelName
+): CachingInfoResultTokens {
   const { entry, matched } = resolveModel(model);
   return {
     caching: {
