@@ -7,6 +7,8 @@ import type { MetadataRoute } from "next";
 export default function sitemap(): MetadataRoute.Sitemap {
   const paths = [
     "/",
+    "/rules",
+    "/leaderboard",
     ...BENCHMARK_SUITES.map((name) => `/leaderboard/${name}`),
   ];
   return paths.map((p) => ({ url: new URL(p, SITE_URL).href }));

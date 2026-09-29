@@ -7,9 +7,16 @@ on accuracy and cost. This page is for driver authors; the wire-level
 contract is [protocol.md](protocol.md).
 
 The bar to beat is a fixed baseline per benchmark at the reference target:
-match or beat its score while a full run costs less, and the cheapest driver
-that does leads. The full rule is under "Winning" in the
+match or beat its score while a full run costs less, on both benchmarks. Of
+the drivers that do, the one that spends least against the baselines wins
+the cup. The full rule is under "Winning" in the
 [README](../README.md#winning).
+
+Develop against the smoke suites, `tau_banking`, and `toolathlon_local`
+(the Toolathlon tasks that need no credentials; see [Run it](#run-it)). To
+enter, open a pull request adding your driver under `drivers/`; the
+competition runs both full benchmark suites, `tau_banking` and
+`toolathlon`, on every entry, and those runs are the ones that count.
 
 ## Pick a lane
 

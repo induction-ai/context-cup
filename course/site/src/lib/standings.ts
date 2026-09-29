@@ -7,7 +7,11 @@
  *  The leader is the cheapest qualifier; with none, there is no leader.
  *  Everyone else ranks below the qualifiers: first those that clear the score
  *  bar but cost as much or more, cheapest first; then those under the bar,
- *  best score first; then those with nothing scored. */
+ *  best score first; then those with nothing scored.
+ *
+ *  The combined board (`rankCombined`) puts every benchmark's board
+ *  together: a driver qualifies on it by qualifying on each, and is ranked
+ *  by the geometric mean of its cost ratios. */
 
 import { REFERENCE_TARGET } from "@context-cup/shared/reference_target.js";
 import tauBanking from "../../../../suites/tau_banking.json";
@@ -39,8 +43,8 @@ export type Baseline = { score: number; run_cents: number };
 
 /** Each benchmark's bar at the reference target. */
 export const BASELINES: Record<BenchmarkSuite, Baseline> = {
-  tau_banking: { score: 0.44, run_cents: 4000 },
-  toolathlon: { score: 0.67, run_cents: 6500 },
+  tau_banking: { score: 0.42, run_cents: 4000 },
+  toolathlon: { score: 0.58, run_cents: 2500 },
 };
 
 /** What a run needs to stand on a leaderboard. */
@@ -181,6 +185,107 @@ export function rankBoard(
     };
   });
   return { baseline, bar, budget, standings };
+}
+
+export type CombinedKind =
+  | "leader"
+  | "qualifies"
+  /** Reaches every baseline's score, but costs as much or more on one. */
+  | "costs_more"
+  /** Under a baseline's score on at least one benchmark. */
+  | "below_bar"
+  /** No scored standing on at least one benchmark. */
+  | "incomplete";
+
+export type CombinedStanding = {
+  driver_name: string;
+  rank: number;
+  kind: CombinedKind;
+  /** Its standing on each benchmark's board, where it has one. */
+  boards: Partial<Record<BenchmarkSuite, Standing>>;
+  /** The geometric mean of its cost ratios, one per benchmark: below 1 is
+   *  cheaper than the baselines. Null unless every benchmark has one. */
+  cost_ratio: number | null;
+  /** Its worse score ratio: below 1 is under a baseline's score. Null
+   *  unless every benchmark has one. */
+  score_ratio: number | null;
+};
+
+/** Every benchmark's board as one. A driver qualifies by qualifying on
+ *  each; the leader is the qualifier with the lowest geometric mean of its
+ *  cost ratios. The mean is the cost ratios' own, so the baselines' costs
+ *  cancel out of the order: it is the order of the product of the drivers'
+ *  run costs, and a benchmark counts for as much however dear its runs.
+ *  Below the qualifiers: those that reach every score but not every budget,
+ *  by the same mean; then those under a score, by their worse score ratio;
+ *  then those without a scored standing on every benchmark. */
+export function rankCombined(
+  boards: Record<BenchmarkSuite, Board>
+): CombinedStanding[] {
+  const drivers = new Map<string, Partial<Record<BenchmarkSuite, Standing>>>();
+  for (const suite of BENCHMARK_SUITES) {
+    for (const s of boards[suite].standings) {
+      drivers.set(s.driver_name, {
+        ...drivers.get(s.driver_name),
+        [suite]: s,
+      });
+    }
+  }
+
+  const combine = (
+    name: string,
+    mine: Partial<Record<BenchmarkSuite, Standing>>
+  ) => {
+    const each = BENCHMARK_SUITES.map((suite) => mine[suite]);
+    const costs = each.map((s) => s?.cost_ratio ?? null);
+    const scores = each.map((s) => s?.score_ratio ?? null);
+    const cost_ratio = costs.every((r): r is number => r != null)
+      ? Math.exp(costs.reduce((sum, r) => sum + Math.log(r), 0) / costs.length)
+      : null;
+    const score_ratio = scores.every((r): r is number => r != null)
+      ? Math.min(...scores)
+      : null;
+    const kinds = each.map((s) => s?.kind);
+    const kind: Exclude<CombinedKind, "leader"> = kinds.some(
+      (k) => k == null || k === "unscored"
+    )
+      ? "incomplete"
+      : kinds.some((k) => k === "below_bar" || k === "no_bar")
+        ? "below_bar"
+        : kinds.every((k) => k === "leader" || k === "qualifies")
+          ? "qualifies"
+          : "costs_more";
+    return { driver_name: name, kind, boards: mine, cost_ratio, score_ratio };
+  };
+
+  const tier: Record<CombinedKind, number> = {
+    leader: 0,
+    qualifies: 0,
+    costs_more: 1,
+    below_bar: 2,
+    incomplete: 3,
+  };
+  const cost = (c: { cost_ratio: number | null }) => c.cost_ratio ?? Infinity;
+  const score = (c: { score_ratio: number | null }) =>
+    c.score_ratio ?? -Infinity;
+
+  return [...drivers]
+    .map(([name, mine]) => combine(name, mine))
+    .sort((a, b) => {
+      const t = tier[a.kind] - tier[b.kind];
+      if (t !== 0) return t;
+      const byCost = tier[a.kind] <= 1;
+      const primary = byCost ? cost(a) - cost(b) : score(b) - score(a);
+      if (primary !== 0 && !Number.isNaN(primary)) return primary;
+      const secondary = byCost ? score(b) - score(a) : cost(a) - cost(b);
+      if (secondary !== 0 && !Number.isNaN(secondary)) return secondary;
+      return a.driver_name.localeCompare(b.driver_name);
+    })
+    .map((c, i) => ({
+      ...c,
+      rank: i + 1,
+      kind: i === 0 && c.kind === "qualifies" ? ("leader" as const) : c.kind,
+    }));
 }
 
 /** What decides whether a run can stand on a leaderboard. */

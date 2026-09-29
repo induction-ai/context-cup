@@ -7,6 +7,9 @@ import {
   BENCHMARK_TASKS,
   disqualifications,
   rankBoard,
+  rankCombined,
+  type Baseline,
+  type BenchmarkSuite,
   type Entry,
 } from "../src/lib/standings.ts";
 
@@ -99,11 +102,91 @@ describe("rankBoard", () => {
   });
 });
 
+describe("rankCombined", () => {
+  // Ten tasks a board, so a mean task cost is a tenth of a run's.
+  const bases: Record<BenchmarkSuite, Baseline> = {
+    tau_banking: { score: 0.44, run_cents: 4000 },
+    toolathlon: { score: 0.6, run_cents: 2500 },
+  };
+  /** Each driver's [score, run cents] on each benchmark, or null for none. */
+  type Runs = Record<string, Record<BenchmarkSuite, [number, number] | null>>;
+  const combined = (runs: Runs, b = bases) => {
+    const board = (suite: BenchmarkSuite) =>
+      rankBoard(
+        Object.entries(runs).flatMap(([name, r]) =>
+          r[suite] ? [e(name, r[suite][0], r[suite][1] / 10)] : []
+        ),
+        b[suite],
+        10
+      );
+    return rankCombined({
+      tau_banking: board("tau_banking"),
+      toolathlon: board("toolathlon"),
+    });
+  };
+
+  it("leads with the qualifier whose cost ratios have the lowest geometric mean", async () => {
+    const board = combined({
+      // Half the baseline's cost on one, 95% on the other: √0.475 ≈ 0.689.
+      specialist: { tau_banking: [0.5, 2000], toolathlon: [0.6, 2375] },
+      // 70% on both: 0.7. The mean of the ratios would put it first.
+      balanced: { tau_banking: [0.5, 2800], toolathlon: [0.6, 1750] },
+    });
+    expect(board.map((c) => [c.driver_name, c.kind])).toEqual([
+      ["specialist", "leader"],
+      ["balanced", "qualifies"],
+    ]);
+    expect(board[0]!.cost_ratio).toBeCloseTo(Math.sqrt(0.5 * 0.95), 9);
+    expect(board[1]!.cost_ratio).toBeCloseTo(0.7, 9);
+    // The worse of 0.5 / 0.44 and 0.6 / 0.6.
+    expect(board[0]!.score_ratio).toBeCloseTo(1, 9);
+  });
+
+  it("orders the same whatever the baselines cost", async () => {
+    const runs: Runs = {
+      a: { tau_banking: [0.5, 1000], toolathlon: [0.7, 900] },
+      b: { tau_banking: [0.5, 300], toolathlon: [0.7, 2000] },
+      c: { tau_banking: [0.5, 700], toolathlon: [0.7, 1200] },
+    };
+    const names = (b: Record<BenchmarkSuite, Baseline>) =>
+      combined(runs, b).map((c) => c.driver_name);
+    expect(names(bases)).toEqual(["b", "c", "a"]);
+    expect(
+      names({
+        tau_banking: { score: 0.44, run_cents: 1500 },
+        toolathlon: { score: 0.6, run_cents: 9000 },
+      })
+    ).toEqual(["b", "c", "a"]);
+  });
+
+  it("qualifies a driver only on every benchmark, and ranks the rest cost-first then score-first", async () => {
+    expect(
+      combined({
+        // Cheaper on tau, dearer on toolathlon: costs more overall.
+        over: { tau_banking: [0.5, 1000], toolathlon: [0.7, 3000] },
+        pricier: { tau_banking: [0.5, 5000], toolathlon: [0.7, 3000] },
+        // Under the bar on toolathlon, however cheap.
+        weak: { tau_banking: [0.5, 100], toolathlon: [0.3, 100] },
+        weaker: { tau_banking: [0.2, 100], toolathlon: [0.7, 100] },
+        // No toolathlon run at all.
+        solo: { tau_banking: [0.9, 100], toolathlon: null },
+        good: { tau_banking: [0.44, 3900], toolathlon: [0.6, 2400] },
+      }).map((c) => [c.driver_name, c.kind])
+    ).toEqual([
+      ["good", "leader"],
+      ["over", "costs_more"],
+      ["pricier", "costs_more"],
+      ["weak", "below_bar"],
+      ["weaker", "below_bar"],
+      ["solo", "incomplete"],
+    ]);
+  });
+});
+
 describe("BENCHMARK_TASKS", () => {
   it("is each suite file’s tasks, less the explicit_only ones", async () => {
     expect(BENCHMARK_TASKS.tau_banking).toHaveLength(97);
     expect(BENCHMARK_TASKS.toolathlon).toHaveLength(107);
-    expect(BENCHMARK_TASKS.toolathlon).not.toContain("train_ticket_plan");
   });
 });
 

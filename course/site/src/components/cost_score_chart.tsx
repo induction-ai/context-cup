@@ -2,7 +2,6 @@
 
 import { logScale, scoreScale } from "@/src/lib/chart";
 import { dollars, reward } from "@/src/lib/format";
-import type { Baseline, Standing } from "@/src/lib/standings";
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import { BASELINE_KEY, useBoardFocus } from "./board_focus";
 
@@ -20,30 +19,76 @@ const OTHER = "var(--bs-gray-600)";
 const MUTED = "var(--bs-secondary-color)";
 const GRID = "var(--bs-border-color-translucent)";
 
-function fill(s: Standing): string {
-  return s.kind === "leader" || s.kind === "qualifies" ? QUALIFIES : OTHER;
-}
-
-/** One marker: a driver, or the baseline. */
-type Point = {
+/** One dot, as the page works it out: a driver, or the baseline. */
+export type ChartDot = {
   key: string;
   name: string;
-  /** Dollars per full benchmark run. */
-  run: number;
-  score: number;
+  /** Cost: dollars per full benchmark run, or a ratio to the baselines'. */
+  x: number;
+  /** Score, or a ratio to the baselines'. */
+  y: number;
+  kind: "leader" | "qualifies" | "other";
+  /** What screen readers say. */
+  note: string;
+  /** The tooltip's lines under the name: a label and its value. */
+  lines: [string, string][];
+};
+
+/** What the axes measure: one benchmark's score against the dollars of a
+ *  full run, or the combined board's ratios to the baselines. */
+export type ChartScale = "run" | "ratio";
+
+const AXES: Record<
+  ChartScale,
+  {
+    x: string;
+    y: string;
+    xTick: (v: number) => string;
+    yTick: (v: number) => string;
+    bar: (v: number) => string;
+    budget: (v: number) => string;
+    aria: string;
+    /** Why a driver has no dot. */
+    lacks: string;
+  }
+> = {
+  run: {
+    x: "$ per full benchmark run (log)",
+    y: "Score",
+    xTick: (v) => `$${v}`,
+    yTick: (v) => `${Math.round(v * 100)}%`,
+    bar: (v) => `baseline score ${reward(v)}`,
+    budget: (v) => `baseline cost ${dollars(v * 100)}`,
+    aria: "Score against dollars per full benchmark run, one dot per driver",
+    lacks: "no score or cost yet",
+  },
+  ratio: {
+    x: "cost vs the baselines, geometric mean (log)",
+    y: "Worse score vs baseline",
+    xTick: (v) => `${v}×`,
+    yTick: (v) => `${v.toFixed(1)}×`,
+    bar: () => "baseline scores",
+    budget: () => "baseline costs",
+    aria: "Worse score ratio against the geometric mean of cost ratios, one dot per driver",
+    lacks: "no scored run of every benchmark yet",
+  },
+};
+
+/** One marker, placed. */
+type Point = ChartDot & {
   color: string;
   big: boolean;
-  /** What the tooltip and screen readers say. */
-  note: string;
   labelled: boolean;
   /** Which side its name prefers. The leader is always cheaper than the
    *  baseline, so its name goes left and the baseline's right. */
   side: -1 | 1;
 };
 
-/** Score against the cost of a full benchmark run (log), one dot per
- *  driver and one for the baseline. The shaded corner is where a driver
- *  qualifies: at or above the baseline's score and left of its cost.
+/** Score against cost (log), one dot per driver and one for the baseline.
+ *  The shaded corner is at or above the baseline's score and left of its
+ *  cost, where a driver qualifies (on the combined board, roughly: a
+ *  qualifier must be under budget on each benchmark, so the colours are
+ *  the word).
  *
  *  Hovering (or focusing) a dot shows its score and cost; clicking it pins
  *  that tooltip until a click elsewhere, Escape, or a second click on the
@@ -51,13 +96,16 @@ type Point = {
  *  as the pointer stays on it. Hovering a driver's table row does the same
  *  (`BoardFocus` shares the state). */
 export function CostScoreChart({
-  standings,
+  dots,
   baseline,
-  bar,
+  unplotted,
+  scale,
 }: {
-  standings: Standing[];
-  baseline: Baseline | null;
-  bar: number | null;
+  dots: ChartDot[];
+  baseline: ChartDot | null;
+  /** Drivers left off for want of a score or cost. */
+  unplotted: number;
+  scale: ChartScale;
 }) {
   const { hovered, pinned, setHovered, setPinned } = useBoardFocus();
   const frame = useRef<HTMLDivElement>(null);
@@ -87,44 +135,34 @@ export function CostScoreChart({
     };
   }, [pinned, setHovered, setPinned]);
 
-  const drivers = standings.flatMap((s) =>
-    s.mean_reward != null && s.run_cents != null && s.run_cents > 0
-      ? [{ s, run: s.run_cents / 100, score: s.mean_reward }]
-      : []
-  );
+  const axes = AXES[scale];
+  const drivers = dots.filter((d) => d.x > 0 && Number.isFinite(d.x));
   // A few dots are all named; a crowd names only the leader and baseline.
   const few = drivers.length <= 6;
-  const points: Point[] = drivers.map(({ s, run, score }) => ({
-    key: s.driver_name,
-    name: s.driver_name,
-    run,
-    score,
-    color: fill(s),
-    big: s.kind === "leader",
-    note: `#${s.rank} ${s.driver_name}: score ${reward(score)}, ${dollars(s.run_cents)} per run`,
-    labelled: few || s.kind === "leader",
-    side: s.kind === "leader" ? -1 : 1,
+  const points: Point[] = drivers.map((d) => ({
+    ...d,
+    color: d.kind === "other" ? OTHER : QUALIFIES,
+    big: d.kind === "leader",
+    labelled: few || d.kind === "leader",
+    side: d.kind === "leader" ? -1 : 1,
   }));
   if (baseline) {
     points.push({
-      key: BASELINE_KEY,
-      name: "baseline",
-      run: baseline.run_cents / 100,
-      score: baseline.score,
+      ...baseline,
       color: BASELINE,
       big: false,
-      note: `baseline: score ${reward(baseline.score)}, ${dollars(baseline.run_cents)} per run`,
       labelled: true,
       side: 1,
     });
   }
   if (drivers.length === 0 && !baseline) return null;
-  const budgetRun = baseline ? baseline.run_cents / 100 : null;
-  const x = logScale(points.map((p) => p.run));
-  const y = scoreScale([
-    ...points.map((p) => p.score),
-    ...(bar != null ? [bar] : []),
-  ]);
+  const bar = baseline ? baseline.y : null;
+  const budgetRun = baseline ? baseline.x : null;
+  const x = logScale(points.map((p) => p.x));
+  const y = scoreScale(
+    points.map((p) => p.y),
+    scale === "ratio" ? Infinity : 1
+  );
   const px = (v: number) => M.left + INSET + x.at(v) * (PW - 2 * INSET);
   const py = (v: number) => M.top + INSET + (1 - y.at(v)) * (PH - 2 * INSET);
   const barY = bar != null ? py(Math.max(bar, y.domain[0])) : null;
@@ -136,7 +174,7 @@ export function CostScoreChart({
   const ordered = [...points].sort(
     (a, b) => Number(a.labelled) - Number(b.labelled)
   );
-  const unplotted = standings.length - drivers.length;
+  const missing = unplotted + dots.length - drivers.length;
   const activeKey = hovered ?? pinned;
   const active = points.find((p) => p.key === activeKey);
   const togglePin = (key: string) =>
@@ -162,7 +200,7 @@ export function CostScoreChart({
           width="100%"
           style={{ height: "auto", display: "block" }}
           role="img"
-          aria-label="Score against dollars per full benchmark run, one dot per driver"
+          aria-label={axes.aria}
           fontSize={12}
         >
           {barY != null && budgetX != null && budgetX > M.left && (
@@ -192,7 +230,7 @@ export function CostScoreChart({
                 fill={MUTED}
                 className="font-monospace"
               >
-                {Math.round(t * 100)}%
+                {axes.yTick(t)}
               </text>
             </g>
           ))}
@@ -212,11 +250,11 @@ export function CostScoreChart({
                 fill={MUTED}
                 className="font-monospace"
               >
-                ${t}
+                {axes.xTick(t)}
               </text>
             </g>
           ))}
-          {barY != null && (
+          {bar != null && barY != null && (
             <g>
               <line
                 x1={M.left}
@@ -232,7 +270,7 @@ export function CostScoreChart({
                 textAnchor="end"
                 fill={MUTED}
               >
-                baseline score {reward(bar)}
+                {axes.bar(bar)}
               </text>
             </g>
           )}
@@ -247,7 +285,7 @@ export function CostScoreChart({
                 strokeDasharray="4 4"
               />
               <text x={budgetX + 6} y={M.top + PH - 6} fill={MUTED}>
-                baseline cost {dollars(baseline!.run_cents)}
+                {axes.budget(budgetRun!)}
               </text>
             </g>
           )}
@@ -259,8 +297,8 @@ export function CostScoreChart({
             stroke="var(--bs-border-color)"
           />
           {ordered.map((p) => {
-            const cx = px(p.run);
-            const cy = py(p.score);
+            const cx = px(p.x);
+            const cy = py(p.y);
             const dimmed = active != null && active.key !== p.key;
             return (
               <g key={p.key} opacity={dimmed ? 0.35 : 1}>
@@ -316,29 +354,29 @@ export function CostScoreChart({
             );
           })}
           <text x={M.left + PW / 2} y={H - 8} textAnchor="middle" fill={MUTED}>
-            ← Cheaper · $ per full benchmark run (log) · More expensive →
+            ← Cheaper · {axes.x} · More expensive →
           </text>
           <text
             transform={`translate(16 ${M.top + PH / 2}) rotate(-90)`}
             textAnchor="middle"
             fill={MUTED}
           >
-            Score
+            {axes.y}
           </text>
         </svg>
         {active && (
           <Tooltip
             point={active}
-            cx={px(active.run)}
-            cy={py(active.score)}
+            cx={px(active.x)}
+            cy={py(active.y)}
             pinned={pinned === active.key}
           />
         )}
       </div>
-      {unplotted > 0 && (
+      {missing > 0 && (
         <figcaption className="small text-body-secondary">
-          {unplotted} {unplotted === 1 ? "driver has" : "drivers have"} no score
-          or cost yet and {unplotted === 1 ? "isn’t" : "aren’t"} plotted.
+          {missing} {missing === 1 ? "driver has" : "drivers have"} {axes.lacks}{" "}
+          and {missing === 1 ? "isn’t" : "aren’t"} plotted.
         </figcaption>
       )}
     </figure>
@@ -398,13 +436,11 @@ function Tooltip({
       aria-hidden="true"
     >
       <div className="fw-semibold font-monospace">{point.name}</div>
-      <div>
-        score <span className="font-monospace">{reward(point.score)}</span>
-      </div>
-      <div>
-        <span className="font-monospace">{dollars(point.run * 100)}</span> per
-        run
-      </div>
+      {point.lines.map(([label, value]) => (
+        <div key={label}>
+          {label} <span className="font-monospace">{value}</span>
+        </div>
+      ))}
     </div>
   );
 }

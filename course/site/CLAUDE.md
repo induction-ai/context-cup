@@ -67,15 +67,20 @@ Keeping the theme tight:
   suite the mean over its tasks (`src/lib/aggregate.ts`, and the SQL in
   `listSuites`).
 - The leaderboard's rule (suites, baselines, reference target,
-  the ranking) is `src/lib/standings.ts`, pure and tested; the page and the
-  chart only draw it. The chart (`src/components/cost_score_chart.tsx`) is
+  the ranking, and `rankCombined` for the combined board at `/leaderboard`)
+  is `src/lib/standings.ts`, pure and tested; the pages and the chart only
+  draw it. The chart takes dots the page works out (`ChartDot`) and a
+  scale: dollars and scores for a benchmark, ratios for the combined board. The chart (`src/components/cost_score_chart.tsx`) is
   SVG with no chart library and a client component: hovering a dot (or its
   table row, through `BoardFocus` in `src/components/board_focus.tsx`)
   shows its score and cost, clicking pins the tooltip until a click
   elsewhere or Escape. Which run a driver stands on is SQL
   (`eligible` and `onBoard` in `src/lib/queries.ts`); `disqualifications`
   states the same rule in TypeScript for the `/suites` column, so change
-  them together. Keep all of it in step with README "Winning".
+  them together. Keep all of it in step with README "Winning". The
+  `/rules` page (`app/rules/page.tsx`) is the README's rules for site
+  visitors: its numbers come from `standings.ts`, its prose follows the
+  README, so a rule change edits both.
 - Query functions return typed rows; aggregation and formatting are pure
   functions with tests under `tests/`.
 - The home page's code samples are the base drivers themselves, one tab
@@ -91,3 +96,6 @@ Keeping the theme tight:
   by `app/icon.tsx`, `app/apple-icon.tsx`, and `app/opengraph-image.tsx`
   from `src/lib/brand.tsx`, whose colours copy the `$cc-*` palette.
 - Tests: `bin/test --project site`. Build check: `pnpm site:build`.
+- `pnpm site:dev` runs webpack, not Turbopack: under Next 16.2.1 Turbopack's
+  dev server serves the first edit to a file and then never another, until
+  it restarts. Try dropping `--webpack` after a Next upgrade.

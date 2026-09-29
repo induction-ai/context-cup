@@ -320,11 +320,6 @@
       "runner": "toolathlon",
       "concurrency": 1
     },
-    "train_ticket_plan": {
-      "runner": "toolathlon",
-      "concurrency": 1,
-      "explicit_only": true
-    },
     "travel_exchange": {
       "runner": "toolathlon"
     },

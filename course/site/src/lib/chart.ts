@@ -34,9 +34,9 @@ export function logScale(values: number[]): Scale {
   return { domain: [lo, hi], ticks, at: (v) => (Math.log10(v) - a) / (b - a) };
 }
 
-/** A linear scale over scores in 0..1, snapped out to tenths with some room
- *  around the data, ticks every tenth. */
-export function scoreScale(values: number[]): Scale {
+/** A linear scale over scores in 0..1 (or ratios in 0..`ceiling`), snapped
+ *  out to tenths with some room around the data, ticks every tenth. */
+export function scoreScale(values: number[], ceiling = 1): Scale {
   const present = values.filter((v) => Number.isFinite(v));
   const tenth = (v: number) => Math.round(v * 10) / 10;
   let lo = present.length
@@ -46,9 +46,9 @@ export function scoreScale(values: number[]): Scale {
     ? Math.ceil((Math.max(...present) + 0.05) * 10) / 10
     : 1;
   lo = Math.max(0, tenth(lo));
-  hi = Math.min(1, tenth(hi));
+  hi = Math.min(ceiling, tenth(hi));
   if (hi - lo < 0.2) {
-    if (hi < 1) hi = Math.min(1, tenth(hi + 0.1));
+    if (hi < ceiling) hi = Math.min(ceiling, tenth(hi + 0.1));
     if (hi - lo < 0.2) lo = Math.max(0, tenth(lo - 0.1));
   }
   const ticks: number[] = [];

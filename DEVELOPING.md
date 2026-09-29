@@ -1,7 +1,8 @@
 # Developing Context Cup
 
 How to set up, run, and operate the course. The competition itself (the
-benchmarks, scoring, and what wins) is in the [README](README.md).
+benchmarks, scoring, what wins, and how to enter: a pull request with your
+driver) is in the [README](README.md).
 
 ## Layout
 

@@ -9,6 +9,7 @@ import { PixelIcon } from "./pixel_icon";
 const PAGES = [
   { href: "/", label: "Home" },
   { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/rules", label: "Rules" },
 ];
 
 /** The site bar: the wordmark, the pages (the current one underlined), and
@@ -67,9 +68,13 @@ export function SiteNav() {
             Docs
           </a>
         </div>
-        <a className="btn btn-primary my-2 my-lg-0" href={DOCS.entering}>
+        <Link
+          className="btn btn-primary my-2 my-lg-0"
+          href="/rules#entering"
+          onClick={close}
+        >
           Enter the cup
-        </a>
+        </Link>
       </div>
     </nav>
   );

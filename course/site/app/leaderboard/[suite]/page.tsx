@@ -3,7 +3,11 @@ import {
   BoardFocus,
   FocusRow,
 } from "@/src/components/board_focus";
-import { CostScoreChart } from "@/src/components/cost_score_chart";
+import { BoardTabs } from "@/src/components/board_tabs";
+import {
+  CostScoreChart,
+  type ChartDot,
+} from "@/src/components/cost_score_chart";
 import { change, dollars, reward, when } from "@/src/lib/format";
 import { loadBoard } from "@/src/lib/queries";
 import {
@@ -15,6 +19,7 @@ import {
   type Standing,
 } from "@/src/lib/standings";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
 
@@ -51,6 +56,7 @@ export default async function LeaderboardPage({
     tasks
   );
   const leader = standings.find((s) => s.kind === "leader");
+  const dots = standings.flatMap(dot);
   // The baseline's row sits where it would rank: after the qualifiers.
   const baselineAt = standings.findIndex(
     (s) => s.kind !== "leader" && s.kind !== "qualifies"
@@ -67,21 +73,10 @@ export default async function LeaderboardPage({
         first. Each driver stands on its most recent finished run of the suite
         at <span className="font-monospace">{REFERENCE_TARGET}</span> that
         covers every task, with at least {ELIGIBILITY.min_done} completed trials
-        in each.
+        in each. <Link href="/rules#winning">The rules</Link> have the rest.
       </p>
 
-      <ul className="nav nav-pills gap-2 mb-3">
-        {BENCHMARK_SUITES.map((name) => (
-          <li className="nav-item" key={name}>
-            <a
-              className={`nav-link border${name === suite_name ? " active" : ""}`}
-              href={`/leaderboard/${name}`}
-            >
-              {name}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <BoardTabs current={suite_name} />
 
       {entries.length === 0 ? (
         <div className="alert alert-secondary">
@@ -113,9 +108,23 @@ export default async function LeaderboardPage({
             <div className="row g-4">
               <div className="col-xl-6">
                 <CostScoreChart
-                  standings={standings}
-                  baseline={baseline}
-                  bar={bar}
+                  dots={dots}
+                  baseline={
+                    baseline && {
+                      key: BASELINE_KEY,
+                      name: "baseline",
+                      x: baseline.run_cents / 100,
+                      y: baseline.score,
+                      kind: "other",
+                      note: `baseline: score ${reward(baseline.score)}, ${dollars(baseline.run_cents)} per run`,
+                      lines: [
+                        ["score", reward(baseline.score)],
+                        ["$ / run", dollars(baseline.run_cents)],
+                      ],
+                    }
+                  }
+                  unplotted={standings.length - dots.length}
+                  scale="run"
                 />
               </div>
               <div className="col-xl-6">
@@ -164,6 +173,25 @@ export default async function LeaderboardPage({
       )}
     </>
   );
+}
+
+/** A driver's dot on the chart, if it has a score and a cost. */
+function dot(s: Standing): ChartDot[] {
+  if (s.mean_reward == null || s.run_cents == null) return [];
+  return [
+    {
+      key: s.driver_name,
+      name: s.driver_name,
+      x: s.run_cents / 100,
+      y: s.mean_reward,
+      kind: s.kind === "leader" || s.kind === "qualifies" ? s.kind : "other",
+      note: `#${s.rank} ${s.driver_name}: score ${reward(s.mean_reward)}, ${dollars(s.run_cents)} per run`,
+      lines: [
+        ["score", reward(s.mean_reward)],
+        ["$ / run", dollars(s.run_cents)],
+      ],
+    },
+  ];
 }
 
 function DriverRow({ s }: { s: Standing }) {

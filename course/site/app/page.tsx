@@ -1,9 +1,8 @@
 import hero from "@/public/hero.png";
 import { PixelIcon, type IconName } from "@/src/components/pixel_icon";
 import { Tabs } from "@/src/components/tabs";
-import { count, dollars, reward } from "@/src/lib/format";
+import { change, count, dollars, reward } from "@/src/lib/format";
 import { highlight } from "@/src/lib/highlight";
-import { DOCS } from "@/src/lib/links";
 import { countTrials, loadBoard } from "@/src/lib/queries";
 import { loadSampleDrivers } from "@/src/lib/sample_driver";
 import {
@@ -11,9 +10,12 @@ import {
   BENCHMARK_SUITES,
   ELIGIBILITY,
   rankBoard,
+  rankCombined,
   REFERENCE_TARGET,
   type Baseline,
+  type BenchmarkSuite,
   type Board,
+  type CombinedStanding,
 } from "@/src/lib/standings";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -43,6 +45,11 @@ export default async function Home() {
     }),
   ]);
 
+  const combined = rankCombined(
+    Object.fromEntries(
+      boards.map((b): [string, Board] => [b.name, b])
+    ) as Record<BenchmarkSuite, Board>
+  );
   const tallest = Math.max(...drivers.map((d) => d.code.split("\n").length));
 
   const stats: { icon: IconName; value: string; label: string }[] = [
@@ -64,13 +71,13 @@ export default async function Home() {
             A coding competition to make the most efficient agentic context
             engine.
           </p>
-          <a
+          <Link
             className="btn btn-primary btn-lg d-inline-flex align-items-center gap-3 px-4 py-3 mb-5"
-            href={DOCS.entering}
+            href="/rules#entering"
           >
             Enter the cup
             <PixelIcon name="arrow" size={22} />
-          </a>
+          </Link>
           <div className="cc-stats">
             <div>
               {stats.map(({ icon, value, label }) => (
@@ -103,7 +110,7 @@ export default async function Home() {
         <Feature
           icon={<span className="h4 mb-0">&lt;/&gt;</span>}
           title="The challenge"
-          href={DOCS.winning}
+          href="/rules"
         >
           Build an agentic context engine that keeps the accuracy but uses fewer
           tokens.
@@ -111,7 +118,7 @@ export default async function Home() {
         <Feature
           icon={<PixelIcon name="document" size={36} />}
           title="Benchmarks"
-          href={DOCS.benchmarks}
+          href="/rules#benchmarks"
         >
           Real agent tasks, the same for every driver.
         </Feature>
@@ -120,8 +127,8 @@ export default async function Home() {
           title="Climb the leaderboard"
           href="/leaderboard"
         >
-          The most efficient driver that reaches the baseline’s score leads each
-          benchmark.
+          Match both baselines’ scores for less money. The cheapest to do it
+          wins the cup.
         </Feature>
       </section>
 
@@ -166,7 +173,11 @@ export default async function Home() {
             className="bg-body text-body border shadow h-100 p-2"
           >
             <h2 className="h4 px-2 pt-2 mb-3">Top drivers</h2>
-            <Tabs labels={boards.map((b) => b.name)} className="px-1">
+            <Tabs
+              labels={["combined", ...boards.map((b) => b.name)]}
+              className="px-1"
+            >
+              <TopCombined standings={combined} />
               {boards.map((b) => (
                 <TopDrivers key={b.name} name={b.name} board={b} />
               ))}
@@ -211,6 +222,83 @@ function Feature({
           className="cc-arrow flex-shrink-0 ms-auto"
         />
       </Link>
+    </div>
+  );
+}
+
+/** The combined board's first few drivers, its leader (the cup's) in
+ *  gold, with the baseline's row where it ranks and a row for any left
+ *  out. */
+function TopCombined({ standings }: { standings: CombinedStanding[] }) {
+  const found = standings.findIndex(
+    (s) => s.kind !== "leader" && s.kind !== "qualifies"
+  );
+  const at = found === -1 ? standings.length : found;
+  const shown = standings.slice(0, TOP);
+  const more = standings.length - shown.length;
+  const baseline = (
+    <tr className="table-info">
+      <td />
+      <td className="fw-semibold">baseline</td>
+      <td className="text-end font-monospace">{change(1)}</td>
+      <td className="text-end font-monospace">{change(1)}</td>
+    </tr>
+  );
+
+  return (
+    <div className="pt-3">
+      {standings.length === 0 ? (
+        <p className="px-2 mb-3">No eligible runs yet.</p>
+      ) : (
+        <div className="table-responsive" data-bs-theme="light">
+          <table className="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th className="text-end">#</th>
+                <th>Driver</th>
+                <th className="text-end">Cost vs base ↓</th>
+                <th className="text-end">Score vs base ↑</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((s, i) => (
+                <Fragment key={s.driver_name}>
+                  {i === at && baseline}
+                  <tr className={s.kind === "leader" ? "table-warning" : ""}>
+                    <td className="text-end font-monospace">{s.rank}</td>
+                    <td className="font-monospace fw-semibold">
+                      {s.driver_name}
+                    </td>
+                    <td className="text-end font-monospace">
+                      {change(s.cost_ratio)}
+                    </td>
+                    <td className="text-end font-monospace">
+                      {change(s.score_ratio)}
+                    </td>
+                  </tr>
+                </Fragment>
+              ))}
+              {more > 0 && (
+                <tr>
+                  <td />
+                  <td colSpan={3} className="text-body-secondary">
+                    … {more} more
+                  </td>
+                </tr>
+              )}
+              {at >= shown.length && baseline}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="text-end px-2 py-2">
+        <Link
+          className="d-inline-flex align-items-center gap-2"
+          href="/leaderboard"
+        >
+          Full leaderboard <PixelIcon name="arrow" size={14} />
+        </Link>
+      </div>
     </div>
   );
 }

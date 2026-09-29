@@ -84,7 +84,7 @@ describe("suite files", () => {
       97
     );
     expect(Object.keys(loadSuiteFile("toolathlon").file.tasks)).toHaveLength(
-      108
+      107
     );
   });
 });
