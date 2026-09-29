@@ -4,6 +4,7 @@ import {
   it,
 } from "@context-cup/shared/test_helpers/index.js";
 import {
+  BENCHMARK_TASKS,
   disqualifications,
   rankBoard,
   type Entry,
@@ -98,12 +99,21 @@ describe("rankBoard", () => {
   });
 });
 
+describe("BENCHMARK_TASKS", () => {
+  it("is each suite file’s tasks, less the explicit_only ones", async () => {
+    expect(BENCHMARK_TASKS.tau_banking).toHaveLength(97);
+    expect(BENCHMARK_TASKS.toolathlon).toHaveLength(107);
+    expect(BENCHMARK_TASKS.toolathlon).not.toContain("train_ticket_plan");
+  });
+});
+
 describe("disqualifications", () => {
   const good = {
     name: "tau_banking",
     target_name: "gpt-6-sol@medium",
     finished_at: new Date("2026-09-25T00:00:00Z"),
     min_task_done: 2,
+    missing_tasks: 0,
   };
 
   it("clears a finished benchmark run at the reference target with enough done trials", async () => {
@@ -118,6 +128,7 @@ describe("disqualifications", () => {
         target_name: "gpt-5.5@medium",
         finished_at: null,
         min_task_done: 1,
+        missing_tasks: 0,
       })
     ).toEqual([
       "not a benchmark suite",
@@ -125,6 +136,9 @@ describe("disqualifications", () => {
       "not finished",
       "a task has 1 completed trial, needs 2",
     ]);
+    expect(
+      disqualifications({ ...good, name: "toolathlon", missing_tasks: 106 })
+    ).toEqual(["ran 1 of the suite’s 107 tasks, not a full run"]);
     expect(disqualifications({ ...good, min_task_done: 0 })).toEqual([
       "a task has 0 completed trials, needs 2",
     ]);

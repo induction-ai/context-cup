@@ -10,10 +10,28 @@
  *  best score first; then those with nothing scored. */
 
 import { REFERENCE_TARGET } from "@context-cup/shared/reference_target.js";
+import tauBanking from "../../../../suites/tau_banking.json";
+import toolathlon from "../../../../suites/toolathlon.json";
 
 /** The suite files the competition is judged on, one per benchmark. */
 export const BENCHMARK_SUITES = ["tau_banking", "toolathlon"] as const;
 export type BenchmarkSuite = (typeof BENCHMARK_SUITES)[number];
+
+/** The tasks a suite file runs by default (all but its `explicit_only`
+ *  ones), as `bin/suite` without `--task` does. */
+function defaultTasks(file: {
+  tasks: Record<string, { runner: string; explicit_only?: boolean }>;
+}): readonly string[] {
+  return Object.entries(file.tasks)
+    .filter(([, t]) => !t.explicit_only)
+    .map(([name]) => name);
+}
+
+/** Every task a full run of each benchmark covers. */
+export const BENCHMARK_TASKS: Record<BenchmarkSuite, readonly string[]> = {
+  tau_banking: defaultTasks(tauBanking),
+  toolathlon: defaultTasks(toolathlon),
+};
 
 /** A benchmark's bar: a score, and what one full benchmark run costs (every
  *  task once: the leaderboard's $ / run), in cents. */
@@ -25,10 +43,23 @@ export const BASELINES: Record<BenchmarkSuite, Baseline> = {
   toolathlon: { score: 0.67, run_cents: 6500 },
 };
 
-/** A run stands on a board only once finished, with at least `min_done`
- *  done trials in every task, retry passes included. A driver's latest such
- *  run is its entry. */
-export const ELIGIBILITY = { min_done: 2 };
+/** What a run needs to stand on a leaderboard. */
+export type Eligibility = {
+  /** Done trials (a reward and no error) every task needs, retry passes
+   *  included. */
+  min_done: number;
+  /** By suite name, the tasks a run must cover: a full run, not one
+   *  narrowed by `--task`. A suite not named here has no such rule. */
+  tasks: Record<string, readonly string[]>;
+};
+
+/** A run stands on a board only once finished, covering every task of its
+ *  suite, with at least `min_done` done trials in each, retry passes
+ *  included. A driver's latest such run is its entry. */
+export const ELIGIBILITY: Eligibility = {
+  min_done: 2,
+  tasks: BENCHMARK_TASKS,
+};
 /** The target the competition is judged at. */
 export { REFERENCE_TARGET };
 
@@ -159,6 +190,8 @@ export type RunFacts = {
   finished_at: Date | null;
   /** The fewest done trials any of its tasks has; null with no tasks. */
   min_task_done: number | null;
+  /** Tasks of its suite (Eligibility `tasks`) it never ran. */
+  missing_tasks: number;
 };
 
 /** Why a run cannot stand on the competition's leaderboard; empty when it
@@ -166,7 +199,7 @@ export type RunFacts = {
  *  and target the competition is judged on. */
 export function disqualifications(
   run: RunFacts,
-  rules: { min_done: number } = ELIGIBILITY
+  rules: Eligibility = ELIGIBILITY
 ): string[] {
   const why: string[] = [];
   if (!(BENCHMARK_SUITES as readonly string[]).includes(run.name)) {
@@ -176,6 +209,13 @@ export function disqualifications(
     why.push(`target isn’t ${REFERENCE_TARGET}`);
   }
   if (!run.finished_at) why.push("not finished");
+  if (run.missing_tasks > 0) {
+    const of = rules.tasks[run.name]?.length ?? 0;
+    const ran = of - run.missing_tasks;
+    why.push(
+      `ran ${ran} of the suite’s ${of} ${of === 1 ? "task" : "tasks"}, not a full run`
+    );
+  }
   if (run.min_task_done == null) {
     why.push("no tasks");
   } else if (run.min_task_done < rules.min_done) {

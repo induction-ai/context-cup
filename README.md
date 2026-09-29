@@ -76,8 +76,9 @@ the benchmark has no leader: matching the baseline's score without spending
 less wins nothing.
 
 Each driver stands on one run: its most recent run of the suite at the
-reference target that is finished and has at least 2 done trials in every
-task, retry passes included. Earlier runs, and
+reference target that is finished, covers every task in the suite file (a
+run narrowed with `--task` is not a full run), and has at least 2 done
+trials in each, retry passes included. Earlier runs, and
 runs that miss any of these, do not count; a smoke suite or any suite other
 than the two never does. Score and cost are that run's suite-level means
 described under [Scoring](#scoring).

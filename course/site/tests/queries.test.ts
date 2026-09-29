@@ -288,7 +288,7 @@ describe("listSuites paging and sorting", () => {
 });
 
 describe("leaderboard queries", () => {
-  const rules = { min_done: 2 };
+  const rules = { min_done: 2, tasks: { board: ["t1", "t2"] } };
 
   /** One run of suite "board" by `driver` at gpt-5.5@medium. `tasks` maps
    *  each task to its trials' rewards per pass (null: an errored trial). */
@@ -393,6 +393,11 @@ describe("leaderboard queries", () => {
       started: "2026-09-02T00:00:00Z",
       tasks: { t1: [[1, null], [0]], t2: [[1, 1]] },
     });
+    // b's newest run is thick enough but skips t2: not a full run.
+    await run("s_b_partial", "b", {
+      started: "2026-09-05T00:00:00Z",
+      tasks: { t1: [[1, 1, 1]] },
+    });
     // c never has an eligible run.
     await run("s_c", "c", {
       started: "2026-09-02T00:00:00Z",
@@ -432,16 +437,17 @@ describe("leaderboard queries", () => {
       Object.fromEntries(
         rows
           .filter((r) => r.name === "board")
-          .map((r) => [r.id, [r.min_task_done, r.on_board]])
+          .map((r) => [r.id, [r.min_task_done, r.missing_tasks, r.on_board]])
       )
     ).toEqual({
-      s_a_older: [3, false],
-      s_a_old: [2, true],
-      s_a_thin: [1, false],
-      s_a_one: [1, false],
-      s_a_running: [3, false],
-      s_b: [2, true],
-      s_c: [1, false],
+      s_a_older: [3, 0, false],
+      s_a_old: [2, 0, true],
+      s_a_thin: [1, 0, false],
+      s_a_one: [1, 0, false],
+      s_a_running: [3, 0, false],
+      s_b: [2, 0, true],
+      s_b_partial: [3, 1, false],
+      s_c: [1, 0, false],
     });
   });
 });

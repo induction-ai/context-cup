@@ -65,8 +65,9 @@ export default async function LeaderboardPage({
         qualifier leads. The rest rank below: those that reach the baseline’s
         score but cost more, cheapest first, then those under it, best score
         first. Each driver stands on its most recent finished run of the suite
-        at <span className="font-monospace">{REFERENCE_TARGET}</span> with at
-        least {ELIGIBILITY.min_done} completed trials in every task.
+        at <span className="font-monospace">{REFERENCE_TARGET}</span> that
+        covers every task, with at least {ELIGIBILITY.min_done} completed trials
+        in each.
       </p>
 
       <ul className="nav nav-pills gap-2 mb-3">
@@ -87,8 +88,8 @@ export default async function LeaderboardPage({
           No eligible runs of{" "}
           <span className="font-monospace">{suite_name}</span> at{" "}
           <span className="font-monospace">{REFERENCE_TARGET}</span> yet: a run
-          needs to be finished, with at least {ELIGIBILITY.min_done} completed
-          trials in every task.
+          needs to be finished and cover every task, with at least{" "}
+          {ELIGIBILITY.min_done} completed trials in each.
         </div>
       ) : (
         <>

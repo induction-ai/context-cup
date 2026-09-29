@@ -5,7 +5,7 @@ import { job, modelCall, suite, trial } from "@context-cup/db/schema.js";
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { alias, type AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Page, Sort } from "./sort";
-import { ELIGIBILITY, type Entry } from "./standings";
+import { ELIGIBILITY, type Eligibility, type Entry } from "./standings";
 
 export type SuiteRow = typeof suite.$inferSelect;
 export type JobRow = typeof job.$inferSelect;
@@ -27,6 +27,8 @@ export type SuiteSummary = SuiteRow & {
    *  this run is its driver's leaderboard entry; `standings.ts` turns them
    *  into the leaderboard column. */
   min_task_done: number | null;
+  /** Tasks of its suite (Eligibility `tasks`) this run never ran. */
+  missing_tasks: number;
   on_board: boolean;
 };
 
@@ -142,6 +144,7 @@ export async function listSuites(options: {
         mean_reward: scores.mean_reward,
         mean_cost_cents: scores.mean_cost_cents,
         min_task_done: minTaskDone(suite),
+        missing_tasks: missingTasks(rules, suite),
         on_board: onBoard(rules),
       })
       .from(suite)
@@ -165,6 +168,7 @@ export async function listSuites(options: {
       mean_cost_cents:
         r.mean_cost_cents == null ? null : Number(r.mean_cost_cents),
       min_task_done: r.min_task_done == null ? null : Number(r.min_task_done),
+      missing_tasks: Number(r.missing_tasks),
       on_board: Boolean(r.on_board),
     })),
   };
@@ -250,18 +254,11 @@ export async function loadTrial(
   return { trial: row, job: j, suite: s, calls };
 }
 
-/** What a run needs to stand on a leaderboard. */
-export type Eligibility = {
-  /** Done trials (a reward and no error) every task needs, retry passes
-   *  included. */
-  min_done: number;
-};
+/** The suite columns the eligibility rule reads, from `suite` or an alias. */
+type SuiteCols = Record<"id" | "name" | "finished_at", AnyPgColumn>;
 
 /** The fewest done trials (a reward and no error) any of a run's tasks
  *  has, retry passes included; null for a run with no jobs. */
-/** The suite columns the eligibility rule reads, from `suite` or an alias. */
-type SuiteCols = Record<"id" | "finished_at", AnyPgColumn>;
-
 function minTaskDone(s: SuiteCols): SQL<number | null> {
   return sql<number | null>`(
     select min(task_done.done) from (
@@ -275,12 +272,32 @@ function minTaskDone(s: SuiteCols): SQL<number | null> {
   )`;
 }
 
-/** A run that can stand on a leaderboard: finished, with at least
- *  `min_done` done trials in every one of its tasks. `standings.ts` states
- *  the same rule over a run's facts. */
-function eligible({ min_done }: Eligibility, s: SuiteCols = suite): SQL {
+/** How many of the tasks its suite requires (`rules.tasks`) a run has no
+ *  job for: 0 for a full run, or a suite with no required tasks. */
+function missingTasks(rules: Eligibility, s: SuiteCols): SQL<number> {
+  const required = Object.entries(rules.tasks).flatMap(([name, tasks]) =>
+    tasks.map((task) => sql`(${name}, ${task})`)
+  );
+  if (required.length === 0) return sql<number>`0`;
+  return sql<number>`(
+    select count(*)::int
+    from (values ${sql.join(required, sql`, `)}) as required(suite_name, task_name)
+    where required.suite_name = ${s.name}
+      and not exists (
+        select 1 from ${job}
+        where ${job.suite_id} = ${s.id}
+          and ${job.task_name} = required.task_name
+      )
+  )`;
+}
+
+/** A run that can stand on a leaderboard: finished, covering every task its
+ *  suite requires, with at least `min_done` done trials in each of its
+ *  tasks. `standings.ts` states the same rule over a run's facts. */
+function eligible(rules: Eligibility, s: SuiteCols = suite): SQL {
   return sql`(${s.finished_at} is not null
-    and coalesce(${minTaskDone(s)}, 0) >= ${min_done})`;
+    and ${missingTasks(rules, s)} = 0
+    and coalesce(${minTaskDone(s)}, 0) >= ${rules.min_done})`;
 }
 
 /** The run is its driver's latest eligible one for its suite name and
