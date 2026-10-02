@@ -35,10 +35,10 @@ function fakeFetch(responses: Response[]): {
   return { fetch: impl as typeof fetch, calls };
 }
 
-const sandbox = (id: string, created_at = "2026-09-01T00:00:00Z"): Sandbox => ({
+const sandbox = (id: string, createdAt = "2026-09-01T00:00:00Z"): Sandbox => ({
   id,
   state: "started",
-  created_at,
+  createdAt,
   labels: { [SUITE_LABEL]: "s_abc" },
 });
 
@@ -114,6 +114,9 @@ describe("daytona", () => {
     const now = new Date("2026-09-02T00:00:00Z");
     const old = sandbox("old", "2026-09-01T00:00:00Z");
     const young = sandbox("young", "2026-09-01T20:00:00Z");
-    expect(olderThan([old, young], 12, now).map((s) => s.id)).toEqual(["old"]);
+    const undated = { ...sandbox("undated"), createdAt: undefined };
+    expect(olderThan([old, young, undated], 12, now).map((s) => s.id)).toEqual([
+      "old",
+    ]);
   });
 });

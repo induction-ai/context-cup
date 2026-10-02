@@ -46,7 +46,7 @@ async function sweep(
   );
   if (dry_run) {
     for (const s of sandboxes)
-      console.log(`  ${s.id} ${s.state} ${s.created_at}`);
+      console.log(`  ${s.id} ${s.state} ${s.createdAt ?? ""}`);
     return;
   }
   const { deleted, failed } = await deleteSandboxes(

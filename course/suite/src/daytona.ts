@@ -15,10 +15,12 @@ export const JOB_LABEL = "context-cup-job";
 
 export const DAYTONA_API = "https://app.daytona.io/api";
 
+/** One sandbox as Daytona's list returns it, camelCase like the rest of its
+ *  API. Daytona's schema marks `createdAt` optional. */
 const zSandbox = z.object({
   id: z.string(),
   state: z.string(),
-  created_at: z.string(),
+  createdAt: z.string().nullish(),
   cpu: z.number().nullish(),
   memory: z.number().nullish(),
   disk: z.number().nullish(),
@@ -121,14 +123,17 @@ export async function deleteSandboxes(
   return { deleted, failed };
 }
 
-/** Sandboxes created more than `hours` ago. */
+/** Sandboxes created more than `hours` ago. One without a creation time is
+ *  left alone, since its age cannot be shown. */
 export function olderThan(
   sandboxes: readonly Sandbox[],
   hours: number,
   now = new Date()
 ): Sandbox[] {
   const cutoff = now.getTime() - hours * 3_600_000;
-  return sandboxes.filter((s) => Date.parse(s.created_at) < cutoff);
+  return sandboxes.filter(
+    (s) => s.createdAt != null && Date.parse(s.createdAt) < cutoff
+  );
 }
 
 /** What a set of sandboxes holds against the organization quota: vCPU, GB of
