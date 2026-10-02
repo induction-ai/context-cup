@@ -133,15 +133,22 @@ to end. [docs/drivers.md](docs/drivers.md) is the guide to writing one: pick
 a lane, copy its base driver, and edit.
 
 While developing, run it on the smoke suites, `tau_banking`, and
-`toolathlon_local`, which needs no credentials:
+`toolathlon_local`, which needs no credentials. Run them on
+[Daytona](https://www.daytona.io): put a Daytona API key in `.env` as
+`DAYTONA_API_KEY` and add `--harbor_env daytona`. You do not need Docker.
+Daytona, a sponsor of the cup, gives every competitor $100 in credits on
+signing up.
 
 ```
-bin/suite tau_banking --driver <your_driver>
-bin/suite toolathlon_local --driver <your_driver>
+bin/suite tau_banking --driver <your_driver> --harbor_env daytona
+bin/suite toolathlon_local --driver <your_driver> --harbor_env daytona
 ```
 
-These run at the reference target, 3 attempts per task.
-[DEVELOPING.md](DEVELOPING.md) covers setup.
+These run at the reference target, 3 attempts per task. On Daytona every
+task gets its own cloud sandbox and up to 64 run at once, so a full
+`tau_banking` run takes about 40 minutes. Without `--harbor_env daytona` the
+tasks run in local Docker, two or four at a time, and the same run takes
+hours. [DEVELOPING.md](DEVELOPING.md) covers setup.
 
 The full `toolathlon` suite needs credentials for outside services, so the
 competition runs the benchmarks: to enter, open a pull request adding your

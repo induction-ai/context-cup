@@ -25,8 +25,12 @@ start with [docs/drivers.md](docs/drivers.md).
 
 Requires Node 24, pnpm 11 (see `.nvmrc` and `packageManager` in
 `package.json`), Python 3.12 (`.python-version`; uv and pyenv both honour
-it), uv, Docker, and a local PostgreSQL server. Trial containers get their
-own uv-managed Python 3.12, whatever the task image ships.
+it), uv, a local PostgreSQL server, and a Daytona API key (see
+[Daytona or Docker](#daytona-or-docker)). With Daytona you do not need
+Docker; it is only for running tasks on your own machine, which is much
+slower.
+Trial containers get their own uv-managed Python 3.12, whatever the task
+image ships.
 
 ```
 cp .env.example .env
@@ -60,10 +64,10 @@ for inspection.
 A run is one suite file, one driver, and one target model.
 
 ```
-bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium
-bin/suite toolathlon_local --driver base_python --target gpt-5.5@medium --count 2
-bin/suite tau_banking --driver base_python    # at the reference target, gpt-6-sol@medium
-bin/suite smoke_tau                       # prompts for the driver
+bin/suite tau_banking --driver base_python --harbor_env daytona    # at the reference target, gpt-6-sol@medium
+bin/suite toolathlon_local --driver base_python --target gpt-5.5@medium --count 2 --harbor_env daytona
+bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --harbor_env daytona
+bin/suite smoke_tau --harbor_env daytona       # prompts for the driver
 bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
 ```
 
@@ -91,15 +95,12 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
   example for agents of your own; `base_codex` is a whole agent
   run by harbor and compared on score and cost only.
 - `--count` is attempts per task. `--task` narrows to named tasks.
-- `--harbor_env daytona` runs in Daytona sandboxes instead of local Docker
-  (needs `DAYTONA_API_KEY`). Each sandbox is labelled with its suite and job
-  ids and stops itself after two hours.
-  `bin/daytona_sweep suite --suite_id <id>` deletes the sandboxes an interrupted
-  run left behind; `bin/daytona_sweep errors` deletes ones whose build
-  failed, which nothing else reclaims.
+- `--harbor_env` picks where the tasks run: `daytona` or `docker` (the
+  default). Use `daytona`; see below.
 
-Prerequisites: Docker running, uv, Python 3.12, provider keys in `.env`, and
-the harbor fork, which the first run clones into `.harbor/repo`. Toolathlon
+Prerequisites: uv, Python 3.12, provider keys in `.env`, `DAYTONA_API_KEY`
+for Daytona or Docker running for Docker, and the harbor fork, which the
+first run clones into `.harbor/repo`. Toolathlon
 tasks that need credentials read `secrets/toolathlon_auth_configs.zip` when
 present; every task image unzips it into its configs, on Docker and Daytona
 alike.
@@ -116,6 +117,34 @@ Its refresh token rotates on every use. Docker trials mount `secrets/mcp`
 live. Daytona sandboxes cannot mount a host path, so before each notion job
 `bin/suite` refreshes a token with under an hour left and bakes a snapshot
 into the notion tasks' `configs.zip` (`course/suite/src/mcp_auth.ts`).
+
+### Daytona or Docker
+
+Run on Daytona. Every task gets its own cloud sandbox and up to the suite's
+`concurrency` (64 for the benchmark suites) run at once, so a full
+`tau_banking` run takes about 40 minutes. Local Docker runs at most
+`SUITE_DOCKER_COUNT` tasks at once, by default four, or two on Apple
+silicon, where the x86 task images run under emulation. The same run then
+takes hours.
+
+1. Sign up at [daytona.io](https://www.daytona.io), which gives every
+   competitor $100 in credits, then create an API key and set it as
+   `DAYTONA_API_KEY` in `.env`.
+2. Add `--harbor_env daytona` to `bin/suite`. You do not need Docker
+   installed or running.
+
+Nothing has to be committed or pushed first. Each trial uploads the engine
+and driver from your working tree into its sandbox, everything in their
+folders but `node_modules`, `.git`, `.venv`, `dist`, and caches, so keep
+data and secrets out of a driver's folder. Provider keys go only to the
+proxy inside the sandbox, as on Docker.
+
+Each sandbox is labelled with its suite and job ids and stops itself once
+it runs well past the job's time budget (`sandboxAutoStopMinutes` in
+`course/suite/src/budget.ts`). A finished run deletes its own sandboxes;
+`bin/daytona_sweep suite --suite_id <id>` deletes the ones an interrupted run
+left behind, and `bin/daytona_sweep errors` the ones whose build failed,
+which nothing else reclaims.
 
 Scores and costs follow [Scoring](README.md#scoring) in the README. Nothing
 is stored; every view computes them.

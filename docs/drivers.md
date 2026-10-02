@@ -176,14 +176,21 @@ Each turn is a fresh process, so anything you keep must be written down:
 ## Run it
 
 ```
-bin/suite smoke_tau --driver keep_recent --target gpt-5.5@medium
-bin/suite smoke_tau --driver keep_recent --target gpt-5.5@medium --count 5
-bin/suite toolathlon_local --driver keep_recent --target gpt-5.5@medium
-bin/suite smoke_tau                                    # choose driver and target from a list
+bin/suite smoke_tau --driver keep_recent --target gpt-5.5@medium --harbor_env daytona
+bin/suite smoke_tau --driver keep_recent --target gpt-5.5@medium --count 3 --harbor_env daytona
+bin/suite toolathlon_local --driver keep_recent --target gpt-5.5@medium --harbor_env daytona
+bin/suite smoke_tau --harbor_env daytona                # choose driver and target from a list
 ```
 
+`--harbor_env daytona` runs each task in a Daytona cloud sandbox, many at
+once, and needs `DAYTONA_API_KEY` in `.env` but not Docker (Daytona gives
+every competitor $100 in credits on signing up). Leave it off and the tasks
+run in local Docker a few at a time, which takes hours for a full suite
+([DEVELOPING.md](../DEVELOPING.md#daytona-or-docker)). Your driver goes up
+from your working tree, so there is nothing to commit first.
+
 `--count` is attempts per task; single trials swing widely, so compare
-drivers at `--count 5` or more. The last lines print the results table and a
+drivers at `--count 3` or more. The last lines print the results table and a
 link to the results site (`pnpm site:dev`), where every trial has its own
 page with its model calls.
 

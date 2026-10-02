@@ -1,5 +1,5 @@
 import { dollars, reward } from "@/src/lib/format";
-import { BENCHMARK_SITES, DOCS, REPO_URL } from "@/src/lib/links";
+import { BENCHMARK_SITES, DAYTONA_URL, DOCS, REPO_URL } from "@/src/lib/links";
 import {
   BASELINES,
   BENCHMARK_SUITES,
@@ -246,16 +246,29 @@ export default function Rules() {
           lane, copy its base driver, and edit. While developing, run it on the
           smoke suites, <span className="font-monospace">tau_banking</span>, and{" "}
           <span className="font-monospace">toolathlon_local</span>, which needs
-          no credentials:
+          no credentials. Run them on <a href={DAYTONA_URL}>Daytona</a>: put a
+          Daytona API key in <span className="font-monospace">.env</span> as{" "}
+          <span className="font-monospace">DAYTONA_API_KEY</span> and add{" "}
+          <span className="font-monospace">--harbor_env daytona</span>. You
+          don’t need Docker. Daytona, a sponsor of the cup, gives every
+          competitor $100 in credits on signing up.
         </p>
         <pre className="border bg-body-tertiary p-3">
-          {"bin/suite tau_banking --driver <your_driver>\n" +
-            "bin/suite toolathlon_local --driver <your_driver>"}
+          {"bin/suite tau_banking --driver <your_driver> --harbor_env daytona\n" +
+            "bin/suite toolathlon_local --driver <your_driver> --harbor_env daytona"}
         </pre>
         <p>
-          These run at the reference target, 3 attempts per task. The full{" "}
-          <span className="font-monospace">toolathlon</span> suite needs
-          credentials for outside services, so the competition runs the
+          These run at the reference target, 3 attempts per task. On Daytona
+          every task gets its own cloud sandbox and up to 64 run at once, so a
+          full <span className="font-monospace">tau_banking</span> run takes
+          about 40 minutes. Without{" "}
+          <span className="font-monospace">--harbor_env daytona</span> the tasks
+          run in local Docker, two or four at a time, and the same run takes
+          hours.
+        </p>
+        <p>
+          The full <span className="font-monospace">toolathlon</span> suite
+          needs credentials for outside services, so the competition runs the
           benchmarks: to enter, open a{" "}
           <a href={`${REPO_URL}/pulls`}>pull request</a> adding your driver
           under <span className="font-monospace">drivers/</span>, and we run

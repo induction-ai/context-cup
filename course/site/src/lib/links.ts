@@ -9,6 +9,15 @@ export const BENCHMARK_SITES = {
   toolathlon: "https://toolathlon.xyz",
 } satisfies Record<BenchmarkSuite, string>;
 
+/** Where entrants get the sandboxes `--harbor_env daytona` runs tasks in. */
+export const DAYTONA_URL = "https://www.daytona.io";
+
+/** The cup's sponsors, in the order the home page lists them. */
+export const SPONSORS = [
+  { name: "Induction", url: "https://induction.ai" },
+  { name: "Daytona", url: DAYTONA_URL },
+];
+
 export const DOCS = {
   entering: `${REPO_URL}#entering`,
   drivers: `${REPO_URL}/blob/main/docs/drivers.md`,

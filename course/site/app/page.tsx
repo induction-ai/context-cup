@@ -1,8 +1,10 @@
 import hero from "@/public/hero.png";
 import { PixelIcon, type IconName } from "@/src/components/pixel_icon";
+import { SponsorMark } from "@/src/components/sponsor_mark";
 import { Tabs } from "@/src/components/tabs";
 import { change, count, dollars, reward } from "@/src/lib/format";
 import { highlight } from "@/src/lib/highlight";
+import { SPONSORS } from "@/src/lib/links";
 import { countTrials, loadBoard } from "@/src/lib/queries";
 import { loadSampleDrivers } from "@/src/lib/sample_driver";
 import {
@@ -95,6 +97,22 @@ export default async function Home() {
                 </div>
               ))}
             </div>
+          </div>
+          <div className="d-flex flex-wrap align-items-center column-gap-4 row-gap-2 mt-4">
+            <span className="small text-uppercase text-body-secondary">
+              Sponsored by
+            </span>
+            {SPONSORS.map(({ name, url }) => (
+              <a
+                className="link-body-emphasis text-decoration-none"
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                key={name}
+              >
+                <SponsorMark name={name} />
+              </a>
+            ))}
           </div>
         </div>
         <div className="cc-hero-art d-none d-lg-block">

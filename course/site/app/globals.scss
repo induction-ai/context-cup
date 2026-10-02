@@ -313,6 +313,27 @@ details > summary {
   }
 }
 
+// The sponsors' marks (src/components/sponsor_mark.tsx), sized from one
+// height: Induction's wordmark (its name in its site's face) by its
+// capitals, 0.72em in Helvetica Neue; Daytona's logotype 30% taller,
+// since its glyph spans the full height and its letters stand lower.
+$cc-sponsor-mark-height: 1.5rem;
+
+.cc-sponsor-logo {
+  display: block;
+  height: $cc-sponsor-mark-height * 1.3;
+  width: auto;
+}
+
+.cc-wordmark-induction {
+  display: block;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: calc(#{$cc-sponsor-mark-height} / 0.72);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
 .cc-hero-art {
   position: absolute;
   top: 0;
