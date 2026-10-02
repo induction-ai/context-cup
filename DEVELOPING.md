@@ -66,9 +66,9 @@ A run is one suite file, one driver, and one target model.
 ```
 bin/suite tau_banking --driver base_python --harbor_env daytona    # at the reference target, gpt-6-sol@medium
 bin/suite toolathlon_local --driver base_python --target gpt-5.5@medium --count 2 --harbor_env daytona
-bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --harbor_env daytona
+bin/suite smoke_tau --driver base_python --target gpt-5.5@medium --harbor_env daytona
 bin/suite smoke_tau --harbor_env daytona       # prompts for the driver
-bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
+bin/suite smoke_tau --driver base_python --target gpt-5.5@medium --dry_run
 ```
 
 - `suites/*.json` list the tasks and how hard to run them (concurrency, a
@@ -82,8 +82,8 @@ bin/suite smoke_tau --driver base_passthrough --target gpt-5.5@medium --dry_run
   (`REFERENCE_TARGET` in `course/shared/src/reference_target.ts`) when the
   driver supports its provider, and otherwise prompts for one.
 - `--driver` is a package under `drivers/`; it must declare support for the
-  target's provider in its manifest. `base_passthrough` and
-  `base_python` speak the turn protocol directly; `base_pydantic` is a
+  target's provider in its manifest. `base_python`
+  speaks the turn protocol directly, clipping oversized tool results; `base_pydantic` is a
   Pydantic AI agent that owns the model side while the course runs the
   environment's tools, doing the same clipping as a capability of its own,
   the example for drivers built on Pydantic AI (`engines/pydantic`); `base_litellm` does the same clipping on litellm chat

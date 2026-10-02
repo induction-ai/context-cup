@@ -102,12 +102,12 @@ describe("findDriver", () => {
   it("scans the real workspace", async () => {
     const pkgs = scanPackages();
     expect(pkgs.get("python")?.kind).toBe("engine");
-    expect(findDriver("base_passthrough", pkgs).extends).toBe("python");
+    expect(findDriver("base_python", pkgs).extends).toBe("python");
     expect(
-      driverChainDirs("base_passthrough", pkgs).map((d) =>
+      driverChainDirs("base_python", pkgs).map((d) =>
         d.split("/").slice(-2).join("/")
       )
-    ).toEqual(["engines/python", "drivers/base_passthrough"]);
+    ).toEqual(["engines/python", "drivers/base_python"]);
   });
 });
 

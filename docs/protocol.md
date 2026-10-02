@@ -462,8 +462,7 @@ proxy.
 
 ## Naming
 
-Drivers shipped with the course are prefixed `base_`, one or two per lane.
-`base_passthrough` sends the context payload unchanged (Python engine).
+Drivers shipped with the course are prefixed `base_`, one per lane.
 `base_python`, `base_litellm`, `base_typescript`, `base_aisdk`, and
 `base_pydantic` all run the same strategy, clipping any tool result over
 `max_bytes`, one per lane (Python, LiteLLM, TypeScript, AI SDK, and Pydantic

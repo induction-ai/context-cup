@@ -36,7 +36,6 @@ on:
           - base_aisdk
           - base_codex
           - base_litellm
-          - base_passthrough
           - base_pydantic
           - base_python
           - base_typescript

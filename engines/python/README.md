@@ -2,8 +2,7 @@
 
 The native lane: `run(ctx)` gets the provider's own request body, calls the
 model with whatever client it likes, and returns the provider's response.
-Start from [`base_passthrough`](../../drivers/base_passthrough) or
-[`base_python`](../../drivers/base_python); the overview is
+Start from [`base_python`](../../drivers/base_python); the overview is
 [docs/drivers.md](../../docs/drivers.md).
 
 ```python
