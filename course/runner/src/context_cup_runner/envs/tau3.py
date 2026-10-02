@@ -10,10 +10,9 @@ Settings:
   CC_TAU3_MAX_ERRORS       runtime error budget, default 10
   CC_MAX_STEPS             also handed to the runtime's configure_run
   CC_TOOL_TIMEOUT_SEC      per MCP call, default 120
-  CC_MAX_TOOL_OUTPUT_CHARS longer tool results are cut, default 100000 (0: never)
 
-A cut result's full text is saved under the agent dir's clipped_tool_outputs,
-where a driver can read it back; tau3 offers the model no tools for it.
+Tool results reach the driver whole; what to keep of a long one is the
+driver's call.
 """
 
 from __future__ import annotations
@@ -31,8 +30,6 @@ from ..environment import EnvironmentStart, StepResult, ToolResult
 from ..mcp_util import mcp_tool_to_function_tool, result_text
 
 FIRST_AGENT_MESSAGE = "Hi! How can I help you today?"
-DEFAULT_MAX_TOOL_OUTPUT_CHARS = 100_000
-CLIPPED_DIR_NAME = "clipped_tool_outputs"
 USER_STOP_TOKENS = ("###STOP###", "###TRANSFER###", "###OUT-OF-SCOPE###")
 
 ORCHESTRATION_TOOL_NAMES = frozenset(
@@ -136,12 +133,8 @@ class Tau3Environment:
         max_steps: int,
         max_errors: int = 10,
         tool_timeout_sec: float = 120.0,
-        agent_dir: Path | None = None,
-        max_tool_output_chars: int = DEFAULT_MAX_TOOL_OUTPUT_CHARS,
     ):
         self.mcp_url = mcp_url
-        self.agent_dir = agent_dir
-        self.max_tool_output_chars = max_tool_output_chars
         self.instruction = instruction
         self.seed = seed
         self.max_steps = max_steps
@@ -154,9 +147,7 @@ class Tau3Environment:
         self.terminated: str | None = None
 
     @classmethod
-    def from_env(
-        cls, env: dict[str, str], *, agent_dir: Path | None = None
-    ) -> Tau3Environment:
+    def from_env(cls, env: dict[str, str]) -> Tau3Environment:
         seed_raw = env.get("CC_TAU3_SEED")
         return cls(
             mcp_url=env["CC_TAU3_MCP_URL"],
@@ -165,31 +156,6 @@ class Tau3Environment:
             max_steps=int(env.get("CC_MAX_STEPS") or 200),
             max_errors=int(env.get("CC_TAU3_MAX_ERRORS") or 10),
             tool_timeout_sec=float(env.get("CC_TOOL_TIMEOUT_SEC") or 120.0),
-            agent_dir=agent_dir,
-            max_tool_output_chars=int(
-                env.get("CC_MAX_TOOL_OUTPUT_CHARS") or DEFAULT_MAX_TOOL_OUTPUT_CHARS
-            ),
-        )
-
-    def _clip(self, text: str, tool_call_id: str) -> str:
-        """A result over the cap, cut with a note; the whole of it is saved
-        for the record when there is an agent dir."""
-        limit = self.max_tool_output_chars
-        if limit <= 0 or len(text) <= limit:
-            return text
-        where = ""
-        if self.agent_dir is not None:
-            save_dir = self.agent_dir / CLIPPED_DIR_NAME
-            save_dir.mkdir(parents=True, exist_ok=True)
-            safe_id = "".join(
-                ch if ch.isalnum() or ch in "-_" else "_" for ch in tool_call_id
-            )
-            path = save_dir / f"{safe_id}.txt"
-            path.write_text(text, encoding="utf-8")
-            where = f" The full output was saved to {path}."
-        return text[:limit] + (
-            f"\n\n[Tool output clipped: showing the first {limit} of {len(text)} "
-            f"characters.{where}]"
         )
 
     # -- MCP plumbing ------------------------------------------------------
@@ -318,9 +284,7 @@ class Tau3Environment:
         results = [
             ToolResult(
                 tool_call_id=str(item.get("id", "")),
-                content=self._clip(
-                    str(item.get("content") or ""), str(item.get("id", ""))
-                ),
+                content=str(item.get("content") or ""),
             )
             for item in response.get("tool_results") or []
         ]

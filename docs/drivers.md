@@ -35,13 +35,14 @@ In the engine lanes the course owns the loop: every turn it writes
 tools it asked for, appends the results, and calls you again. A turn ends
 when the model asks for an environment tool or answers in text. Tools a
 driver owns itself (a memory, a summariser) run inside your turn and never
-reach the course. Toolathlon's environment cuts tool results over 100,000
-characters, as upstream Toolathlon does, and offers the four
-`local-*_overlong_tooloutput` tools that search and page the saved text;
-they arrive in the task's tool list like any other environment tool.
-tau3's environment cuts them at the same length, with a note, and offers no
-such tools; the whole text is saved under the agent log directory's
-`clipped_tool_outputs/`.
+reach the course. Neither environment cuts a tool result: it reaches your
+driver whole, however long, and what to keep of it is your call. Upstream
+Toolathlon cuts results over 100,000 characters and offers tools to page the
+rest; the course leaves that to drivers. Two Toolathlon tasks,
+`hk_top_conf` and `academic_pdf_report`, return results too long for the
+model to take whole, so they fail unless your driver cuts, summarises, or
+otherwise shrinks long tool results. The `base_` drivers' `max_bytes` clip
+is the simplest way through.
 
 ## Start a driver
 

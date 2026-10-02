@@ -1,11 +1,9 @@
-"""The environments' failure handling and the Toolathlon overlong-output
-tools, with MCP sessions faked."""
+"""The environments' failure handling, with MCP sessions faked."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-import re
 import types
 from datetime import timedelta
 from pathlib import Path
@@ -25,7 +23,6 @@ from context_cup_runner.envs.toolathlon import (
     ToolathlonEnvironment,
     _connection_lost,
 )
-from context_cup_runner.overlong import OVERLONG_TOOLS, OverlongOutputs
 
 
 def text_result(payload: Any) -> types.SimpleNamespace:
@@ -212,187 +209,31 @@ def test_an_agent_s_tau3_run_is_seeded_but_not_started(tmp_path, monkeypatch):
     ]
 
 
-def test_tau3_cuts_a_tool_result_over_the_cap(tmp_path):
-    long = "x" * 50
+def test_tau3_passes_a_long_tool_result_whole(tmp_path):
+    long = "x" * 200_000
     session = FakeSession(
         {
             "submit_assistant_tool_calls": {
-                "tool_results": [
-                    {"id": "c/1", "content": long},
-                    {"id": "c2", "content": "short"},
-                ]
+                "tool_results": [{"id": "c1", "content": long}]
             }
         }
     )
     env = tau3_env(session, tmp_path)
-    env.agent_dir = tmp_path
-    env.max_tool_output_chars = 20
-    step = asyncio.run(
-        env.on_tool_calls(
-            [ToolCallRef("c/1", "a", {}), ToolCallRef("c2", "b", {})], None
-        )
-    )
-    saved = tmp_path / "clipped_tool_outputs" / "c_1.txt"
-    assert [r.content for r in step.tool_results] == [
-        "x" * 20 + "\n\n[Tool output clipped: showing the first 20 of 50 "
-        f"characters. The full output was saved to {saved}.]",
-        "short",
-    ]
-    assert saved.read_text() == long
+    step = asyncio.run(env.on_tool_calls([ToolCallRef("c1", "a", {})], None))
+    assert [r.content for r in step.tool_results] == [long]
 
 
-# -- toolathlon: overlong outputs -------------------------------------------
-
-
-def test_a_long_output_is_cut_with_its_shortuuid(tmp_path):
-    store = OverlongOutputs(tmp_path / "saved", max_chars=100)
-    assert store.clip("short") == "short"
-    text = "line\n" * 100
-    clipped = store.clip(text)
-    assert clipped.startswith(text[:100] + " ...\n\n(The output of the tool call")
-    found = re.search(r"shortuuid identifier: ([0-9a-f]{32})", clipped)
-    assert found is not None
-    assert "original output length is 500 characters" in clipped
-    saved = tmp_path / "saved" / f"{found.group(1)}.json"
-    assert saved.read_text() == text
-    assert str(saved) in clipped
-
-
-def test_truncation_modes(tmp_path):
-    long_json = json.dumps({"rows": ["x" * 50] * 10})
-    assert (
-        OverlongOutputs(tmp_path, max_chars=10, mode="off").clip("y" * 50) == "y" * 50
-    )
-    no_json = OverlongOutputs(tmp_path, max_chars=10, mode="no_json")
-    assert no_json.clip(long_json) == long_json
-    assert no_json.clip("z" * 50).startswith("z" * 10 + " ...")
-
-
-def test_the_overlong_tools_search_and_page_the_saved_text(tmp_path):
-    store = OverlongOutputs(tmp_path, max_chars=10)
-    text = "".join(f"row {i} value={i * 7}\n" for i in range(40))
-    shortuuid = re.search(r"identifier: (\w+)", store.clip(text)).group(1)  # type: ignore[union-attr]
-
-    found = store.call(
-        "local-search_overlong_tooloutput",
-        {"shortuuid": shortuuid, "pattern": r"value=\d+4\b", "page_size": 2},
-    )
-    assert "Total matches: 4" in found and "(Page 1/2)" in found
-    assert ">>>value=14<<<" in found
-    session_id = re.search(r"Search Session ID: (\w+)", found).group(1)  # type: ignore[union-attr]
-    page_two = store.call(
-        "local-search_overlong_tooloutput_navigate",
-        {"search_session_id": session_id, "action": "next_page"},
-    )
-    assert "(Page 2/2)" in page_two and "Match 3" in page_two
-
-    viewed = store.call(
-        "local-view_overlong_tooloutput", {"shortuuid": shortuuid, "page_size": 100}
-    )
-    assert "Characters 0-100 of" in viewed and text[:100] in viewed
-    view_id = re.search(r"View Session ID: (\w+)", viewed).group(1)  # type: ignore[union-attr]
-    last = store.call(
-        "local-view_overlong_tooloutput_navigate",
-        {"view_session_id": view_id, "action": "last_page"},
-    )
-    assert "[End of file reached" in last and text[-40:] in last
-
-    assert store.call("local-view_overlong_tooloutput", {"shortuuid": "nope"}) == (
-        "Error: No overlong tool output found for shortuuid: nope"
-    )
-    assert store.call(
-        "local-search_overlong_tooloutput", {"shortuuid": shortuuid, "pattern": "("}
-    ).startswith("Error: Invalid regex pattern")
-    assert "Local tool error" in store.call(
-        "local-view_overlong_tooloutput", {"shortuuid": shortuuid, "page_size": [1]}
-    )
-
-
-def test_a_shortuuid_cannot_reach_outside_the_saved_outputs(tmp_path):
-    store = OverlongOutputs(tmp_path / "saved", max_chars=10)
-    (tmp_path / "secret.json").write_text("do not show")
-    for name in ("local-view_overlong_tooloutput", "local-search_overlong_tooloutput"):
-        out = store.call(name, {"shortuuid": "../secret", "pattern": "show"})
-        assert out == "Error: No overlong tool output found for shortuuid: ../secret"
-
-
-def test_a_search_keeps_its_matches_bounded(tmp_path, monkeypatch):
-    store = OverlongOutputs(tmp_path, max_chars=10)
-    shortuuid = re.search(r"identifier: (\w+)", store.clip("ab" * 5_000)).group(1)  # type: ignore[union-attr]
-    empty = store.call(
-        "local-search_overlong_tooloutput", {"shortuuid": shortuuid, "pattern": "x?"}
-    )
-    assert empty.startswith("No matches found"), "empty matches are not kept"
-    many = store.call(
-        "local-search_overlong_tooloutput", {"shortuuid": shortuuid, "pattern": "b"}
-    )
-    assert "Total matches: 1000+ (only the first 1000 are kept)" in many
-
-    monkeypatch.setattr("context_cup_runner.overlong.SEARCH_TIMEOUT_SEC", 0.2)
-    shortuuid = re.search(  # type: ignore[union-attr]
-        r"identifier: (\w+)", store.clip("a" * 40 + "b")
-    ).group(1)
-    slow = store.call(
-        "local-search_overlong_tooloutput",
-        {"shortuuid": shortuuid, "pattern": "(a+)+$"},
-    )
-    assert slow == (
-        "Error: the search for '(a+)+$' took longer than 0.2 seconds; "
-        "use a simpler pattern"
-    )
-
-
-def test_toolathlon_offers_the_tools_and_never_cuts_their_output(tmp_path):
+def test_toolathlon_passes_a_long_tool_result_whole():
     env = ToolathlonEnvironment(
-        servers=[],
-        instruction="task",
-        bundle={},
-        workspace_dir="/w",
-        agent_dir=tmp_path,
-        max_tool_output_chars=50,
+        servers=[], instruction="task", bundle={}, workspace_dir="/w"
     )
-    long_text = "a" * 60 + "\n" + "b" * 200
+    long_text = "a" * 200_000
 
     async def mcp_call(name: str, arguments: dict[str, Any]) -> str:
         return long_text
 
     env.router.call = mcp_call  # type: ignore[method-assign]
     step = asyncio.run(env.on_tool_calls([ToolCallRef("c1", "fetch", {})], None))
-    clipped = step.tool_results[0].content
-    assert clipped.startswith("a" * 50 + " ...")
-    shortuuid = re.search(r"identifier: (\w+)", clipped).group(1)  # type: ignore[union-attr]
-    step = asyncio.run(
-        env.on_tool_calls(
-            [
-                ToolCallRef(
-                    "c2",
-                    "local-view_overlong_tooloutput",
-                    {"shortuuid": shortuuid, "page_size": 1000},
-                )
-            ],
-            None,
-        )
-    )
-    assert "b" * 200 in step.tool_results[0].content
-    names = {t["function"]["name"] for t in OVERLONG_TOOLS}
-    assert names == {
-        "local-search_overlong_tooloutput",
-        "local-search_overlong_tooloutput_navigate",
-        "local-view_overlong_tooloutput",
-        "local-view_overlong_tooloutput_navigate",
-    }
+    assert step.tool_results[0].content == long_text
     assert ToolathlonEnvironment.fail_at_max_steps is True
     assert Tau3Environment.fail_at_max_steps is False
-
-
-def test_toolathlon_rejects_an_unknown_truncate_mode(tmp_path):
-    instruction = tmp_path / "i.txt"
-    instruction.write_text("task")
-    with pytest.raises(ValueError, match="CC_TRUNCATE_TOOL_OUTPUT"):
-        ToolathlonEnvironment.from_env(
-            {
-                "CC_INSTRUCTION_FILE": str(instruction),
-                "CC_TRUNCATE_TOOL_OUTPUT": "maybe",
-            },
-            agent_dir=tmp_path,
-        )

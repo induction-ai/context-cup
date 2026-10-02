@@ -9,12 +9,9 @@ Settings:
   CC_WORKSPACE_DIR         default /workspace/dumps/workspace
   CC_TOOL_TIMEOUT_SEC      per MCP call, default 270
   CC_MAX_UNANSWERED_CALLS  dead-link threshold, default 3
-  CC_MAX_TOOL_OUTPUT_CHARS longer results are cut, default 100000
-  CC_TRUNCATE_TOOL_OUTPUT  on (default), off, or no_json (cut all but JSON)
 
-A cut result is saved under a short id; the four overlong-output tools
-(overlong.py) let the model search and page through it, and their own
-results are never cut.
+Tool results reach the driver whole: unlike upstream Toolathlon, nothing is
+cut, since what to keep of a long result is the driver's call.
 """
 
 from __future__ import annotations
@@ -31,14 +28,11 @@ from context_cup_protocol import ToolCallRef, Utterance
 
 from ..environment import EnvironmentStart, StepResult, ToolResult
 from ..mcp_util import mcp_tool_to_function_tool, result_text
-from ..overlong import OVERLONG_DIR_NAME, OVERLONG_TOOLS, OverlongOutputs, TruncateMode
 
 DEFAULT_GATEWAY = {"name": "gw", "transport": "sse", "url": "http://127.0.0.1:8765/sse"}
 DEFAULT_STOP_TOOLS = ["local-claim_done"]
 DEFAULT_BUNDLE = "/workspace/dumps/task_bundle.json"
 DEFAULT_WORKSPACE = "/workspace/dumps/workspace"
-DEFAULT_MAX_TOOL_OUTPUT_CHARS = 100_000
-TRUNCATE_MODES: tuple[TruncateMode, ...] = ("on", "off", "no_json")
 
 
 def read_bundle(path: Path) -> dict[str, Any]:
@@ -207,18 +201,10 @@ class ToolathlonEnvironment:
         instruction: str,
         bundle: dict[str, Any],
         workspace_dir: str,
-        agent_dir: Path,
         tool_timeout_sec: float = 270.0,
         max_unanswered: int = 3,
-        max_tool_output_chars: int = DEFAULT_MAX_TOOL_OUTPUT_CHARS,
-        truncate: TruncateMode = "on",
     ):
         self.instruction = instruction
-        self.overlong = OverlongOutputs(
-            agent_dir / OVERLONG_DIR_NAME,
-            max_chars=max_tool_output_chars,
-            mode=truncate,
-        )
         self.system_prompt = bundle_system_prompt(bundle)
         self.stop_tools = set(bundle_stop_tools(bundle))
         self.workspace_dir = workspace_dir
@@ -229,27 +215,17 @@ class ToolathlonEnvironment:
         )
 
     @classmethod
-    def from_env(cls, env: dict[str, str], *, agent_dir: Path) -> ToolathlonEnvironment:
+    def from_env(cls, env: dict[str, str]) -> ToolathlonEnvironment:
         raw = env.get("CC_MCP_SERVERS_JSON")
         servers = json.loads(raw) if raw else []
         bundle_path = Path(env.get("CC_TOOLATHLON_BUNDLE") or DEFAULT_BUNDLE)
-        truncate = env.get("CC_TRUNCATE_TOOL_OUTPUT") or "on"
-        if truncate not in TRUNCATE_MODES:
-            raise ValueError(
-                f"CC_TRUNCATE_TOOL_OUTPUT must be one of {', '.join(TRUNCATE_MODES)}"
-            )
         return cls(
             servers=servers or [dict(DEFAULT_GATEWAY)],
             instruction=Path(env["CC_INSTRUCTION_FILE"]).read_text(encoding="utf-8"),
             bundle=read_bundle(bundle_path),
             workspace_dir=env.get("CC_WORKSPACE_DIR") or DEFAULT_WORKSPACE,
-            agent_dir=agent_dir,
             tool_timeout_sec=float(env.get("CC_TOOL_TIMEOUT_SEC") or 270.0),
             max_unanswered=int(env.get("CC_MAX_UNANSWERED_CALLS") or 3),
-            max_tool_output_chars=int(
-                env.get("CC_MAX_TOOL_OUTPUT_CHARS") or DEFAULT_MAX_TOOL_OUTPUT_CHARS
-            ),
-            truncate=truncate,
         )
 
     async def open(self) -> EnvironmentStart:
@@ -261,7 +237,7 @@ class ToolathlonEnvironment:
         return EnvironmentStart(
             system=self.system_prompt,
             opening=[Utterance("user", self.instruction)],
-            tools=[*self.router.tools, *OVERLONG_TOOLS],
+            tools=self.router.tools,
             workspace_dir=self.workspace_dir,
         )
 
@@ -276,13 +252,7 @@ class ToolathlonEnvironment:
                     ToolResult(call.id, "Invalid tool arguments: not a JSON object")
                 )
                 continue
-            if self.overlong.handles(call.name):
-                # Read-back of a saved output: never cut again.
-                output = self.overlong.call(call.name, call.arguments)
-            else:
-                output = self.overlong.clip(
-                    await self.router.call(call.name, call.arguments)
-                )
+            output = await self.router.call(call.name, call.arguments)
             print(f"[runner] tool {call.name}: {output[:400]!r}", flush=True)
             results.append(ToolResult(call.id, output))
             if call.name in self.stop_tools:

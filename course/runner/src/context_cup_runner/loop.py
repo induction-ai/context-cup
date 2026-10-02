@@ -508,11 +508,11 @@ def build_environment(
     if benchmark == "tau3":
         from .envs.tau3 import Tau3Environment
 
-        return Tau3Environment.from_env(env, agent_dir=settings.agent_dir)
+        return Tau3Environment.from_env(env)
     if benchmark == "toolathlon":
         from .envs.toolathlon import ToolathlonEnvironment
 
-        return ToolathlonEnvironment.from_env(env, agent_dir=settings.agent_dir)
+        return ToolathlonEnvironment.from_env(env)
     raise TrialError(f"unknown CC_BENCHMARK {benchmark!r}")
 
 

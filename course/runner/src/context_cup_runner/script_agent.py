@@ -76,16 +76,14 @@ def _int(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def benchmark_setup(env: dict[str, str], agent_dir: Path) -> dict[str, str]:
+def benchmark_setup(env: dict[str, str]) -> dict[str, str]:
     """Set the task up as the turn loop would, and return what agent.sh
     should get for it."""
     benchmark = env.get("CC_BENCHMARK")
     if benchmark == "tau3":
         from .envs.tau3 import HARNESS_TOOL_NAMES, Tau3Environment
 
-        asyncio.run(
-            Tau3Environment.from_env(env, agent_dir=agent_dir).configure_for_agent()
-        )
+        asyncio.run(Tau3Environment.from_env(env).configure_for_agent())
         print("[runner] tau3 runtime configured for the trial", flush=True)
         return {"CC_HARNESS_TOOLS": ",".join(sorted(HARNESS_TOOL_NAMES))}
     elif benchmark == "toolathlon":
@@ -112,7 +110,7 @@ def run(env: dict[str, str]) -> int:
     run_as = RunAs.from_env(env)
     result_file = agent_dir / RESULT_FILE
     result_file.unlink(missing_ok=True)
-    setup = benchmark_setup(env, agent_dir)
+    setup = benchmark_setup(env)
     script_env = chain.script_env(
         package,
         trial_id=trial_id,

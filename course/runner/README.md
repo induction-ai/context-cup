@@ -17,7 +17,6 @@ and the tool results that come back.
 | `providers/`                           | trial container               | one adapter per provider: builds the first request body, reads a response's text and tool calls, appends responses, tool results and user turns in the provider's own format                                                                  |
 | `envs/tau3.py`                         | trial container               | talks to the tau3-runtime MCP sidecar (user simulator and domain tools)                                                                                                                                                                       |
 | `envs/toolathlon.py`                   | trial container               | talks to the Toolathlon MCP gateway; a stop tool or a plain reply ends the trial; reaching the step cap fails it                                                                                                                              |
-| `overlong.py`                          | trial container               | Toolathlon's overlong tool output: cuts a long result, saves it under a short id, and answers the four `local-*_overlong_tooloutput` tools that search and page it                                                                            |
 | `chain.py`                             | both                          | the driver chain: packages root to leaf (each named by its folder, with a `package.json` `contextCup` block or a `pyproject.toml` `[tool.context-cup]` table) and their scripts                                                               |
 | `atif.py`                              | trial container               | builds `trajectory.json` (harbor ATIF-v1.7) from the original payload, through the adapter                                                                                                                                                    |
 
@@ -31,22 +30,20 @@ harbor selects the agent with `--agent context_cup_runner.tau3:Tau3Agent` or
 Passed by the suite with `--agent-env`; the host agent forwards them to the
 loop.
 
-| var                        | required | meaning                                                                                                              |
-| -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
-| `CC_HOST_DRIVER_CHAIN`     | yes      | host package dirs root to leaf, colon separated; `node_modules` and similar are not uploaded                         |
-| `CC_TARGET_JSON`           | yes      | `{provider, model, reasoning_effort}`                                                                                |
-| `CC_SAVE_BODIES`           | no       | `1` has the proxy keep every request and response body under `bodies/`                                               |
-| `CC_TURN_RETRIES`          | no       | retries per failed turn, default 3                                                                                   |
-| `CC_EMPTY_RETRIES`         | no       | re-asks after an empty reply across the whole trial, default 3                                                       |
-| `CC_MAX_STEPS`             | no       | turn cap, default 200 for tau3 and 150 for toolathlon                                                                |
-| `CC_MAX_TOOL_OUTPUT_CHARS` | no       | toolathlon: results longer than this are cut, default 100000; the full text is saved under `.overlong_tool_outputs/` |
-| `CC_TRUNCATE_TOOL_OUTPUT`  | no       | toolathlon: `on` (default), `off`, or `no_json` (cut everything but JSON)                                            |
-| `CC_TURN_TIMEOUT_SEC`      | no       | wall clock for one `run.sh`, default 1800                                                                            |
-| `CC_TOOL_TIMEOUT_SEC`      | no       | one MCP call, default 120 (tau3) or 270 (toolathlon)                                                                 |
-| `CC_TAU3_SEED`             | no       | base seed, default 300; each trial derives its own from its name                                                     |
-| `CC_TAU3_MAX_ERRORS`       | no       | runtime error budget, default 10                                                                                     |
-| `CC_TOOLATHLON_BUNDLE`     | no       | default `/workspace/dumps/task_bundle.json`                                                                          |
-| `CC_WORKSPACE_DIR`         | no       | default `/workspace/dumps/workspace`                                                                                 |
+| var                    | required | meaning                                                                                      |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `CC_HOST_DRIVER_CHAIN` | yes      | host package dirs root to leaf, colon separated; `node_modules` and similar are not uploaded |
+| `CC_TARGET_JSON`       | yes      | `{provider, model, reasoning_effort}`                                                        |
+| `CC_SAVE_BODIES`       | no       | `1` has the proxy keep every request and response body under `bodies/`                       |
+| `CC_TURN_RETRIES`      | no       | retries per failed turn, default 3                                                           |
+| `CC_EMPTY_RETRIES`     | no       | re-asks after an empty reply across the whole trial, default 3                               |
+| `CC_MAX_STEPS`         | no       | turn cap, default 200 for tau3 and 150 for toolathlon                                        |
+| `CC_TURN_TIMEOUT_SEC`  | no       | wall clock for one `run.sh`, default 1800                                                    |
+| `CC_TOOL_TIMEOUT_SEC`  | no       | one MCP call, default 120 (tau3) or 270 (toolathlon)                                         |
+| `CC_TAU3_SEED`         | no       | base seed, default 300; each trial derives its own from its name                             |
+| `CC_TAU3_MAX_ERRORS`   | no       | runtime error budget, default 10                                                             |
+| `CC_TOOLATHLON_BUNDLE` | no       | default `/workspace/dumps/task_bundle.json`                                                  |
+| `CC_WORKSPACE_DIR`     | no       | default `/workspace/dumps/workspace`                                                         |
 
 The loop itself reads `CC_BENCHMARK`, `CC_TRIAL_ID`, `CC_AGENT_DIR`,
 `CC_INSTRUCTION_FILE`, `CC_PROXY_URL` (the in-container proxy,
@@ -71,7 +68,7 @@ call log), `proxy.txt` (its output), `isolation.txt` (the key check),
 `original_payload.json`, `context_payload.json`, `runner.txt` (the loop's
 output),
 `setup_<package>.txt` per setup script, `scripts/teardown_<package>.txt`,
-`driver_state/` and `.overlong_tool_outputs/`.
+and `driver_state/`.
 
 ## Failures
 
