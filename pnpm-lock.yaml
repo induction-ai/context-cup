@@ -69,6 +69,9 @@ catalogs:
     react-dom:
       specifier: 19.2.4
       version: 19.2.4
+    smol-toml:
+      specifier: ^1.9.0
+      version: 1.9.0
     tiktoken:
       specifier: ^1.0.22
       version: 1.0.22
@@ -188,7 +191,7 @@ importers:
         specifier: 'catalog:'
         version: 0.28.2
       smol-toml:
-        specifier: ^1.9.0
+        specifier: 'catalog:'
         version: 1.9.0
       zod:
         specifier: 'catalog:'
@@ -350,6 +353,9 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.3.1
+      smol-toml:
+        specifier: 'catalog:'
+        version: 1.9.0
       yargs:
         specifier: 'catalog:'
         version: 18.2.0

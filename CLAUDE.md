@@ -48,6 +48,9 @@ bin/lint                   every static check: prettier, ruff format, ruff check
 bin/suite <key> --driver <d> [--target <t>] [--count N] [--dry_run]
                            run a suite file with one driver against one target (targets.json;
                            default the reference target, `REFERENCE_TARGET` in course/shared)
+bin/review_driver [--base <ref>]
+                           the static review of a driver PR: one drivers/<name>/, nothing
+                           that runs on the host (driver_review.yml runs it on a PR)
 bin/deploy [--yes]         push origin/main to the production branch, which Render deploys
 bin/daytona_sweep suite --suite_id <id> | errors [--dry_run]
                            delete Daytona sandboxes a run left behind

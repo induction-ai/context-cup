@@ -1,0 +1,358 @@
+name: Driver review
+
+# Reviews a driver PR in two steps, both against the PR's merge commit (the
+# PR applied to main). Entrants run the same checks with bin/review_driver.
+#
+# 1. static, on every push to a PR that touches drivers/: bin/review_driver,
+#    run from main, reads the PR's files without running them. It holds the
+#    PR to one drivers/<name>/ directory and fails anything that would run on
+#    the host (build.sh, install scripts, dependencies built from source). No
+#    secrets, and no PR code runs, which is what makes pull_request_target
+#    safe here: the workflow and the checker are main's.
+# 2. smoke, when a maintainer comments
+#
+#      /review-driver <sha>
+#
+#    naming the PR's head commit they read, so the run is the code they read
+#    and not whatever was pushed since. It reruns static, then
+#    `bin/review_driver --smoke`: smoke_tau and smoke_toolathlon at the
+#    reference target. Static has proved the merge commit differs from main
+#    only in the driver's directory and pnpm-lock.yaml, and the job installs
+#    from main's lockfile, so everything on the host is main's code; the
+#    driver itself runs in Daytona sandboxes. Its
+#    secrets come from the `driver-review` environment, under names no other
+#    workflow uses, so a missing one fails instead of falling back to a
+#    production secret: REVIEW_OPENAI_API_KEY (spend-capped; the reference
+#    target is OpenAI) and REVIEW_DAYTONA_API_KEY (a small quota). Results go
+#    to a throwaway Postgres in the job, not the results database.
+#
+# Each posts its result as a PR comment and keeps it updated on reruns.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "drivers/**"
+  issue_comment:
+    types: [created]
+
+# A newer run of the same kind replaces one in progress: a push replaces the
+# static run of the push before, a maintainer's review comment the review
+# before. Every other comment, a /review-driver from anyone else included,
+# lands in a group of its own, so it can never cancel a review.
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.event.pull_request.number ||
+    github.event.issue.number }}-${{ github.event_name ==
+    'pull_request_target' && 'push' || (contains(github.event.comment.body,
+    '/review-driver') && contains(fromJSON('["OWNER", "MEMBER",
+    "COLLABORATOR"]'), github.event.comment.author_association) && 'review'
+    || format('comment-{0}', github.event.comment.id)) }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    if: >-
+      github.event_name == 'pull_request_target'
+      || (github.event.issue.pull_request
+      && contains(github.event.comment.body, '/review-driver')
+      && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
+      github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    permissions:
+      # contents: the merge commit's parents, from the commits API.
+      contents: read
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.pin.outputs.pr }}
+      head: ${{ steps.pin.outputs.head }}
+      merge: ${{ steps.pin.outputs.merge }}
+    steps:
+      - name: Pin the commit under review
+        id: pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          # A push reviews the commit it pushed; a comment the one it names.
+          PUSHED: ${{ github.event.pull_request.head.sha }}
+          COMMENT: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PUSHED" ]; then
+            wanted="$PUSHED"
+          else
+            # Expressions can't trim, so the job's guard only asks whether the
+            # comment mentions the command; this holds it to the first line.
+            wanted=$(printf '%s\n' "$COMMENT" | grep -m1 -v '^[[:space:]]*$' | sed -nE 's|^[[:space:]]*/review-driver[[:space:]]+([0-9a-f]{7,40})[[:space:]]*$|\1|p')
+            if [ -z "$wanted" ]; then
+              echo "::error::Comment \`/review-driver <sha>\`, naming the PR’s head commit you reviewed."
+              exit 1
+            fi
+          fi
+          # GitHub computes the merge commit in the background after a push;
+          # wait until it exists and is built on the head we were asked for.
+          for attempt in $(seq 1 12); do
+            pr=$(gh api "repos/$REPO/pulls/$PR")
+            head=$(jq -r .head.sha <<<"$pr")
+            if [[ "$head" != "$wanted"* ]]; then
+              if [ -n "$PUSHED" ]; then
+                echo "::error::A newer push, $head, replaces $wanted; its own run reviews it."
+              else
+                echo "::error::The PR’s head is $head, not $wanted. Review the new commits, then comment again with the new head."
+              fi
+              exit 1
+            fi
+            mergeable=$(jq -r .mergeable <<<"$pr")
+            merge=$(jq -r '.merge_commit_sha // empty' <<<"$pr")
+            if [ "$mergeable" = "false" ]; then
+              echo "::error::The PR conflicts with main; it needs a rebase before it can be reviewed."
+              exit 1
+            fi
+            if [ "$mergeable" = "true" ] && [ -n "$merge" ]; then
+              parent=$(gh api "repos/$REPO/commits/$merge" --jq '.parents[1].sha')
+              if [ "$parent" = "$head" ]; then
+                echo "Reviewing $head as merge commit $merge"
+                {
+                  echo "pr=$PR"
+                  echo "head=$head"
+                  echo "merge=$merge"
+                } >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo "::error::GitHub had no merge commit for $head after two minutes; push again, or comment again."
+          exit 1
+
+  static:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      driver: ${{ steps.review.outputs.driver }}
+      ok: ${{ steps.review.outputs.ok }}
+    steps:
+      # main: the reviewer is trusted code. The PR is only read, from a
+      # checkout beside it.
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      # actions/checkout fetches with the job's token (the repository can't be
+      # read anonymously) and leaves no credentials in the checkout. Depth 2
+      # brings the merge's first parent, which the review compares against.
+      - name: Check out the PR beside main
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.merge }}
+          path: .pr
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Review
+        id: review
+        env:
+          MERGE: ${{ needs.resolve.outputs.merge }}
+        run: |
+          set +e
+          bin/review_driver --root "$GITHUB_WORKSPACE/.pr" --base "$MERGE^1" \
+            --output "$RUNNER_TEMP/static.md" --json_output "$RUNNER_TEMP/static.json"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/static.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "driver=$(jq -r '.driver // empty' "$RUNNER_TEMP/static.json")" >> "$GITHUB_OUTPUT"
+          echo "ok=$(jq -r .ok "$RUNNER_TEMP/static.json")" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: static-review
+          path: ${{ runner.temp }}/static.md
+          if-no-files-found: ignore
+
+  static-comment:
+    needs: [resolve, static]
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Download the report
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: static-review
+          path: ${{ runner.temp }}
+
+      - name: Fall back when there is no report
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -f "$RUNNER_TEMP/static.md" ] && exit 0
+          {
+            echo "<!-- driver-review:static -->"
+            echo "## ❌ Static review"
+            echo ""
+            echo "The review didn’t finish; see [the run]($RUN_URL)."
+          } > "$RUNNER_TEMP/static.md"
+
+      - uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:static -->"
+          body_file: ${{ runner.temp }}/static.md
+
+  smoke:
+    needs: [resolve, static]
+    # Only on a maintainer's comment: it runs the entry, and spends.
+    if: github.event_name == 'issue_comment' && needs.static.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: driver-review
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: context_cup
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/context_cup
+    steps:
+      - name: Checkout the merge commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.merge }}
+          # The merge's first parent too, which the static review compares to.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Require the review secrets
+        env:
+          OPENAI_API_KEY: ${{ secrets.REVIEW_OPENAI_API_KEY }}
+          DAYTONA_API_KEY: ${{ secrets.REVIEW_DAYTONA_API_KEY }}
+        run: |
+          [ -n "$OPENAI_API_KEY" ] || missing="$missing REVIEW_OPENAI_API_KEY"
+          [ -n "$DAYTONA_API_KEY" ] || missing="$missing REVIEW_DAYTONA_API_KEY"
+          if [ -n "${missing:-}" ]; then
+            echo "::error::The driver-review environment is missing:$missing"
+            exit 1
+          fi
+
+      # The PR's pnpm-lock.yaml could pin anything, the host's own tools
+      # included, to any tarball. Install from main's instead, and let pnpm
+      # resolve the driver's dependencies (registry only; static checked) on
+      # top of it.
+      - name: Use main’s lockfile
+        run: git checkout HEAD^1 -- pnpm-lock.yaml
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          frozen_lockfile: "false"
+
+      - name: Migrate the throwaway database
+        run: bin/db migrate
+
+      # The command an entrant runs: the static review again (main's code,
+      # so the same verdict), then the smoke suites.
+      - name: Run the smoke suites
+        env:
+          OPENAI_API_KEY: ${{ secrets.REVIEW_OPENAI_API_KEY }}
+          DAYTONA_API_KEY: ${{ secrets.REVIEW_DAYTONA_API_KEY }}
+        run: |
+          set +e
+          bin/review_driver --base HEAD^1 --smoke --harbor_env daytona \
+            --log_dir .temp/suites --smoke_output "$RUNNER_TEMP/smoke.md"
+          code=$?
+          set -e
+          [ -f "$RUNNER_TEMP/smoke.md" ] && cat "$RUNNER_TEMP/smoke.md" >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+      # A cancelled run strands its sandboxes; see suite.yml.
+      - name: Delete this run’s Daytona sandboxes
+        if: always()
+        env:
+          DAYTONA_API_KEY: ${{ secrets.REVIEW_DAYTONA_API_KEY }}
+        run: |
+          shopt -s nullglob
+          for dir in .temp/suites/*/*/; do
+            bin/daytona_sweep suite --suite_id "$(basename "$dir")"
+          done
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-review
+          path: ${{ runner.temp }}/smoke.md
+          if-no-files-found: ignore
+
+      - name: Upload suite logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: suite-logs
+          include-hidden-files: true
+          path: .temp/suites/
+          if-no-files-found: ignore
+
+  smoke-comment:
+    needs: [resolve, smoke]
+    if: always() && needs.smoke.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Download the report
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: smoke-review
+          path: ${{ runner.temp }}
+
+      - name: Fall back when there is no report
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -f "$RUNNER_TEMP/smoke.md" ] && exit 0
+          {
+            echo "<!-- driver-review:smoke -->"
+            echo "## ❌ Smoke run"
+            echo ""
+            echo "The smoke run didn’t finish; see [the run]($RUN_URL)."
+          } > "$RUNNER_TEMP/smoke.md"
+
+      - uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:smoke -->"
+          body_file: ${{ runner.temp }}/smoke.md

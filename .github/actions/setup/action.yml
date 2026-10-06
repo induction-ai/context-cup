@@ -1,6 +1,15 @@
 name: Setup
 description: Node, pnpm, uv with Python 3.12, and the workspace's node modules.
 
+inputs:
+  frozen_lockfile:
+    description: >-
+      "true" installs exactly what pnpm-lock.yaml pins; "false" lets pnpm
+      resolve what the lockfile lacks (a new driver's dependencies) from the
+      registry, keeping every pin it has.
+    required: false
+    default: "true"
+
 runs:
   using: composite
   steps:
@@ -26,5 +35,5 @@ runs:
         enable-cache: false
 
     - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+      run: pnpm install ${{ inputs.frozen_lockfile == 'true' && '--frozen-lockfile' || '--no-frozen-lockfile' }}
       shell: bash

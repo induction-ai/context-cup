@@ -129,6 +129,13 @@ system packages, files, permissions. It runs as root once per trial
 container, after the dependencies; `uv` is on `PATH`, and the container's
 own Python is never used.
 
+Nothing of an entry runs on the host, where the competition's keys are: no
+`build.sh` of its own (the engines' bundle TypeScript drivers), no install
+scripts in `package.json`, no `setup.py` or anything else that has uv build
+the driver's own project, and dependencies from PyPI or npm only, never
+git, a path, or a URL. A Python dependency is installed from a wheel, so
+lock a version that ships one.
+
 ## Models, keys, and accounting
 
 - **Every call goes through the trial's proxy.** It runs inside your
@@ -218,3 +225,44 @@ attempt still counts toward cost. Beside
 `runner.txt` the loop's own log, `calls.jsonl` every model call the proxy
 recorded, and `proxy.txt` the proxy's own output. Set `CC_SAVE_BODIES=1` to
 keep every request and response the proxy saw under `bodies/` there too.
+
+## Enter it
+
+Open a pull request that adds `drivers/<your_name>/` and changes nothing
+outside it, except `pnpm-lock.yaml` when a TypeScript driver's
+dependencies change it. Docs, engine, and course changes go in a pull
+request of their own. Once it merges, a maintainer adds the driver to the
+Suite workflow's list.
+
+The review is two checks, and you can run both before opening the pull
+request:
+
+```
+bin/review_driver           # the static check
+bin/review_driver --smoke   # the static check, then the smoke run
+```
+
+Each ends with a `PASS` or `FAIL` line, and exits non-zero on a `FAIL`. They
+compare your branch, uncommitted work included, with `origin/main`.
+
+The **static check** reads your files without running them. It fails on a
+change outside the driver directory, a manifest the course can't load, a
+missing entry point or README, anything that would run on the host, a
+committed `node_modules` or `.env`, something that looks like a key, and
+imports from the course beyond `context_cup_protocol` and the engines. It
+warns where a reviewer looks first: benchmark or task names in the code,
+URLs other than the model endpoint, binary or large files, and a
+`setup.sh`, and a PR that changes an entry already on main. Warnings
+don't fail it. It also fails on symlinks and submodules in the directory.
+
+The **smoke run** runs `smoke_tau` and `smoke_toolathlon` with your driver
+at the reference target, on Daytona (`--harbor_env docker` for local
+Docker), so it needs `OPENAI_API_KEY` and `DAYTONA_API_KEY` in `.env`. It
+passes when every trial finishes; a trial that errors is retried up to three
+times, and the reward doesn't count.
+Logs go under `.temp/review/`.
+
+On the pull request, the static check runs on every push and posts its
+result. Once it passes, a maintainer reads the code and starts the smoke run,
+which posts its own; the code is also read against the
+[rules](../README.md#rules).

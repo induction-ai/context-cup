@@ -59,6 +59,7 @@ drivers/base_python/
                  into the engine's venv once per trial
   uv.lock        with dependencies: the versions they are pinned to
   build.sh       optional  runs once per suite run on the host, before any trial
+                           (an engine's; an entry can't ship one)
   setup.sh       optional  runs once per trial, after the parent's setup.sh,
                            for what a dependency list cannot express
   run.sh         optional  runs once per turn: run.sh <input.json> <output.json>

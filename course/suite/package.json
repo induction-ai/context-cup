@@ -22,6 +22,7 @@
     "execa": "catalog:",
     "nanoid": "catalog:",
     "pino": "catalog:",
+    "smol-toml": "catalog:",
     "yargs": "catalog:",
     "zod": "catalog:"
   },

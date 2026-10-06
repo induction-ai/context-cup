@@ -200,6 +200,36 @@ and a test fails when they drift.
 **Daytona sweep** runs hourly and deletes context-cup sandboxes
 whose build failed more than 12 hours earlier.
 
+**Driver review** (`.github/workflows/driver_review.yml`) reviews an entry's
+pull request against its merge commit, in two steps; entrants run both with
+`bin/review_driver --smoke`:
+
+1. **static**, on every push to a PR that touches `drivers/`:
+   `bin/review_driver`, run from main, reads the PR without running it (see
+   "Enter it" in [docs/drivers.md](docs/drivers.md#enter-it)). No secrets,
+   and no PR code runs, which is what makes `pull_request_target` safe here.
+2. **smoke**, when an owner, member, or collaborator comments
+   `/review-driver <sha>`, naming the head commit they read (a push after
+   that needs a new comment): the static check again, then `smoke_tau` and
+   `smoke_toolathlon` with the driver at the reference target, on Daytona.
+   Static has proved the merge commit is main plus the driver's directory,
+   so the host runs only main's code and the driver runs only in sandboxes.
+   Results go to a Postgres in the job, not the deployed database.
+
+Each posts its result as a PR comment, updated in place on reruns. The
+smoke job runs in the `driver-review` environment, which holds its own
+secrets under names nothing else uses, so a missing one fails the job
+instead of falling back to a repository secret:
+
+| environment secret       | for                                                                       |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `REVIEW_OPENAI_API_KEY`  | a separate, spend-capped key: entries' code runs with it in the sandboxes |
+| `REVIEW_DAYTONA_API_KEY` | a separate Daytona organization or key with a small quota                 |
+
+Give the environment required reviewers to add a second approval before the
+smoke run. A maintainer adds a merged driver to the Suite workflow's
+`driver` list.
+
 Repository secrets:
 
 | secret                                                  | for                                                                                                            |

@@ -1,0 +1,53 @@
+name: Sticky comment
+description: >-
+  Create, or update in place, the PR comment this workflow posted with a
+  given marker, so each review keeps one comment however often it reruns.
+
+inputs:
+  pr:
+    description: The pull request number
+    required: true
+  marker:
+    description: An HTML comment that identifies the comment
+    required: true
+  body_file:
+    description: The comment's Markdown; it should contain the marker
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v8
+      env:
+        PR: ${{ inputs.pr }}
+        MARKER: ${{ inputs.marker }}
+        BODY_FILE: ${{ inputs.body_file }}
+      with:
+        script: |
+          const fs = require("fs");
+          const body = fs.readFileSync(process.env.BODY_FILE, "utf8");
+          const issue_number = Number(process.env.PR);
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            ...context.repo,
+            issue_number,
+          });
+          // Only this workflow's own comment: a person quoting the marker
+          // keeps theirs.
+          const ours = comments.find(
+            (c) =>
+              c.user?.login === "github-actions[bot]" &&
+              c.body?.includes(process.env.MARKER)
+          );
+          if (ours) {
+            await github.rest.issues.updateComment({
+              ...context.repo,
+              comment_id: ours.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number,
+              body,
+            });
+          }

@@ -155,6 +155,13 @@ competition runs the benchmarks: to enter, open a pull request adding your
 driver under `drivers/`, and we run both full benchmark suites with it for
 the standings (see [Winning](#winning)).
 
+The pull request adds `drivers/<your_driver>/` and changes nothing outside
+it. Before a full run, an entry is reviewed three ways: a static check of
+its files, a smoke run of `smoke_tau` and `smoke_toolathlon` at the
+reference target, and a read of its code against the [rules](#rules).
+`bin/review_driver --smoke` runs the first two on your branch and says
+whether it passes; see [Enter it](docs/drivers.md#enter-it).
+
 ## Leaderboard
 
 The combined leaderboard and each benchmark's rank the drivers by the rules

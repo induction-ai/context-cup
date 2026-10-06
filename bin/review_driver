@@ -1,0 +1,4 @@
+#!/bin/bash
+# The static review of a driver PR (see course/suite/src/review_driver.ts).
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" && exec node_modules/.bin/tsx course/suite/src/review_driver.ts "$@"
