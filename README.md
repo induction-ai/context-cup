@@ -156,11 +156,11 @@ driver under `drivers/`, and we run both full benchmark suites with it for
 the standings (see [Winning](#winning)).
 
 The pull request adds `drivers/<your_driver>/` and changes nothing outside
-it. Before a full run, an entry is reviewed three ways: a static check of
-its files, a smoke run of `smoke_tau` and `smoke_toolathlon` at the
-reference target, and a read of its code against the [rules](#rules).
-`bin/review_driver --smoke` runs the first two on your branch and says
-whether it passes; see [Enter it](docs/drivers.md#enter-it).
+it. Before a full run, an entry is reviewed in three steps: a static check
+of its files, a Claude Code review of its code against the [rules](#rules),
+and a smoke run of `smoke_tau` and `smoke_toolathlon` at the reference
+target. `bin/review_driver --claude --smoke` runs all three on your branch
+and says whether it passes; see [Enter it](docs/drivers.md#enter-it).
 
 ## Leaderboard
 

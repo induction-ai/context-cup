@@ -234,12 +234,13 @@ dependencies change it. Docs, engine, and course changes go in a pull
 request of their own. Once it merges, a maintainer adds the driver to the
 Suite workflow's list.
 
-The review is two checks, and you can run both before opening the pull
-request:
+The review is three steps, each run only when the one before it passes,
+and you can run them all before opening the pull request:
 
 ```
-bin/review_driver           # the static check
-bin/review_driver --smoke   # the static check, then the smoke run
+bin/review_driver                   # the static check
+bin/review_driver --claude          # then the Claude review
+bin/review_driver --claude --smoke  # then the smoke run: the whole review
 ```
 
 Each ends with a `PASS` or `FAIL` line, and exits non-zero on a `FAIL`. They
@@ -255,6 +256,13 @@ URLs other than the model endpoint, binary or large files, and a
 `setup.sh`, and a PR that changes an entry already on main. Warnings
 don't fail it. It also fails on symlinks and submodules in the directory.
 
+The **Claude review** has [Claude Code](https://docs.claude.com/en/docs/claude-code),
+restricted to reading files, read your driver and judge whether it is safe
+and honest to run, against the [rules](../README.md#rules). It fails when
+Claude flags something; its notes, like the static check's warnings, are
+for the maintainer. It needs Claude Code installed and signed in (or
+`ANTHROPIC_API_KEY` set), and costs well under a dollar.
+
 The **smoke run** runs `smoke_tau` and `smoke_toolathlon` with your driver
 at the reference target, on Daytona (`--harbor_env docker` for local
 Docker), so it needs `OPENAI_API_KEY` and `DAYTONA_API_KEY` in `.env`. It
@@ -262,7 +270,6 @@ passes when every trial finishes; a trial that errors is retried up to three
 times, and the reward doesn't count.
 Logs go under `.temp/review/`.
 
-On the pull request, the static check runs on every push and posts its
-result. Once it passes, a maintainer reads the code and starts the smoke run,
-which posts its own; the code is also read against the
-[rules](../README.md#rules).
+On the pull request, the static check and the Claude review run on every
+push and post their results. Once they pass, a maintainer reads the code
+and starts the smoke run, which posts its own.

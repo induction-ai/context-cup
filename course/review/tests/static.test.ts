@@ -16,20 +16,17 @@ import {
   expect,
   it,
 } from "@context-cup/shared/test_helpers/index.js";
-import { isRunnable, scanPackages } from "../src/packages.ts";
+import { isRunnable, scanPackages } from "@context-cup/suite/packages.js";
 import {
   errors,
   formatMarkdown,
-  formatSmokeMarkdown,
-  formatSmokeText,
   formatText,
   reviewDriverDir,
   reviewDriverPr,
-  SMOKE_MARKER,
   STATIC_MARKER,
   warnings,
   type Review,
-} from "../src/review.ts";
+} from "../src/static.ts";
 
 const PYPROJECT = `[project]
 name = "keep-recent"
@@ -504,42 +501,5 @@ describe("formatText", () => {
       expect.stringMatching(/^ {2}! setup\.sh: /),
       expect.stringMatching(/^ {2}\d+ passed, 1 error, 1 warning$/),
     ]);
-  });
-});
-
-describe("smoke formatting", () => {
-  const results = [
-    {
-      suite: "smoke_tau",
-      ok: true,
-      log_dir: ".temp/review/smoke_tau/s1",
-      results: "table\n",
-    },
-    {
-      suite: "smoke_toolathlon",
-      ok: false,
-      log_dir: ".temp/review/smoke_toolathlon/s2",
-    },
-  ];
-
-  it("fails the comment when any suite fails, and shows each table", async () => {
-    const markdown = formatSmokeMarkdown("keep_recent", results);
-    expect(markdown.split("\n")[0]).toBe(SMOKE_MARKER);
-    expect(markdown).toContain("## ❌ Smoke run: `keep_recent`");
-    expect(markdown).toContain("### `smoke_tau`: ✅ passed\n\n```\ntable\n```");
-    expect(markdown).toContain("### `smoke_toolathlon`: ❌ failed");
-    expect(
-      formatSmokeMarkdown("keep_recent", [results[0]!]).split("\n")[1]
-    ).toBe("## ✅ Smoke run: `keep_recent`");
-  });
-
-  it("points a terminal at a failed suite's logs", async () => {
-    expect(formatSmokeText("keep_recent", results)).toBe(
-      [
-        "Smoke run: keep_recent",
-        "  ✓ smoke_tau",
-        "  ✗ smoke_toolathlon: see .temp/review/smoke_toolathlon/s2",
-      ].join("\n")
-    );
   });
 });

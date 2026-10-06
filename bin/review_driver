@@ -1,4 +1,4 @@
 #!/bin/bash
-# The static review of a driver PR (see course/suite/src/review_driver.ts).
+# Review a driver PR as the Driver review workflow does (see course/review).
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT" && exec node_modules/.bin/tsx course/suite/src/review_driver.ts "$@"
+cd "$ROOT" && exec node_modules/.bin/tsx course/review/src/cli.ts "$@"

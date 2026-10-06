@@ -26,6 +26,7 @@ This is a pnpm workspace (TypeScript) with a uv workspace (Python) beside it. `c
 - `course/shared` owns env loading (`load_env.ts`, `REPO_ROOT`), `NODE_ENV` parsing, and the test bootstrap other packages import.
 - `course/db` owns the Postgres schema (`src/schema.ts`), migrations under `drizzle/`, the connection, and the database test setup.
 - `course/suite` is `bin/suite`: expands a suite file into harbor jobs, schedules them, ingests results.
+- `course/review` is `bin/review_driver`: reviews a driver PR (static checks, a restricted Claude Code read, the smoke suites), as `.github/workflows/driver_review.yml` runs it.
 - `course/runner` (Python) is the harbor agent that runs inside a trial: it owns the payloads and hands each turn to the driver. For a script agent (`kind: "agent"` without `harbor_agent`) its script agent for the benchmark (`context_cup_runner.agent`) sets the benchmark up as the loop would, then runs the package's `agent.sh`, which works the task itself.
 - `course/proxy` is the forwarding proxy every model call goes through. It runs inside each trial container (bundled to one file by `src/bundle.ts`, started by the runner as root) and is the only process there holding provider keys; driver scripts run as the unprivileged `ccdriver` and cannot read them. Never pass a key through harbor's `--agent-env`, which reaches every command in the container.
 - `course/protocol` is the protocol as a library: the `input.json`/`output.json` models, the provider adapters, the provider-neutral view, and `run_engine`, shared by the runner and every Python engine. The same package is `@context-cup/protocol`, the TypeScript twin (models, view, `runEngine`, the driver bundler) for the TypeScript engines; `tests/test_protocol_contract.py` checks both views read payloads alike.
@@ -48,9 +49,9 @@ bin/lint                   every static check: prettier, ruff format, ruff check
 bin/suite <key> --driver <d> [--target <t>] [--count N] [--dry_run]
                            run a suite file with one driver against one target (targets.json;
                            default the reference target, `REFERENCE_TARGET` in course/shared)
-bin/review_driver [--base <ref>]
-                           the static review of a driver PR: one drivers/<name>/, nothing
-                           that runs on the host (driver_review.yml runs it on a PR)
+bin/review_driver [--claude] [--smoke] [--base <ref>]
+                           review a driver PR as driver_review.yml does: static checks,
+                           then a restricted Claude Code read, then the smoke suites
 bin/deploy [--yes]         push origin/main to the production branch, which Render deploys
 bin/daytona_sweep suite --suite_id <id> | errors [--dry_run]
                            delete Daytona sandboxes a run left behind

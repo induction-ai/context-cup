@@ -1,7 +1,9 @@
 name: Driver review
 
-# Reviews a driver PR in two steps, both against the PR's merge commit (the
-# PR applied to main). Entrants run the same checks with bin/review_driver.
+# Reviews a driver PR in three steps, each starting only when the one before
+# it passes. Entrants run the same steps with bin/review_driver. Every job
+# runs main's code: static and claude read the PR's merge commit (the PR
+# applied to main), and smoke copies in only the driver's directory from it.
 #
 # 1. static, on every push to a PR that touches drivers/: bin/review_driver,
 #    run from main, reads the PR's files without running them. It holds the
@@ -9,24 +11,32 @@ name: Driver review
 #    the host (build.sh, install scripts, dependencies built from source). No
 #    secrets, and no PR code runs, which is what makes pull_request_target
 #    safe here: the workflow and the checker are main's.
-# 2. smoke, when a maintainer comments
+# 2. claude, on the same pushes: Claude Code, restricted to reading files,
+#    reads the driver for anything shady (bin/review_driver --claude). A
+#    flagged verdict blocks the smoke run.
+# 3. smoke, when a maintainer comments
 #
 #      /review-driver <sha>
 #
 #    naming the PR's head commit they read, so the run is the code they read
-#    and not whatever was pushed since. It reruns static, then
-#    `bin/review_driver --smoke`: smoke_tau and smoke_toolathlon at the
-#    reference target. Static has proved the merge commit differs from main
-#    only in the driver's directory and pnpm-lock.yaml, and the job installs
-#    from main's lockfile, so everything on the host is main's code; the
-#    driver itself runs in Daytona sandboxes. Its
-#    secrets come from the `driver-review` environment, under names no other
-#    workflow uses, so a missing one fails instead of falling back to a
-#    production secret: REVIEW_OPENAI_API_KEY (spend-capped; the reference
-#    target is OpenAI) and REVIEW_DAYTONA_API_KEY (a small quota). Results go
-#    to a throwaway Postgres in the job, not the results database.
+#    and not whatever was pushed since. The comment reruns static and claude
+#    on that commit; `/review-driver <sha> override` runs smoke even when
+#    claude flagged it. Smoke is `bin/review_driver --smoke`: smoke_tau and
+#    smoke_toolathlon at the reference target. It checks out main and copies
+#    in only the driver's directory, so everything on the host is main's code,
+#    lockfile included; the driver itself runs in Daytona sandboxes. Results
+#    go to a throwaway Postgres in the job, not the results database.
 #
-# Each posts its result as a PR comment and keeps it updated on reruns.
+# claude and smoke take their secrets from the `driver-review` environment,
+# under names no other workflow uses, so a missing one fails instead of
+# falling back to a production secret: REVIEW_ANTHROPIC_API_KEY,
+# REVIEW_OPENAI_API_KEY (spend-capped; the reference target is OpenAI), and
+# REVIEW_DAYTONA_API_KEY (a small quota). REVIEW_CLAUDE_INSTRUCTIONS, if set,
+# adds maintainers' instructions to claude's prompt without publishing them,
+# and the repository variable REVIEW_CLAUDE_MODEL picks its model.
+#
+# Each step posts a PR comment with a link to the run as it starts, and
+# replaces it with its result.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
@@ -36,9 +46,9 @@ on:
     types: [created]
 
 # A newer run of the same kind replaces one in progress: a push replaces the
-# static run of the push before, a maintainer's review comment the review
-# before. Every other comment, a /review-driver from anyone else included,
-# lands in a group of its own, so it can never cancel a review.
+# run of the push before, a maintainer's review comment the review before.
+# Every other comment, a /review-driver from anyone else included, lands in a
+# group of its own, so it can never cancel a review.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event.pull_request.number ||
@@ -48,6 +58,9 @@ concurrency:
     "COLLABORATOR"]'), github.event.comment.author_association) && 'review'
     || format('comment-{0}', github.event.comment.id)) }}
   cancel-in-progress: true
+
+env:
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 jobs:
   resolve:
@@ -66,6 +79,7 @@ jobs:
       pr: ${{ steps.pin.outputs.pr }}
       head: ${{ steps.pin.outputs.head }}
       merge: ${{ steps.pin.outputs.merge }}
+      override: ${{ steps.pin.outputs.override }}
     steps:
       - name: Pin the commit under review
         id: pin
@@ -78,19 +92,27 @@ jobs:
           COMMENT: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
+          override=false
           if [ -n "$PUSHED" ]; then
             wanted="$PUSHED"
           else
             # Expressions can't trim, so the job's guard only asks whether the
             # comment mentions the command; this holds it to the first line.
-            wanted=$(printf '%s\n' "$COMMENT" | grep -m1 -v '^[[:space:]]*$' | sed -nE 's|^[[:space:]]*/review-driver[[:space:]]+([0-9a-f]{7,40})[[:space:]]*$|\1|p')
+            command=$(printf '%s\n' "$COMMENT" | grep -m1 -v '^[[:space:]]*$' || true)
+            wanted=$(sed -nE 's|^[[:space:]]*/review-driver[[:space:]]+([0-9a-f]{7,40})([[:space:]]+override)?[[:space:]]*$|\1|p' <<<"$command")
             if [ -z "$wanted" ]; then
               echo "::error::Comment \`/review-driver <sha>\`, naming the PR’s head commit you reviewed."
               exit 1
             fi
+            if grep -qE '[[:space:]]override[[:space:]]*$' <<<"$command"; then
+              override=true
+            fi
           fi
           # GitHub computes the merge commit in the background after a push;
           # wait until it exists and is built on the head we were asked for.
+          # Its base may lag main, which is fine: static and claude read only
+          # the PR's changes from it, and smoke takes only the driver's
+          # directory.
           for attempt in $(seq 1 12); do
             pr=$(gh api "repos/$REPO/pulls/$PR")
             head=$(jq -r .head.sha <<<"$pr")
@@ -111,11 +133,12 @@ jobs:
             if [ "$mergeable" = "true" ] && [ -n "$merge" ]; then
               parent=$(gh api "repos/$REPO/commits/$merge" --jq '.parents[1].sha')
               if [ "$parent" = "$head" ]; then
-                echo "Reviewing $head as merge commit $merge"
+                echo "Reviewing $head as merge commit $merge (override: $override)"
                 {
                   echo "pr=$PR"
                   echo "head=$head"
                   echo "merge=$merge"
+                  echo "override=$override"
                 } >> "$GITHUB_OUTPUT"
                 exit 0
               fi
@@ -124,6 +147,64 @@ jobs:
           done
           echo "::error::GitHub had no merge commit for $head after two minutes; push again, or comment again."
           exit 1
+
+  # Says the review has started, with a link, in the comments the jobs below
+  # replace with their results.
+  announce:
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      HEAD: ${{ needs.resolve.outputs.head }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Write the notices
+        run: |
+          short="\`${HEAD:0:7}\`"
+          {
+            echo "<!-- driver-review:static -->"
+            echo "## ⏳ Static review: running"
+            echo ""
+            echo "Reviewing $short; see [the run]($RUN_URL)."
+          } > "$RUNNER_TEMP/static.md"
+          {
+            echo "<!-- driver-review:claude -->"
+            echo "## ⏳ Claude review: waiting for the static review"
+            echo ""
+            echo "Reviewing $short; see [the run]($RUN_URL)."
+          } > "$RUNNER_TEMP/claude.md"
+          {
+            echo "<!-- driver-review:smoke -->"
+            echo "## ⏳ Smoke run: waiting for the static and Claude reviews"
+            echo ""
+            echo "Reviewing $short; see [the run]($RUN_URL)."
+          } > "$RUNNER_TEMP/smoke.md"
+
+      - uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:static -->"
+          body_file: ${{ runner.temp }}/static.md
+
+      - uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:claude -->"
+          body_file: ${{ runner.temp }}/claude.md
+
+      # Only a maintainer's comment starts a smoke run.
+      - if: github.event_name == 'issue_comment'
+        uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:smoke -->"
+          body_file: ${{ runner.temp }}/smoke.md
 
   static:
     needs: resolve
@@ -180,12 +261,15 @@ jobs:
           if-no-files-found: ignore
 
   static-comment:
-    needs: [resolve, static]
+    needs: [resolve, announce, static]
     if: always() && needs.resolve.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
+    env:
+      HEAD: ${{ needs.resolve.outputs.head }}
+      OK: ${{ needs.static.outputs.ok }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v5
@@ -199,17 +283,41 @@ jobs:
           name: static-review
           path: ${{ runner.temp }}
 
-      - name: Fall back when there is no report
-        env:
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Write the comments
         run: |
-          [ -f "$RUNNER_TEMP/static.md" ] && exit 0
+          short="\`${HEAD:0:7}\`"
+          if [ ! -f "$RUNNER_TEMP/static.md" ]; then
+            {
+              echo "<!-- driver-review:static -->"
+              echo "## ❌ Static review"
+              echo ""
+              echo "The review didn’t finish; see [the run]($RUN_URL)."
+            } > "$RUNNER_TEMP/static.md"
+          fi
           {
-            echo "<!-- driver-review:static -->"
-            echo "## ❌ Static review"
-            echo ""
-            echo "The review didn’t finish; see [the run]($RUN_URL)."
-          } > "$RUNNER_TEMP/static.md"
+            echo "<!-- driver-review:claude -->"
+            if [ "$OK" = "true" ]; then
+              echo "## ⏳ Claude review: running"
+              echo ""
+              echo "Claude Code is reading $short; see [the run]($RUN_URL)."
+            else
+              echo "## ❌ Claude review: not run"
+              echo ""
+              echo "The static review of $short didn’t pass; see [the run]($RUN_URL)."
+            fi
+          } > "$RUNNER_TEMP/claude.md"
+          {
+            echo "<!-- driver-review:smoke -->"
+            if [ "$OK" = "true" ]; then
+              echo "## ⏳ Smoke run: waiting for the Claude review"
+              echo ""
+              echo "Reviewing $short; see [the run]($RUN_URL)."
+            else
+              echo "## ❌ Smoke run: not run"
+              echo ""
+              echo "The static review of $short didn’t pass; see [the run]($RUN_URL)."
+            fi
+          } > "$RUNNER_TEMP/smoke.md"
 
       - uses: ./.github/actions/sticky_comment
         with:
@@ -217,10 +325,154 @@ jobs:
           marker: "<!-- driver-review:static -->"
           body_file: ${{ runner.temp }}/static.md
 
-  smoke:
+      - uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:claude -->"
+          body_file: ${{ runner.temp }}/claude.md
+
+      - if: github.event_name == 'issue_comment'
+        uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:smoke -->"
+          body_file: ${{ runner.temp }}/smoke.md
+
+  claude:
     needs: [resolve, static]
-    # Only on a maintainer's comment: it runs the entry, and spends.
-    if: github.event_name == 'issue_comment' && needs.static.outputs.ok == 'true'
+    if: needs.static.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: driver-review
+    permissions:
+      contents: read
+    outputs:
+      clean: ${{ steps.review.outputs.clean }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      # Claude reads this checkout and nothing else: its file tools are
+      # confined to the directory it runs in.
+      - name: Check out the PR beside main
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.merge }}
+          path: .pr
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Install Claude Code
+        run: npm install --global @anthropic-ai/claude-code@2.1.290
+
+      - name: Review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.REVIEW_ANTHROPIC_API_KEY }}
+          CC_REVIEW_INSTRUCTIONS: ${{ secrets.REVIEW_CLAUDE_INSTRUCTIONS }}
+          MODEL: ${{ vars.REVIEW_CLAUDE_MODEL }}
+          MERGE: ${{ needs.resolve.outputs.merge }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::The driver-review environment is missing REVIEW_ANTHROPIC_API_KEY"
+            exit 1
+          fi
+          args=(--root "$GITHUB_WORKSPACE/.pr" --base "$MERGE^1" --claude
+            --claude_output "$RUNNER_TEMP/claude.md")
+          [ -n "$MODEL" ] && args+=(--claude_model "$MODEL")
+          set +e
+          bin/review_driver "${args[@]}"
+          code=$?
+          set -e
+          [ -f "$RUNNER_TEMP/claude.md" ] && cat "$RUNNER_TEMP/claude.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "clean=$([ "$code" = 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: claude-review
+          path: ${{ runner.temp }}/claude.md
+          if-no-files-found: ignore
+
+  claude-comment:
+    # After static-comment, whose "running" notice this replaces.
+    needs: [resolve, static-comment, claude]
+    if: always() && needs.claude.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      HEAD: ${{ needs.resolve.outputs.head }}
+      CLEAN: ${{ needs.claude.outputs.clean }}
+      OVERRIDE: ${{ needs.resolve.outputs.override }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Download the report
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: claude-review
+          path: ${{ runner.temp }}
+
+      - name: Write the comments
+        run: |
+          short="\`${HEAD:0:7}\`"
+          if [ ! -f "$RUNNER_TEMP/claude.md" ]; then
+            {
+              echo "<!-- driver-review:claude -->"
+              echo "## ❌ Claude review"
+              echo ""
+              echo "The review didn’t finish; see [the run]($RUN_URL)."
+            } > "$RUNNER_TEMP/claude.md"
+          fi
+          {
+            echo "<!-- driver-review:smoke -->"
+            if [ "$CLEAN" = "true" ] || [ "$OVERRIDE" = "true" ]; then
+              echo "## ⏳ Smoke run: running"
+              echo ""
+              echo "Running \`smoke_tau\` and \`smoke_toolathlon\` on $short, about ten minutes; see [the run]($RUN_URL)."
+            else
+              echo "## ❌ Smoke run: blocked"
+              echo ""
+              echo "The Claude review flagged $short. Read its findings; to run the smoke suites anyway, comment \`/review-driver ${HEAD:0:7} override\`."
+            fi
+          } > "$RUNNER_TEMP/smoke.md"
+
+      - uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:claude -->"
+          body_file: ${{ runner.temp }}/claude.md
+
+      - if: github.event_name == 'issue_comment'
+        uses: ./.github/actions/sticky_comment
+        with:
+          pr: ${{ needs.resolve.outputs.pr }}
+          marker: "<!-- driver-review:smoke -->"
+          body_file: ${{ runner.temp }}/smoke.md
+
+  smoke:
+    needs: [resolve, static, claude]
+    # Only on a maintainer's comment, since it runs the entry and spends; and
+    # only on a commit Claude passed, unless the comment overrides it.
+    if: >-
+      !cancelled()
+      && github.event_name == 'issue_comment'
+      && needs.static.outputs.ok == 'true'
+      && (needs.claude.outputs.clean == 'true'
+      || needs.resolve.outputs.override == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment: driver-review
@@ -241,13 +493,29 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/context_cup
     steps:
-      - name: Checkout the merge commit
+      # main: everything this job runs on the host is main's code, the
+      # lockfile included. Only the driver's directory comes from the PR, from
+      # the commit the static and Claude reviews read.
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Check out the PR beside main
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.resolve.outputs.merge }}
-          # The merge's first parent too, which the static review compares to.
-          fetch-depth: 2
+          path: .pr
           persist-credentials: false
+
+      - name: Bring in the driver, and nothing else
+        env:
+          DRIVER: ${{ needs.static.outputs.driver }}
+        run: |
+          rm -rf "drivers/$DRIVER"
+          cp -a ".pr/drivers/$DRIVER" "drivers/$DRIVER"
+          rm -rf .pr
+          git status --short
 
       - name: Require the review secrets
         env:
@@ -261,13 +529,9 @@ jobs:
             exit 1
           fi
 
-      # The PR's pnpm-lock.yaml could pin anything, the host's own tools
-      # included, to any tarball. Install from main's instead, and let pnpm
-      # resolve the driver's dependencies (registry only; static checked) on
-      # top of it.
-      - name: Use main’s lockfile
-        run: git checkout HEAD^1 -- pnpm-lock.yaml
-
+      # main's lockfile, never the PR's, which could pin anything (the host's
+      # own tools included) to any tarball. pnpm resolves a new driver's
+      # dependencies (registry only; static checked) on top of it.
       - name: Setup
         uses: ./.github/actions/setup
         with:
@@ -276,15 +540,15 @@ jobs:
       - name: Migrate the throwaway database
         run: bin/db migrate
 
-      # The command an entrant runs: the static review again (main's code,
-      # so the same verdict), then the smoke suites.
+      # The command an entrant runs, on the same tree: main with the driver
+      # added. The static review again, then the smoke suites.
       - name: Run the smoke suites
         env:
           OPENAI_API_KEY: ${{ secrets.REVIEW_OPENAI_API_KEY }}
           DAYTONA_API_KEY: ${{ secrets.REVIEW_DAYTONA_API_KEY }}
         run: |
           set +e
-          bin/review_driver --base HEAD^1 --smoke --harbor_env daytona \
+          bin/review_driver --base HEAD --smoke --harbor_env daytona \
             --log_dir .temp/suites --smoke_output "$RUNNER_TEMP/smoke.md"
           code=$?
           set -e
@@ -320,7 +584,8 @@ jobs:
           if-no-files-found: ignore
 
   smoke-comment:
-    needs: [resolve, smoke]
+    # After claude-comment, whose "running" notice this replaces.
+    needs: [resolve, claude-comment, smoke]
     if: always() && needs.smoke.result != 'skipped'
     runs-on: ubuntu-latest
     permissions:
@@ -340,8 +605,6 @@ jobs:
           path: ${{ runner.temp }}
 
       - name: Fall back when there is no report
-        env:
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           [ -f "$RUNNER_TEMP/smoke.md" ] && exit 0
           {

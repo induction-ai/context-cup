@@ -201,30 +201,47 @@ and a test fails when they drift.
 whose build failed more than 12 hours earlier.
 
 **Driver review** (`.github/workflows/driver_review.yml`) reviews an entry's
-pull request against its merge commit, in two steps; entrants run both with
-`bin/review_driver --smoke`:
+pull request in three steps, each starting only when the one before passes
+and every job running main's code; entrants run them all with
+`bin/review_driver --claude --smoke`:
 
 1. **static**, on every push to a PR that touches `drivers/`:
-   `bin/review_driver`, run from main, reads the PR without running it (see
-   "Enter it" in [docs/drivers.md](docs/drivers.md#enter-it)). No secrets,
-   and no PR code runs, which is what makes `pull_request_target` safe here.
-2. **smoke**, when an owner, member, or collaborator comments
+   `bin/review_driver`, run from main, reads the PR's merge commit without
+   running it (see "Enter it" in [docs/drivers.md](docs/drivers.md#enter-it)).
+   No secrets, and no PR code runs, which is what makes
+   `pull_request_target` safe here.
+2. **claude**, on the same pushes: Claude Code, restricted to reading files
+   in the PR's checkout, reads the driver for anything shady. Its
+   instructions (`course/review/src/claude_prompt.md`) stay general on
+   purpose, so the public repo isn't a list of what it looks for; anything
+   more specific goes in the `REVIEW_CLAUDE_INSTRUCTIONS` secret, which is
+   appended to the prompt and never published. A flagged verdict blocks
+   smoke.
+3. **smoke**, when an owner, member, or collaborator comments
    `/review-driver <sha>`, naming the head commit they read (a push after
-   that needs a new comment): the static check again, then `smoke_tau` and
-   `smoke_toolathlon` with the driver at the reference target, on Daytona.
-   Static has proved the merge commit is main plus the driver's directory,
-   so the host runs only main's code and the driver runs only in sandboxes.
-   Results go to a Postgres in the job, not the deployed database.
+   that needs a new comment): static and claude again on that commit, then
+   `smoke_tau` and `smoke_toolathlon` with the driver at the reference
+   target, on Daytona. `/review-driver <sha> override` runs smoke even when
+   claude flagged it. The job checks out main and copies in only the
+   driver's directory, so the host runs only main's code (its lockfile
+   included) and the driver runs only in sandboxes. Results go to a
+   Postgres in the job, not the deployed database.
 
-Each posts its result as a PR comment, updated in place on reruns. The
-smoke job runs in the `driver-review` environment, which holds its own
+Each posts a comment with a link to its run as it starts, and replaces it
+with its result when it finishes, updating in place on reruns. The claude
+and smoke jobs run in the `driver-review` environment, which holds their
 secrets under names nothing else uses, so a missing one fails the job
 instead of falling back to a repository secret:
 
-| environment secret       | for                                                                       |
-| ------------------------ | ------------------------------------------------------------------------- |
-| `REVIEW_OPENAI_API_KEY`  | a separate, spend-capped key: entries' code runs with it in the sandboxes |
-| `REVIEW_DAYTONA_API_KEY` | a separate Daytona organization or key with a small quota                 |
+| environment secret           | for                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `REVIEW_ANTHROPIC_API_KEY`   | the Claude review; it runs on every push to a driver PR, so cap its spend   |
+| `REVIEW_CLAUDE_INSTRUCTIONS` | optional: maintainers' own instructions for the Claude review, kept private |
+| `REVIEW_OPENAI_API_KEY`      | a separate, spend-capped key: entries' code runs with it in the sandboxes   |
+| `REVIEW_DAYTONA_API_KEY`     | a separate Daytona organization or key with a small quota                   |
+
+The repository variable `REVIEW_CLAUDE_MODEL` picks the Claude review's
+model (default `claude-opus-5-5`).
 
 Give the environment required reviewers to add a second approval before the
 smoke run. A maintainer adds a merged driver to the Suite workflow's

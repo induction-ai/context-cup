@@ -1,27 +1,22 @@
 {
   "private": true,
-  "name": "@context-cup/suite",
+  "name": "@context-cup/review",
   "version": "0.1.0",
-  "description": "bin/suite: expands a suite file into harbor jobs, schedules them, and ingests results",
+  "description": "bin/review_driver: reviews a driver PR in three steps (static checks, a restricted Claude Code read, the smoke suites)",
   "type": "module",
   "exports": {
     "./*.js": "./src/*.ts",
     "./*": "./src/*"
   },
   "scripts": {
-    "test": "../../bin/test --project suite",
+    "test": "../../bin/test --project review",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@context-cup/db": "workspace:*",
-    "@context-cup/model-stats": "workspace:*",
-    "@context-cup/protocol": "workspace:*",
-    "@context-cup/proxy": "workspace:*",
     "@context-cup/shared": "workspace:*",
-    "drizzle-orm": "catalog:",
+    "@context-cup/suite": "workspace:*",
     "execa": "catalog:",
-    "nanoid": "catalog:",
-    "pino": "catalog:",
+    "smol-toml": "catalog:",
     "yargs": "catalog:",
     "zod": "catalog:"
   },
