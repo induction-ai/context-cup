@@ -14,9 +14,9 @@ A simple and savage context manager with aggressive truncation and thread compac
    - **the end** - the most recent steps, up to about `keep_recent_tokens`
      (default 16,000). Kept as is.
    - **the summary** - a cheap model on the same provider rewrites it
-     as one summary message, listing the facts it learned (ids, amounts,
-     file paths, copied exactly), what's done, what it promised the user,
-     and what's left to do.
+     as one summary message: the facts it found (copied exactly), what it
+     has done, what it decided and why, and what's left, including
+     approaches that failed.
 
    Each summary and
    the text it was made from are saved under the trial's

@@ -27,19 +27,20 @@ see your summary in place of everything in between, and nothing else of it.
 Write the summary from the agent's point of view, under these headings:
 
 ## Facts
-Every concrete value the agent learned and may need again, verbatim: ids,
-names, account and order numbers, amounts, dates, file paths, URLs, counts.
+Every specific value the agent found and may need again, copied exactly:
+identifiers, names, numbers, dates, paths, links.
 
-## Done
-What has been completed, including every change made to the world (records
-written, messages sent, files created) and its result.
+## Progress
+What the agent has done and what came of it, including every action that
+changed something outside the conversation.
 
-## Commitments
-What the agent told the user it would or would not do, decisions it made,
-and policy rules it found apply here.
+## Decisions
+What the agent decided or concluded and why, any constraints or
+requirements it discovered, and anything it told the user it would do.
 
 ## Remaining
-What is still to do, and anything that failed and why.
+What is still to do, and approaches that failed and why, so they aren't
+tried again.
 
 Be complete about facts and terse about everything else. Do not continue the
 task; only summarise it."""
