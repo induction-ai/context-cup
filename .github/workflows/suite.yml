@@ -39,6 +39,7 @@ on:
           - base_pydantic
           - base_python
           - base_typescript
+          - contextsbane_9000
       target:
         description: "Target model (targets.json); the driver must support its provider"
         required: true
