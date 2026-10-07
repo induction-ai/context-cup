@@ -59,7 +59,9 @@ bin/suite toolathlon_local --driver contextsbane_9000 --count 2
 ```
 
 **Make your own ContextsBane**: copy the directory and change one layer at a time. Where
-to look first: the summary prompt (`SUMMARY_INSTRUCTIONS`) for what a
-benchmark punishes forgetting; `compact_at_tokens` against the cost per
-task on the results site; and `max_result_bytes` against the Toolathlon
-tasks that read long files.
+to look first: the summary prompt (`SUMMARY_INSTRUCTIONS`), by reading the
+saved summaries next to the steps that followed them and asking what the
+agent lost; `compact_at_tokens`, by trading cost per task against score on
+the results site; and `max_result_bytes`, by checking what clipped results
+cut. Keep each change general: the rules ask for a context manager that
+works on any task, not one tuned to these benchmarks.
