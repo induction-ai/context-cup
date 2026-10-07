@@ -30,6 +30,9 @@ Write the summary from the agent's point of view, under these headings:
 Every specific value the agent found and may need again, copied exactly:
 identifiers, names, numbers, dates, paths, links.
 
+## User
+Everything the user said after their first message, verbatim.
+
 ## Progress
 What the agent has done and what came of it, including every action that
 changed something outside the conversation.
