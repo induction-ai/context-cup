@@ -1,0 +1,23 @@
+[project]
+name = "contextsbane-9000"
+version = "0.1.0"
+description = "Clips long tool results and summarises the middle of the thread once it grows past a threshold."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.context-cup]
+kind = "driver"
+extends = "litellm"
+providers = ["openai", "anthropic", "gemini"]
+
+[tool.context-cup.config]
+# Tool results over this many bytes keep their head and tail.
+max_result_bytes = 20_000
+# Compact once the conversation passes this estimate (bytes / 4).
+compact_at_tokens = 64_000
+# How much of the recent conversation compaction keeps whole.
+keep_recent_tokens = 16_000
+# Each tool result's cap in what the summariser reads.
+summary_result_bytes = 8_000
+# The summariser; empty picks a cheap model on the run's provider.
+summary_model = ""
