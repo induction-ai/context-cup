@@ -13,28 +13,24 @@
  *  together: a driver qualifies on it by qualifying on each, and is ranked
  *  by the geometric mean of its cost ratios. */
 
-import { REFERENCE_TARGET } from "@context-cup/shared/reference_target.js";
-import tauBanking from "../../../../suites/tau_banking.json";
-import toolathlon from "../../../../suites/toolathlon.json";
+import {
+  BENCHMARK_SUITES,
+  BENCHMARK_TASKS,
+  ELIGIBILITY,
+  REFERENCE_TARGET,
+  type BenchmarkSuite,
+  type Eligibility,
+} from "@context-cup/shared/competition.js";
 
-/** The suite files the competition is judged on, one per benchmark. */
-export const BENCHMARK_SUITES = ["tau_banking", "toolathlon"] as const;
-export type BenchmarkSuite = (typeof BENCHMARK_SUITES)[number];
-
-/** The tasks a suite file runs by default (all but its `explicit_only`
- *  ones), as `bin/suite` without `--task` does. */
-function defaultTasks(file: {
-  tasks: Record<string, { runner: string; explicit_only?: boolean }>;
-}): readonly string[] {
-  return Object.entries(file.tasks)
-    .filter(([, t]) => !t.explicit_only)
-    .map(([name]) => name);
-}
-
-/** Every task a full run of each benchmark covers. */
-export const BENCHMARK_TASKS: Record<BenchmarkSuite, readonly string[]> = {
-  tau_banking: defaultTasks(tauBanking),
-  toolathlon: defaultTasks(toolathlon),
+// The suites, target, and eligibility rule are the competition's, shared with
+// bin/drivers; this file ranks by them.
+export {
+  BENCHMARK_SUITES,
+  BENCHMARK_TASKS,
+  ELIGIBILITY,
+  REFERENCE_TARGET,
+  type BenchmarkSuite,
+  type Eligibility,
 };
 
 /** A benchmark's bar: a score, and what one full benchmark run costs (every
@@ -47,28 +43,8 @@ export const BASELINES: Record<BenchmarkSuite, Baseline> = {
   toolathlon: { score: 0.58, run_cents: 2500 },
 };
 
-/** What a run needs to stand on a leaderboard. */
-export type Eligibility = {
-  /** Done trials (a reward and no error) every task needs, retry passes
-   *  included. */
-  min_done: number;
-  /** By suite name, the tasks a run must cover: a full run, not one
-   *  narrowed by `--task`. A suite not named here has no such rule. */
-  tasks: Record<string, readonly string[]>;
-};
-
-/** A run stands on a board only once finished, covering every task of its
- *  suite, with at least `min_done` done trials in each, retry passes
- *  included. A driver's latest such run is its entry. */
-export const ELIGIBILITY: Eligibility = {
-  min_done: 2,
-  tasks: BENCHMARK_TASKS,
-};
-/** The target the competition is judged at. */
-export { REFERENCE_TARGET };
-
 /** One driver's result on a board: its most recent eligible run of the
- *  suite at the target (ELIGIBILITY), scored as a suite is. */
+ *  suite at the target (the `run_eligibility` view), scored as a suite is. */
 export type Entry = {
   driver_name: string;
   suite_id: string;
@@ -289,33 +265,38 @@ export function rankCombined(
 }
 
 /** What decides whether a run can stand on a leaderboard. */
+/** A run's eligibility facts, from the `run_eligibility` view. */
 export type RunFacts = {
-  name: string;
   target_name: string;
   finished_at: Date | null;
+  /** The target a suite of its name is judged at; null when it isn't a
+   *  competition suite. */
+  competition_target: string | null;
+  /** Done trials each task needs; null when it isn't a competition suite. */
+  min_done: number | null;
+  required_tasks: number;
+  /** Tasks of its suite it never ran. */
+  missing_tasks: number;
   /** The fewest done trials any of its tasks has; null with no tasks. */
   min_task_done: number | null;
-  /** Tasks of its suite (Eligibility `tasks`) it never ran. */
-  missing_tasks: number;
 };
 
-/** Why a run cannot stand on the competition's leaderboard; empty when it
- *  can. The same rule as the eligibility SQL in `queries.ts`, plus the suite
- *  and target the competition is judged on. */
-export function disqualifications(
-  run: RunFacts,
-  rules: Eligibility = ELIGIBILITY
-): string[] {
+/** Why a run cannot stand on the competition's leaderboard, in words; empty
+ *  when it can. The rule itself is the `run_eligibility` view's: this only
+ *  says which of its facts fell short, so it holds no thresholds. */
+export function disqualifications(run: RunFacts): string[] {
   const why: string[] = [];
-  if (!(BENCHMARK_SUITES as readonly string[]).includes(run.name)) {
+  if (run.competition_target == null || run.min_done == null) {
     why.push("not a benchmark suite");
+    if (!run.finished_at) why.push("not finished");
+    return why;
   }
-  if (run.target_name !== REFERENCE_TARGET) {
-    why.push(`target isn’t ${REFERENCE_TARGET}`);
+  if (run.target_name !== run.competition_target) {
+    why.push(`target isn’t ${run.competition_target}`);
   }
   if (!run.finished_at) why.push("not finished");
   if (run.missing_tasks > 0) {
-    const of = rules.tasks[run.name]?.length ?? 0;
+    const of = run.required_tasks;
     const ran = of - run.missing_tasks;
     why.push(
       `ran ${ran} of the suite’s ${of} ${of === 1 ? "task" : "tasks"}, not a full run`
@@ -323,9 +304,9 @@ export function disqualifications(
   }
   if (run.min_task_done == null) {
     why.push("no tasks");
-  } else if (run.min_task_done < rules.min_done) {
+  } else if (run.min_task_done < run.min_done) {
     why.push(
-      `a task has ${run.min_task_done} completed ${run.min_task_done === 1 ? "trial" : "trials"}, needs ${rules.min_done}`
+      `a task has ${run.min_task_done} completed ${run.min_task_done === 1 ? "trial" : "trials"}, needs ${run.min_done}`
     );
   }
   return why;

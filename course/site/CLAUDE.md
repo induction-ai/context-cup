@@ -64,8 +64,8 @@ Keeping the theme tight:
   for sortable headers and the helpers in `src/lib/sort.ts`.
 - Scores are computed, never stored: a task is the mean over its done
   trials in all its jobs (a `--retry_errors` pass adds jobs to a task), a
-  suite the mean over its tasks (`src/lib/aggregate.ts`, and the SQL in
-  `listSuites`).
+  suite the mean over its tasks (`src/lib/aggregate.ts` for one suite's
+  page, and the `suite_score` view for every list and board).
 - The leaderboard's rule (suites, baselines, reference target,
   the ranking, and `rankCombined` for the combined board at `/leaderboard`)
   is `src/lib/standings.ts`, pure and tested; the pages and the chart only
@@ -74,10 +74,14 @@ Keeping the theme tight:
   SVG with no chart library and a client component: hovering a dot (or its
   table row, through `BoardFocus` in `src/components/board_focus.tsx`)
   shows its score and cost, clicking pins the tooltip until a click
-  elsewhere or Escape. Which run a driver stands on is SQL
-  (`eligible` and `onBoard` in `src/lib/queries.ts`); `disqualifications`
-  states the same rule in TypeScript for the `/suites` column, so change
-  them together. Keep all of it in step with README "Winning". The
+  elsewhere or Escape. Which runs count, and which one a driver stands
+  on, is the `run_eligibility` view (`course/db/src/schema.ts`), and scores
+  are the `suite_score` view; `listSuites` and `loadBoard` read them, and
+  `disqualifications` only words the view's facts for the `/suites` column.
+  The suites, target, and eligibility constants live in
+  `course/shared/src/competition.ts` (`standings.ts` re-exports them for the
+  pages' prose), and `bin/db migrate` writes them to the tables the view
+  judges by; tests write their own with `writeCompetition`. Keep all of it in step with README "Winning". The
   `/rules` page (`app/rules/page.tsx`) is the README's rules for site
   visitors: its numbers come from `standings.ts`, its prose follows the
   README, so a rule change edits both.

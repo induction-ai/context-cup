@@ -1,11 +1,17 @@
 /** Every read the pages make. Plain functions returning rows; the pages do
  *  the rendering and `aggregate.ts` does the arithmetic. */
 import { getCurrentTransaction } from "@context-cup/db/connection.js";
-import { job, modelCall, suite, trial } from "@context-cup/db/schema.js";
+import {
+  job,
+  modelCall,
+  runEligibility,
+  suite,
+  suiteScore,
+  trial,
+} from "@context-cup/db/schema.js";
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
-import { alias, type AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Page, Sort } from "./sort";
-import { ELIGIBILITY, type Eligibility, type Entry } from "./standings";
+import type { Entry } from "./standings";
 
 export type SuiteRow = typeof suite.$inferSelect;
 export type JobRow = typeof job.$inferSelect;
@@ -23,12 +29,17 @@ export type SuiteSummary = SuiteRow & {
   errors: number;
   mean_reward: number | null;
   mean_cost_cents: number | null;
-  /** The fewest done trials any task has (null with no jobs), and whether
-   *  this run is its driver's leaderboard entry; `standings.ts` turns them
-   *  into the leaderboard column. */
-  min_task_done: number | null;
-  /** Tasks of its suite (Eligibility `tasks`) this run never ran. */
+  /** Its eligibility facts, from the `run_eligibility` view; `standings.ts`
+   *  turns them into the leaderboard column. */
+  competition_target: string | null;
+  min_done: number | null;
+  required_tasks: number;
+  /** Tasks of its suite this run never ran. */
   missing_tasks: number;
+  /** The fewest done trials any task has (null with no jobs). */
+  min_task_done: number | null;
+  eligible: boolean;
+  /** Whether this run is its driver's leaderboard entry. */
   on_board: boolean;
 };
 
@@ -49,85 +60,30 @@ export const SUITE_SORT_KEYS = [
 ] as const;
 export type SuiteSortKey = (typeof SUITE_SORT_KEYS)[number];
 
-/** One page of suites, sorted in the database so the slice is right. */
+/** One page of suites, sorted in the database so the slice is right. Scores
+ *  come from the `suite_score` view and eligibility from `run_eligibility`
+ *  (course/db/src/schema.ts). */
 export async function listSuites(options: {
   sort: Sort<SuiteSortKey>;
   page: Page;
-  rules?: Eligibility;
 }): Promise<{ rows: SuiteSummary[]; total: number }> {
   const db = getCurrentTransaction();
-  const rollup = db
-    .select({
-      suite_id: trial.suite_id,
-      trials: sql<number>`count(*)::int`.as("trials"),
-      scored:
-        sql<number>`count(*) filter (where ${trial.reward} is not null and ${trial.error} is null)::int`.as(
-          "scored"
-        ),
-      errors:
-        sql<number>`count(*) filter (where ${trial.error} is not null)::int`.as(
-          "errors"
-        ),
-    })
-    .from(trial)
-    .groupBy(trial.suite_id)
-    .as("rollup");
-  // A task's means over its done trials in all its jobs, then the suite's
-  // mean over its tasks.
-  const done = sql`${trial.reward} is not null and ${trial.error} is null`;
-  const taskMeans = db
-    .select({
-      suite_id: trial.suite_id,
-      task_name: job.task_name,
-      task_reward: sql<
-        number | null
-      >`avg(${trial.reward}) filter (where ${done})`.as("task_reward"),
-      task_cost: sql<
-        number | null
-      >`avg(${trial.cost_cents}) filter (where ${done})`.as("task_cost"),
-    })
-    .from(trial)
-    .innerJoin(job, eq(job.id, trial.job_id))
-    .groupBy(trial.suite_id, job.task_name)
-    .as("task_means");
-  const scores = db
-    .select({
-      suite_id: taskMeans.suite_id,
-      mean_reward: sql<number | null>`avg(${taskMeans.task_reward})`.as(
-        "mean_reward"
-      ),
-      mean_cost_cents: sql<number | null>`avg(${taskMeans.task_cost})`.as(
-        "mean_cost_cents"
-      ),
-    })
-    .from(taskMeans)
-    .groupBy(taskMeans.suite_id)
-    .as("scores");
-  const jobCounts = db
-    .select({
-      suite_id: job.suite_id,
-      tasks: sql<number>`count(distinct ${job.task_name})::int`.as("tasks"),
-    })
-    .from(job)
-    .groupBy(job.suite_id)
-    .as("job_counts");
-
   const sortExpr: Record<SuiteSortKey, SQL> = {
     suite: sql`${suite.id}`,
     name: sql`${suite.name}`,
     driver: sql`${suite.driver_name}`,
     target: sql`${suite.target_name}`,
-    tasks: sql`${jobCounts.tasks}`,
+    tasks: sql`${suiteScore.tasks}`,
     count: sql`${suite.count}`,
     started: sql`${suite.started_at}`,
     duration: sql`${suite.finished_at} - ${suite.started_at}`,
-    trials: sql`${rollup.trials}`,
-    done: sql`${rollup.scored}`,
-    errors: sql`${rollup.errors}`,
-    reward: sql`${scores.mean_reward}`,
-    cost: sql`${scores.mean_cost_cents}`,
+    trials: sql`${suiteScore.trials}`,
+    done: sql`${suiteScore.scored}`,
+    errors: sql`${suiteScore.errors}`,
+    reward: sql`${suiteScore.mean_reward}`,
+    cost: sql`${suiteScore.mean_cost_cents}`,
   };
-  const { sort, page, rules = ELIGIBILITY } = options;
+  const { sort, page } = options;
   const primary =
     sort.dir === "asc"
       ? sql`${sortExpr[sort.key]} asc nulls last`
@@ -137,20 +93,23 @@ export async function listSuites(options: {
     db
       .select({
         suite,
-        tasks: jobCounts.tasks,
-        trials: rollup.trials,
-        scored: rollup.scored,
-        errors: rollup.errors,
-        mean_reward: scores.mean_reward,
-        mean_cost_cents: scores.mean_cost_cents,
-        min_task_done: minTaskDone(suite),
-        missing_tasks: missingTasks(rules, suite),
-        on_board: onBoard(rules),
+        tasks: suiteScore.tasks,
+        trials: suiteScore.trials,
+        scored: suiteScore.scored,
+        errors: suiteScore.errors,
+        mean_reward: suiteScore.mean_reward,
+        mean_cost_cents: suiteScore.mean_cost_cents,
+        competition_target: runEligibility.competition_target,
+        min_done: runEligibility.min_done,
+        required_tasks: runEligibility.required_tasks,
+        missing_tasks: runEligibility.missing_tasks,
+        min_task_done: runEligibility.min_task_done,
+        eligible: runEligibility.eligible,
+        on_board: runEligibility.on_board,
       })
       .from(suite)
-      .leftJoin(jobCounts, eq(jobCounts.suite_id, suite.id))
-      .leftJoin(rollup, eq(rollup.suite_id, suite.id))
-      .leftJoin(scores, eq(scores.suite_id, suite.id))
+      .innerJoin(suiteScore, eq(suiteScore.suite_id, suite.id))
+      .innerJoin(runEligibility, eq(runEligibility.suite_id, suite.id))
       .orderBy(primary, desc(suite.started_at), asc(suite.id))
       .limit(page.per)
       .offset((page.page - 1) * page.per),
@@ -160,15 +119,19 @@ export async function listSuites(options: {
     total: counted?.total ?? 0,
     rows: rows.map((r) => ({
       ...r.suite,
-      tasks: r.tasks ?? 0,
-      trials: r.trials ?? 0,
-      scored: r.scored ?? 0,
-      errors: r.errors ?? 0,
+      tasks: r.tasks,
+      trials: r.trials,
+      scored: r.scored,
+      errors: r.errors,
       mean_reward: r.mean_reward == null ? null : Number(r.mean_reward),
       mean_cost_cents:
         r.mean_cost_cents == null ? null : Number(r.mean_cost_cents),
-      min_task_done: r.min_task_done == null ? null : Number(r.min_task_done),
+      competition_target: r.competition_target,
+      min_done: r.min_done,
+      required_tasks: Number(r.required_tasks),
       missing_tasks: Number(r.missing_tasks),
+      min_task_done: r.min_task_done == null ? null : Number(r.min_task_done),
+      eligible: Boolean(r.eligible),
       on_board: Boolean(r.on_board),
     })),
   };
@@ -254,158 +217,39 @@ export async function loadTrial(
   return { trial: row, job: j, suite: s, calls };
 }
 
-/** The suite columns the eligibility rule reads, from `suite` or an alias. */
-type SuiteCols = Record<"id" | "name" | "finished_at", AnyPgColumn>;
-
-/** The fewest done trials (a reward and no error) any of a run's tasks
- *  has, retry passes included; null for a run with no jobs. */
-function minTaskDone(s: SuiteCols): SQL<number | null> {
-  return sql<number | null>`(
-    select min(task_done.done) from (
-      select count(${trial.id}) filter (
-        where ${trial.reward} is not null and ${trial.error} is null
-      ) as done
-      from ${job} left join ${trial} on ${trial.job_id} = ${job.id}
-      where ${job.suite_id} = ${s.id}
-      group by ${job.task_name}
-    ) as task_done
-  )`;
-}
-
-/** How many of the tasks its suite requires (`rules.tasks`) a run has no
- *  job for: 0 for a full run, or a suite with no required tasks. */
-function missingTasks(rules: Eligibility, s: SuiteCols): SQL<number> {
-  const required = Object.entries(rules.tasks).flatMap(([name, tasks]) =>
-    tasks.map((task) => sql`(${name}, ${task})`)
-  );
-  if (required.length === 0) return sql<number>`0`;
-  return sql<number>`(
-    select count(*)::int
-    from (values ${sql.join(required, sql`, `)}) as required(suite_name, task_name)
-    where required.suite_name = ${s.name}
-      and not exists (
-        select 1 from ${job}
-        where ${job.suite_id} = ${s.id}
-          and ${job.task_name} = required.task_name
-      )
-  )`;
-}
-
-/** A run that can stand on a leaderboard: finished, covering every task its
- *  suite requires, with at least `min_done` done trials in each of its
- *  tasks. `standings.ts` states the same rule over a run's facts. */
-function eligible(rules: Eligibility, s: SuiteCols = suite): SQL {
-  return sql`(${s.finished_at} is not null
-    and ${missingTasks(rules, s)} = 0
-    and coalesce(${minTaskDone(s)}, 0) >= ${rules.min_done})`;
-}
-
-/** The run is its driver's latest eligible one for its suite name and
- *  target: the run that driver's leaderboard entry comes from. */
-function onBoard(rules: Eligibility): SQL<boolean> {
-  const newer = alias(suite, "newer");
-  return sql<boolean>`(${eligible(rules)} and not exists (
-    select 1 from ${suite} ${sql.identifier("newer")}
-    where ${newer.name} = ${suite.name}
-      and ${newer.target_name} = ${suite.target_name}
-      and ${newer.driver_name} = ${suite.driver_name}
-      and (${newer.started_at}, ${newer.id}) > (${suite.started_at}, ${suite.id})
-      and ${eligible(rules, newer)}
-  ))`;
-}
-
-/** Every driver's entry on one board, each from its own most recent
- *  eligible run of the suite at the target (earlier runs do not count):
- *  that run's task means over its done trials, retry passes included, then
- *  the mean over tasks, as a suite is scored. `tasks` is how many tasks the
- *  suite has covered in any run, the count a full benchmark run's cost
- *  multiplies by. */
+/** Every driver's entry on one board: its run that `run_eligibility` puts
+ *  on the board (its most recent eligible run of the suite at the target;
+ *  earlier runs do not count), scored as `suite_score` scores a suite.
+ *  `tasks` is how many tasks the suite has covered in any run, the count a
+ *  full benchmark run's cost multiplies by. */
 export async function loadBoard(
   suite_name: string,
-  target_name: string,
-  rules: Eligibility
+  target_name: string
 ): Promise<{ tasks: number; entries: Entry[] }> {
   const db = getCurrentTransaction();
-  const latest = db
-    .selectDistinctOn([suite.driver_name], {
-      suite_id: sql<string>`${suite.id}`.as("latest_suite_id"),
-      suite_started_at: sql<Date>`${suite.started_at}`.as("latest_started_at"),
-    })
-    .from(suite)
-    .where(
-      and(
-        eq(suite.name, suite_name),
-        eq(suite.target_name, target_name),
-        eligible(rules)
-      )
-    )
-    .orderBy(suite.driver_name, desc(suite.started_at), desc(suite.id))
-    .as("latest");
-  const done = sql`${trial.reward} is not null and ${trial.error} is null`;
-  const taskMeans = db
-    .select({
-      suite_id: trial.suite_id,
-      task_name: trial.task_name,
-      task_reward: sql<
-        number | null
-      >`avg(${trial.reward}) filter (where ${done})`.as("task_reward"),
-      task_cost: sql<
-        number | null
-      >`avg(${trial.cost_cents}) filter (where ${done})`.as("task_cost"),
-    })
-    .from(trial)
-    .innerJoin(latest, eq(latest.suite_id, trial.suite_id))
-    .groupBy(trial.suite_id, trial.task_name)
-    .as("task_means");
-  const scores = db
-    .select({
-      suite_id: taskMeans.suite_id,
-      tasks_scored: sql<number>`count(${taskMeans.task_reward})::int`.as(
-        "tasks_scored"
-      ),
-      mean_reward: sql<number | null>`avg(${taskMeans.task_reward})`.as(
-        "mean_reward"
-      ),
-      mean_cost_cents: sql<number | null>`avg(${taskMeans.task_cost})`.as(
-        "mean_cost_cents"
-      ),
-    })
-    .from(taskMeans)
-    .groupBy(taskMeans.suite_id)
-    .as("scores");
-  const rollup = db
-    .select({
-      suite_id: trial.suite_id,
-      trials: sql<number>`count(*)::int`.as("trials"),
-      scored: sql<number>`count(*) filter (where ${done})::int`.as("scored"),
-      errors:
-        sql<number>`count(*) filter (where ${trial.error} is not null)::int`.as(
-          "errors"
-        ),
-    })
-    .from(trial)
-    .innerJoin(latest, eq(latest.suite_id, trial.suite_id))
-    .groupBy(trial.suite_id)
-    .as("rollup");
-
   const [rows, [counted]] = await Promise.all([
     db
       .select({
-        driver_name: suite.driver_name,
-        suite_id: suite.id,
-        suite_started_at: suite.started_at,
-        trials: rollup.trials,
-        scored: rollup.scored,
-        errors: rollup.errors,
-        tasks_scored: scores.tasks_scored,
-        mean_reward: scores.mean_reward,
-        mean_cost_cents: scores.mean_cost_cents,
+        driver_name: runEligibility.driver_name,
+        suite_id: runEligibility.suite_id,
+        suite_started_at: runEligibility.started_at,
+        trials: suiteScore.trials,
+        scored: suiteScore.scored,
+        errors: suiteScore.errors,
+        tasks_scored: suiteScore.tasks_scored,
+        mean_reward: suiteScore.mean_reward,
+        mean_cost_cents: suiteScore.mean_cost_cents,
       })
-      .from(latest)
-      .innerJoin(suite, eq(suite.id, latest.suite_id))
-      .leftJoin(rollup, eq(rollup.suite_id, latest.suite_id))
-      .leftJoin(scores, eq(scores.suite_id, latest.suite_id))
-      .orderBy(asc(suite.driver_name)),
+      .from(runEligibility)
+      .innerJoin(suiteScore, eq(suiteScore.suite_id, runEligibility.suite_id))
+      .where(
+        and(
+          eq(runEligibility.suite_name, suite_name),
+          eq(runEligibility.target_name, target_name),
+          eq(runEligibility.on_board, true)
+        )
+      )
+      .orderBy(asc(runEligibility.driver_name)),
     db
       .select({
         tasks: sql<number>`count(distinct ${trial.task_name})::int`,
@@ -417,10 +261,6 @@ export async function loadBoard(
     tasks: counted?.tasks ?? 0,
     entries: rows.map((r) => ({
       ...r,
-      trials: r.trials ?? 0,
-      scored: r.scored ?? 0,
-      errors: r.errors ?? 0,
-      tasks_scored: r.tasks_scored ?? 0,
       mean_reward: r.mean_reward == null ? null : Number(r.mean_reward),
       mean_cost_cents:
         r.mean_cost_cents == null ? null : Number(r.mean_cost_cents),

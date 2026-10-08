@@ -1,5 +1,7 @@
 /**
- * `bin/db migrate` applies pending migrations and reports the applied count.
+ * `bin/db migrate` applies pending migrations and reports the applied count,
+ * then writes the competition's rule (course/shared/src/competition.ts) to
+ * the competition tables, so every deploy judges by the rule it ships.
  */
 import "@context-cup/shared/load_env.js";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -7,6 +9,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Client } from "pg";
 import yargs from "yargs";
 import z from "zod";
+import { competitionFacts, writeCompetition } from "../src/competition.ts";
 import { applyMigrations } from "../src/migrations.ts";
 
 // Drizzle's migrator holds no lock of its own; two runs starting from the same
@@ -19,7 +22,9 @@ const LOCK_REPORT_MS = 30 * 1000;
 
 yargs(process.argv.slice(2))
   .scriptName("bin/db migrate")
-  .usage("Usage: $0\n\nApply all pending migrations from drizzle/.")
+  .usage(
+    "Usage: $0\n\nApply all pending migrations from drizzle/, then write the competition rule."
+  )
   .alias("h", "help")
   .strict()
   .parseSync();
@@ -86,6 +91,11 @@ async function main() {
       applied === 0
         ? "[-] No DB migrations to apply."
         : `[✓] ${applied} DB migration${applied === 1 ? "" : "s"} applied successfully!`
+    );
+    const facts = competitionFacts();
+    await drizzle({ client }).transaction((tx) => writeCompetition(tx, facts));
+    console.log(
+      `[✓] Competition rule written: ${facts.map((f) => `${f.suite_name} (${f.tasks.length} tasks)`).join(", ")} at ${facts[0]?.target_name}.`
     );
   } finally {
     await client.end();

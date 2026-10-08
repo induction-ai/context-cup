@@ -1,0 +1,5 @@
+#!/bin/bash
+# The driver registry: sync drivers/ to the database, and list what each
+# driver owes the competition (see course/suite/src/drivers.ts).
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" && exec node_modules/.bin/tsx course/suite/src/drivers_cli.ts "$@"

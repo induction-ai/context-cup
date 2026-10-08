@@ -546,6 +546,8 @@ export type InvocationFacts = {
   harbor_env: string;
   git_sha: string | null;
   harbor_sha: string | null;
+  /** fingerprint.ts: the driver's code as this invocation ran it. */
+  driver_fingerprint: string | null;
   github_run_id: string | null;
   github_run_attempt: number | null;
   github_repository: string | null;
@@ -589,6 +591,7 @@ export async function ingestJob(
         harbor_env: suite.harbor_env,
         git_sha: suite.git_sha,
         harbor_sha: suite.harbor_sha,
+        driver_fingerprint: suite.driver_fingerprint,
         github_run_id: suite.github_run_id,
         github_run_attempt: suite.github_run_attempt,
         github_repository: suite.github_repository,

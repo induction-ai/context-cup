@@ -38,6 +38,7 @@ const SUITE = {
 function stored(overrides: Partial<StoredSuite> = {}): StoredSuite {
   return {
     harbor_sha: null,
+    driver_fingerprint: null,
     github_run_attempt: null,
     github_repository: null,
     ...SUITE,
@@ -176,6 +177,7 @@ describe("ingestJob with invocation facts", () => {
         harbor_env: "docker",
         git_sha: "bbb",
         harbor_sha: "hhh",
+        driver_fingerprint: "v1:appended",
         github_run_id: "2",
         github_run_attempt: 1,
         github_repository: "induction-ai/context-cup",
@@ -189,6 +191,7 @@ describe("ingestJob with invocation facts", () => {
       pass: 2,
       harbor_env: "docker",
       git_sha: "bbb",
+      driver_fingerprint: "v1:appended",
       github_run_id: "2",
     });
   });

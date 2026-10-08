@@ -192,41 +192,52 @@ describe("BENCHMARK_TASKS", () => {
 
 describe("disqualifications", () => {
   const good = {
-    name: "tau_banking",
     target_name: "gpt-6-sol@medium",
     finished_at: new Date("2026-09-25T00:00:00Z"),
+    competition_target: "gpt-6-sol@medium",
+    min_done: 2,
+    required_tasks: 107,
     min_task_done: 2,
     missing_tasks: 0,
   };
 
-  it("clears a finished benchmark run at the reference target with enough done trials", async () => {
+  it("clears a finished benchmark run at its target with enough done trials", async () => {
     expect(disqualifications(good)).toEqual([]);
-    expect(disqualifications({ ...good, name: "toolathlon" })).toEqual([]);
   });
 
-  it("gives every reason a run falls short", async () => {
+  it("gives every reason a benchmark run falls short", async () => {
     expect(
       disqualifications({
-        name: "smoke_tau",
+        ...good,
         target_name: "gpt-5.5@medium",
         finished_at: null,
         min_task_done: 1,
-        missing_tasks: 0,
       })
     ).toEqual([
-      "not a benchmark suite",
       "target isn’t gpt-6-sol@medium",
       "not finished",
       "a task has 1 completed trial, needs 2",
     ]);
-    expect(
-      disqualifications({ ...good, name: "toolathlon", missing_tasks: 106 })
-    ).toEqual(["ran 1 of the suite’s 107 tasks, not a full run"]);
+    expect(disqualifications({ ...good, missing_tasks: 106 })).toEqual([
+      "ran 1 of the suite’s 107 tasks, not a full run",
+    ]);
     expect(disqualifications({ ...good, min_task_done: 0 })).toEqual([
       "a task has 0 completed trials, needs 2",
     ]);
     expect(disqualifications({ ...good, min_task_done: null })).toEqual([
       "no tasks",
     ]);
+  });
+
+  it("stops at not being a benchmark suite", async () => {
+    expect(
+      disqualifications({
+        ...good,
+        competition_target: null,
+        min_done: null,
+        finished_at: null,
+        min_task_done: 1,
+      })
+    ).toEqual(["not a benchmark suite", "not finished"]);
   });
 });

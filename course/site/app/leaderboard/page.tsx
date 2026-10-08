@@ -38,11 +38,7 @@ export default async function CombinedLeaderboard() {
   const boards = Object.fromEntries(
     await Promise.all(
       BENCHMARK_SUITES.map(async (name) => {
-        const { tasks, entries } = await loadBoard(
-          name,
-          REFERENCE_TARGET,
-          ELIGIBILITY
-        );
+        const { tasks, entries } = await loadBoard(name, REFERENCE_TARGET);
         return [name, rankBoard(entries, BASELINES[name], tasks)] as const;
       })
     )

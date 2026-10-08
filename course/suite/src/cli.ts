@@ -1,5 +1,4 @@
 import "@context-cup/shared/load_env.js";
-import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
@@ -31,6 +30,8 @@ import {
   type Selection,
   type SuiteRun,
 } from "./expand.ts";
+import { driverFingerprint } from "./fingerprint.ts";
+import { gitSha } from "./git.ts";
 import {
   assertTaskRunnable,
   buildHarborCommand,
@@ -105,17 +106,6 @@ export function githubRun(env: Record<string, string | undefined>): {
       Number.isInteger(attempt) && attempt > 0 ? attempt : null,
     github_repository: env.GITHUB_REPOSITORY ?? null,
   };
-}
-
-function git_sha(): string | null {
-  try {
-    return execSync("git rev-parse HEAD", {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-    }).trim();
-  } catch {
-    return null;
-  }
 }
 
 function list(value: unknown): string[] | undefined {
@@ -388,8 +378,9 @@ async function main(): Promise<void> {
   report(`results page: ${suiteUrl(suite_id)}`);
   const invocation: InvocationFacts = {
     harbor_env,
-    git_sha: git_sha(),
+    git_sha: gitSha(),
     harbor_sha,
+    driver_fingerprint: driverFingerprint(spec.driver_name),
     ...githubRun(process.env),
   };
   const started_at = base?.suite.started_at ?? new Date();
@@ -630,7 +621,7 @@ async function main(): Promise<void> {
     count,
     started_at: started_at.toISOString(),
     finished_at: finished_at.toISOString(),
-    git_sha: git_sha(),
+    git_sha: gitSha(),
     harbor_sha,
     harbor_env,
     retry_errors,

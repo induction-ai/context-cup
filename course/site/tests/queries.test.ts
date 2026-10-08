@@ -1,3 +1,4 @@
+import { writeCompetition } from "@context-cup/db/competition.js";
 import { getCurrentTransaction } from "@context-cup/db/connection.js";
 import { job, modelCall, suite, trial } from "@context-cup/db/schema.js";
 import {
@@ -288,7 +289,17 @@ describe("listSuites paging and sorting", () => {
 });
 
 describe("leaderboard queries", () => {
-  const rules = { min_done: 2, tasks: { board: ["t1", "t2"] } };
+  /** "board" is judged at gpt-5.5@medium: both tasks, two done trials each. */
+  const judgeBoard = () =>
+    writeCompetition(getCurrentTransaction(), [
+      {
+        suite_name: "board",
+        target_name: "gpt-5.5@medium",
+        provider: "openai",
+        min_done: 2,
+        tasks: ["t1", "t2"],
+      },
+    ]);
 
   /** One run of suite "board" by `driver` at gpt-5.5@medium. `tasks` maps
    *  each task to its trials' rewards per pass (null: an errored trial). */
@@ -360,6 +371,7 @@ describe("leaderboard queries", () => {
   }
 
   it("stands each driver on its latest finished run with enough done trials", async () => {
+    await judgeBoard();
     // a's oldest run is its only eligible one: the next two each have a task
     // with one done trial, the newest has not finished.
     await run("s_a_old", "a", {
@@ -404,11 +416,7 @@ describe("leaderboard queries", () => {
       tasks: { t1: [[1, null, null]], t2: [[1, 1, 1]] },
     });
 
-    const { tasks, entries } = await loadBoard(
-      "board",
-      "gpt-5.5@medium",
-      rules
-    );
+    const { tasks, entries } = await loadBoard("board", "gpt-5.5@medium");
     expect(tasks).toBe(2);
     expect(entries.map((e) => [e.driver_name, e.suite_id])).toEqual([
       ["a", "s_a_old"],
@@ -423,15 +431,12 @@ describe("leaderboard queries", () => {
     expect(b).toMatchObject({ trials: 5, scored: 4, errors: 1 });
     // t1 is (1 + 0) / 2 over both passes, t2 is 1.
     expect(b!.mean_reward).toBeCloseTo(0.75, 6);
-    expect((await loadBoard("board", "gpt-5.5@low", rules)).entries).toEqual(
-      []
-    );
+    expect((await loadBoard("board", "gpt-5.5@low")).entries).toEqual([]);
 
     // The suites index says which run is each driver's entry.
     const { rows } = await listSuites({
       sort: { key: "suite", dir: "asc" },
       page: { page: 1, per: 200 },
-      rules,
     });
     expect(
       Object.fromEntries(

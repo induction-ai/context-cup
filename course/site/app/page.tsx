@@ -38,11 +38,7 @@ export default async function Home() {
     countTrials(),
     loadSampleDrivers(),
     ...BENCHMARK_SUITES.map(async (name) => {
-      const { tasks, entries } = await loadBoard(
-        name,
-        REFERENCE_TARGET,
-        ELIGIBILITY
-      );
+      const { tasks, entries } = await loadBoard(name, REFERENCE_TARGET);
       return { name, tasks, ...rankBoard(entries, BASELINES[name], tasks) };
     }),
   ]);

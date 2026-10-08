@@ -59,6 +59,46 @@ Tests run against one database per vitest worker (`context_cup_test_1`,
 transaction that rolls back afterwards; set `LEAVEDB=true` to keep the rows
 for inspection.
 
+### Scores, eligibility, and the driver registry
+
+Three views (`course/db/src/schema.ts`) hold the competition's arithmetic,
+so the site, `bin/drivers`, and anything else reading the database agree:
+
+- `suite_score`: every run's totals and score, as the leaderboard scores it.
+- `run_eligibility`: whether each run counts (README "Winning"), the facts
+  that decide it, and `on_board`, the run each driver stands on. This is the
+  only statement of the eligibility rule; the site's leaderboard and suites
+  pages read it, and `disqualifications` in `standings.ts` only words its
+  facts.
+- `driver_status`: one row per registered driver and competition suite: its
+  standing run's score, its latest run and why that run does or doesn't
+  count, and a status: `current` (its standing run ran its present code),
+  `running` (a run of its present code is under way), `stale` (it has changed
+  since), or `missing` (no run that counts). A run from before fingerprints
+  were recorded counts as current until a sync sees the driver change.
+
+The rule the views judge by lives in the `competition_suite` and
+`competition_task` tables, which `bin/db migrate` rewrites from
+`course/shared/src/competition.ts` after applying migrations. A deploy runs
+it, so production judges by the rule it ships.
+
+The `driver` table is what `bin/drivers sync` last found under `drivers/`:
+every runnable driver with its fingerprint, a hash over the files of its
+package and every package it extends (`course/suite/src/fingerprint.ts`),
+skipping what `.gitignore` ignores. `bin/suite` records the same fingerprint
+on every suite and trial it runs. On Render, the `drivers-sync` cron runs the
+sync every ten minutes from `main`, the code the Suite workflow runs.
+
+```
+bin/drivers sync [--dry_run]   write drivers/ and their fingerprints to the database
+bin/drivers status [--all]     what each driver owes (--all: current ones too)
+```
+
+drizzle-kit writes a migration's new views in alphabetical order, not the
+order they depend on one another; put `suite_score` before
+`run_eligibility` before `driver_status` by hand when a migration recreates
+them.
+
 ## Running a suite
 
 A run is one suite file, one driver, and one target model.
@@ -288,13 +328,18 @@ GitHub Actions show a link to the workflow run.
 
 ## Deploying
 
-`render/render.yaml` is a Render Blueprint for the site and its Postgres
-database, in one environment. The site builds from the `production` branch;
+`render/render.yaml` is a Render Blueprint for the site, its Postgres
+database, and the `drivers-sync` cron (see "Scores, eligibility, and the
+driver registry"), in one environment. The site builds from the `production` branch;
 `bin/deploy` pushes `origin/main` there (`--commit <sha>` deploys an earlier
 commit of main, `--yes` skips the prompt). Each deploy applies pending
-migrations before it goes live (`pnpm prelaunch`). A package that deploys
+migrations, and writes the competition's rule, before it goes live
+(`pnpm prelaunch`). A package that deploys
 keeps its Render scripts in its own `render/` directory
-(`course/site/render/build.sh`).
+(`course/site/render/build.sh`, `course/suite/render/build.sh`). The cron
+builds from `main`, not `production`, so a migration it needs must be
+deployed before the sync can write; until then each tick fails and the next
+tries again.
 
 The database accepts connections from anywhere, since `bin/suite` writes to
 it from wherever it runs; set the GitHub `DATABASE_URL` secret to its external

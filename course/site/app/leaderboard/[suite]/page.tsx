@@ -45,11 +45,7 @@ export default async function LeaderboardPage({
   const { suite } = await params;
   const suite_name = BENCHMARK_SUITES.find((name) => name === suite);
   if (!suite_name) notFound();
-  const { tasks, entries } = await loadBoard(
-    suite_name,
-    REFERENCE_TARGET,
-    ELIGIBILITY
-  );
+  const { tasks, entries } = await loadBoard(suite_name, REFERENCE_TARGET);
   const { baseline, bar, budget, standings } = rankBoard(
     entries,
     BASELINES[suite_name],
