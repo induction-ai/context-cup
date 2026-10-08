@@ -99,6 +99,22 @@ describe("findDriver", () => {
     );
   });
 
+  it("suggests the driver a typo meant", async () => {
+    const message = (name: string) => {
+      try {
+        findDriver(name, samplePackages());
+      } catch (err) {
+        return (err as Error).message;
+      }
+      throw new Error(`${name} resolved`);
+    };
+    expect(message("basepython")).toContain("Did you mean base_python?");
+    expect(message(" Base_Python")).toContain("Did you mean base_python?");
+    expect(message("base_pyhton")).toContain("Did you mean base_python?");
+    expect(message("base_passthru")).not.toContain("Did you mean");
+    expect(message("")).not.toContain("Did you mean");
+  });
+
   it("scans the real workspace", async () => {
     const pkgs = scanPackages();
     expect(pkgs.get("python")?.kind).toBe("engine");

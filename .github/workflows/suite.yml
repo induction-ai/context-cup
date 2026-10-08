@@ -8,8 +8,9 @@ run-name: >-
 # One bin/suite run: one suite file, one driver, one target. Results go to the
 # database in DATABASE_URL, and the suite row links back to this run. The
 # site's deploy migrates that database (render/render.yaml), so this doesn't.
-# The option lists mirror suites/, drivers/, and targets.json;
-# course/suite/tests/workflow.test.ts fails when they drift.
+# The suite and target option lists mirror suites/ and targets.json;
+# course/suite/tests/workflow.test.ts fails when they drift. The driver is
+# typed, not picked, so new drivers need no edit here.
 on:
   workflow_dispatch:
     inputs:
@@ -25,21 +26,13 @@ on:
           - tau_banking
           - toolathlon
           - toolathlon_local
+      # Free text rather than a choice so a merged driver is runnable at once,
+      # without a follow-up edit here; bin/suite rejects any name that isn't
+      # a runnable package under drivers/.
       driver:
-        description: "Driver (drivers/<driver>)"
+        description: "Driver: its folder under drivers/ (e.g. base_python)"
         required: true
-        type: choice
-        default: "<choose a driver>"
-        options:
-          - "<choose a driver>"
-          - base_agent
-          - base_aisdk
-          - base_codex
-          - base_litellm
-          - base_pydantic
-          - base_python
-          - base_typescript
-          - contextsbane_9000
+        type: string
       target:
         description: "Target model (targets.json); the driver must support its provider"
         required: true
@@ -102,20 +95,33 @@ jobs:
 
     steps:
       # A choice input can't be empty and required: true is always satisfied,
-      # so the defaults are sentinels and the run fails fast here instead of
-      # benchmarking a suite or driver nobody picked.
+      # so the suite default is a sentinel and the run fails fast here instead
+      # of benchmarking a suite nobody picked. A dispatch through the API can
+      # still leave the driver blank.
       - name: Require an explicit suite and driver
-        if: inputs.suite == '<choose a suite>' || inputs.driver == '<choose a driver>'
+        if: inputs.suite == '<choose a suite>' || inputs.driver == ''
         env:
           SUITE: ${{ inputs.suite }}
           DRIVER: ${{ inputs.driver }}
         run: |
           [ "$SUITE" = "<choose a suite>" ] && echo "::error::No suite selected; re-run and pick a suite from the dropdown."
-          [ "$DRIVER" = "<choose a driver>" ] && echo "::error::No driver selected; re-run and pick a driver from the dropdown."
+          [ -z "$DRIVER" ] && echo "::error::No driver given; re-run and name a folder under drivers/."
           exit 1
 
       - name: Checkout code
         uses: actions/checkout@v5
+
+      # The driver is typed, so catch a typo before the minutes of setup.
+      # bin/suite still decides whether the package is runnable.
+      - name: Require an existing driver
+        env:
+          DRIVER: ${{ inputs.driver }}
+        run: |
+          case "$DRIVER" in */*|.*) ok=false ;; *) [ -d "drivers/$DRIVER" ] && ok=true || ok=false ;; esac
+          if [ "$ok" != true ]; then
+            echo "::error::No driver '$DRIVER' under drivers/. Drivers: $(ls drivers | tr '\n' ' ')"
+            exit 1
+          fi
 
       # Whether the run has toolathlon tasks, which decides the auth steps.
       - name: Detect toolathlon suite

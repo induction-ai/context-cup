@@ -185,17 +185,18 @@ every request and response body under the trial's `agent/bodies/`.
 ## Running in GitHub Actions
 
 The **Suite** workflow (`.github/workflows/suite.yml`, run from the Actions
-tab) is `bin/suite` on a hosted runner: pick the suite, driver, and target
-(the suite and driver have no default),
-and optionally a count and tasks. It runs on Daytona by default. It runs the
+tab) is `bin/suite` on a hosted runner: pick the suite and target, type the
+driver's folder name under `drivers/` (the suite and driver have no
+default), and optionally a count and tasks. A merged driver is runnable
+straight away, with no edit to the workflow. It runs on Daytona by default. It runs the
 suite against the deployed database (the site's deploy migrates it), deletes the run's Daytona sandboxes (including
 after a cancel), writes the results table to the run summary, and uploads
 two artifacts: `suite-summary` (results and the suite log) and `suite-logs`
 (all of `.temp/suites/`). Toolathlon runs take turns, restore the notion
 login, and write it back when it rotated. The suite row records the
 workflow run id, attempt, and repository, and the results site links back to
-the run. The option lists mirror `suites/`, `drivers/`, and `targets.json`,
-and a test fails when they drift.
+the run. The suite and target option lists mirror `suites/` and
+`targets.json`, and a test fails when they drift.
 
 **Daytona sweep** runs hourly and deletes context-cup sandboxes
 whose build failed more than 12 hours earlier.

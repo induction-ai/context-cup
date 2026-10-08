@@ -176,11 +176,45 @@ export function findDriver(
     const drivers = [...packages.values()]
       .filter(isRunnable)
       .map((p) => p.name);
+    const near = closestName(name, drivers);
     throw new Error(
-      `Unknown driver "${name}". Drivers in the workspace: ${drivers.join(", ") || "(none)"}`
+      `Unknown driver "${name}".${near ? ` Did you mean ${near}?` : ""} Drivers in the workspace: ${drivers.join(", ") || "(none)"}`
     );
   }
   return pkg;
+}
+
+/** The name a typo most likely meant: one that differs only in case,
+ *  spacing, or punctuation, else the nearest within two edits. */
+function closestName(typed: string, names: string[]): string | undefined {
+  const fold = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const folded = fold(typed);
+  if (!folded) return undefined;
+  const same = names.find((n) => fold(n) === folded);
+  if (same) return same;
+  let best: string | undefined;
+  let bestDistance = 3;
+  for (const n of names) {
+    const d = editDistance(folded, fold(n));
+    if (d < bestDistance) [best, bestDistance] = [n, d];
+  }
+  return best;
+}
+
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(
+        prev[j]! + 1,
+        row[j - 1]! + 1,
+        prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    prev = row;
+  }
+  return prev[b.length]!;
 }
 
 /** The package directories of a driver's chain, root to leaf, as the

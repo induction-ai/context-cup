@@ -7,7 +7,6 @@ import {
   it,
 } from "@context-cup/shared/test_helpers/index.js";
 import { listSuiteKeys } from "../src/keys.ts";
-import { isRunnable, scanPackages } from "../src/packages.ts";
 import { loadTargets } from "../src/targets.ts";
 
 const WORKFLOW = path.join(REPO_ROOT, ".github", "workflows", "suite.yml");
@@ -40,17 +39,6 @@ describe("suite workflow", () => {
     expect(inputOptions(yaml, "suite")).toEqual([
       "<choose a suite>",
       ...listSuiteKeys().sort(),
-    ]);
-  });
-
-  it("offers every runnable driver", async () => {
-    const drivers = [...scanPackages().values()]
-      .filter(isRunnable)
-      .map((p) => p.name)
-      .sort();
-    expect(inputOptions(yaml, "driver")).toEqual([
-      "<choose a driver>",
-      ...drivers,
     ]);
   });
 
