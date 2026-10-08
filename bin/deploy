@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy by pushing origin/main to the production branch, which Render watches
-# (see render/render.yaml) and builds on push.
+# and builds on push.
 #
 # Usage: bin/deploy [--yes] [--commit <sha>]
 #   --yes           skip the confirmation prompt (for CI)

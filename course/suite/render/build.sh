@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Render build command for the drivers-sync cron (render/render.yaml).
+# Render build command for the drivers-sync cron.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

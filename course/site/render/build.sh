@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Render build command for the site (buildCommand in render/render.yaml).
+# Render build command for the site.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

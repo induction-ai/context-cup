@@ -328,18 +328,16 @@ GitHub Actions show a link to the workflow run.
 
 ## Deploying
 
-`render/render.yaml` is a Render Blueprint for the site, its Postgres
-database, and the `drivers-sync` cron (see "Scores, eligibility, and the
-driver registry"), in one environment. The site builds from the `production` branch;
-`bin/deploy` pushes `origin/main` there (`--commit <sha>` deploys an earlier
-commit of main, `--yes` skips the prompt). Each deploy applies pending
-migrations, and writes the competition's rule, before it goes live
-(`pnpm prelaunch`). A package that deploys
-keeps its Render scripts in its own `render/` directory
-(`course/site/render/build.sh`, `course/suite/render/build.sh`). The cron
-builds from `main`, not `production`, so a migration it needs must be
-deployed before the sync can write; until then each tick fails and the next
-tries again.
+The site, its Postgres database, and the `drivers-sync` cron (see "Scores,
+eligibility, and the driver registry") run on Render. The site builds from the
+`production` branch; `bin/deploy` pushes `origin/main` there (`--commit <sha>`
+deploys an earlier commit of main, `--yes` skips the prompt). Each deploy
+applies pending migrations, and writes the competition's rule, before it goes
+live (`pnpm prelaunch`). A package that deploys keeps its Render scripts in
+its own `render/` directory (`course/site/render/build.sh`,
+`course/suite/render/build.sh`). The cron builds from `main`, not
+`production`, so a migration it needs must be deployed before the sync can
+write; until then each tick fails and the next tries again.
 
 The database accepts connections from anywhere, since `bin/suite` writes to
 it from wherever it runs; set the GitHub `DATABASE_URL` secret to its external

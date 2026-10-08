@@ -7,7 +7,7 @@ run-name: >-
 
 # One bin/suite run: one suite file, one driver, one target. Results go to the
 # database in DATABASE_URL, and the suite row links back to this run. The
-# site's deploy migrates that database (render/render.yaml), so this doesn't.
+# site's deploy migrates that database (pnpm prelaunch), so this doesn't.
 # The suite and target option lists mirror suites/ and targets.json;
 # course/suite/tests/workflow.test.ts fails when they drift. The driver is
 # typed, not picked, so new drivers need no edit here.
