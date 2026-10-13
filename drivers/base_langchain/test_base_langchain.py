@@ -58,6 +58,11 @@ mcp.run()
 """
 
 REPLIES = [
+    # The course's cache-bust tool, called anyway: answered by the agent.
+    AIMessage(
+        content="",
+        tool_calls=[{"id": "b1", "name": "cache_bust_trial", "args": {}}],
+    ),
     AIMessage(
         content="",
         tool_calls=[{"id": "c1", "name": "add", "args": {"a": 2, "b": 3}}],
@@ -96,7 +101,7 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
     for name, value in {
         "CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "gpt-5.5"}),
         "CC_DRIVER_DIR": str(tmp_path),
-        "CC_CONFIG": json.dumps({"max_bytes": 10}),
+        "CC_CONFIG": json.dumps({"max_bytes": 20}),
         "CC_INSTRUCTION_FILE": str(tmp_path / "instruction.md"),
         "CC_MCP_SERVERS_JSON": json.dumps(servers),
         "CC_RESULT_FILE": str(tmp_path / "result.json"),
@@ -104,6 +109,7 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
         "OPENAI_API_KEY": "cc-proxy",
         "CC_SYSTEM_PROMPT": "Work in /workspace.",
         "CC_HARNESS_TOOLS": "configure_run,record_termination",
+        "CC_CACHE_BUST_TOOL": "cache_bust_trial",
     }.items():
         monkeypatch.setenv(name, value)
     replies: Iterator[BaseMessage] = iter(REPLIES)
@@ -115,15 +121,21 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
     assert [m.type for m in first] == ["system", "human"]
     assert first[0].text == "Work in /workspace."
     assert first[1].text == "Add 2 and 3."
-    assert [t.name for t in scripted.bound[0]] == ["add"]
+    assert [t.name for t in scripted.bound[0]] == ["cache_bust_trial", "add"]
+    assert scripted.bound[0][0].description == "Never call this tool."
+    answered = scripted.sent[1][-1]
+    assert answered.type == "tool" and answered.tool_call_id == "b1"
+    assert answered.content == '{"success": true}'
     last = scripted.sent[-1][-1]
     assert last.type == "tool" and last.tool_call_id == "c1"
     assert (
-        last.content == "5 xxxxxxxx\n\n[truncated by base_langchain: 42 bytes removed]"
+        last.content
+        == "5 xxxxxxxxxxxxxxxxxx\n\n[truncated by base_langchain: 32 bytes removed]"
     )
     result = json.loads((tmp_path / "result.json").read_text())
     assert result["stop_reason"] == "agent_done"
-    assert (result["turns"], result["env_tool_calls"]) == (2, 1)
+    # The cache-bust call was a turn but no environment tool call.
+    assert (result["turns"], result["env_tool_calls"]) == (3, 1)
     assert result["messages"][-1]["data"]["content"] == "It is 5."
 
 

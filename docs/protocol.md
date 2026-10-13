@@ -254,6 +254,20 @@ turn) and from then on appends in native form: the response's output
 (reasoning items, thought signatures and all) and the tool results for the
 calls it made.
 
+The tool list opens with the trial's **cache-bust tool**: `cache_bust_` and
+the trial id (`cache_bust_tau3-banking_knowledge-task-047__C6gys3m`),
+described "Never call this tool." Providers cache prompts by prefix, and the
+tools head the prompt, so without it two trials of one task would share a
+cached prefix and one trial's calls would be discounted by another's,
+whether the two ran side by side or days apart. A name that differs per
+trial puts a difference at the front of every request: a trial caches only
+against itself, and its cost is its own. The course answers a call to it
+with `{"success": true}` and tells the environment nothing; such a call is
+not an environment tool call, so it is not in `env_tool_calls`, though the
+turn is a turn. A driver that rebuilds the tool list should keep it. The
+naming rule is `context_cup_protocol.cache_bust`, and the same rule names
+the tool an agent driver gets as `CC_CACHE_BUST_TOOL` (Agent drivers, below).
+
 ## input.json
 
 ```json
@@ -516,17 +530,18 @@ the task bundle. Then it runs `agent.sh` once, as `ccdriver`, from the package
 directory. Besides the script variables above and the proxy's base URLs and
 placeholder keys, `agent.sh` gets:
 
-| var                   | meaning                                                                                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `CC_INSTRUCTION_FILE` | harbor's instruction for the task                                                                                                                                        |
-| `CC_MCP_SERVERS_JSON` | the task's MCP servers, `[{name, transport, url, command, args}]`: its tools                                                                                             |
-| `CC_TARGET_JSON`      | `{provider, model, reasoning_effort}`                                                                                                                                    |
-| `CC_MAX_STEPS`        | the course's step cap for the benchmark                                                                                                                                  |
-| `CC_AGENT_DIR`        | the trial's agent log directory                                                                                                                                          |
-| `CC_RESULT_FILE`      | where the agent may write its result                                                                                                                                     |
-| `CC_CONFIG`           | the `config` of the agent's manifest, as JSON                                                                                                                            |
-| `CC_SYSTEM_PROMPT`    | the benchmark's system prompt, when it has one outside the instruction                                                                                                   |
-| `CC_HARNESS_TOOLS`    | comma-separated MCP tools the harness owns (tau3's runtime controls): listed by the server, never to be offered to the model, since calling one undoes the trial's setup |
+| var                   | meaning                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CC_INSTRUCTION_FILE` | harbor's instruction for the task                                                                                                                                                                                                                                                                                                                                |
+| `CC_MCP_SERVERS_JSON` | the task's MCP servers, `[{name, transport, url, command, args}]`: its tools                                                                                                                                                                                                                                                                                     |
+| `CC_TARGET_JSON`      | `{provider, model, reasoning_effort}`                                                                                                                                                                                                                                                                                                                            |
+| `CC_MAX_STEPS`        | the course's step cap for the benchmark                                                                                                                                                                                                                                                                                                                          |
+| `CC_AGENT_DIR`        | the trial's agent log directory                                                                                                                                                                                                                                                                                                                                  |
+| `CC_RESULT_FILE`      | where the agent may write its result                                                                                                                                                                                                                                                                                                                             |
+| `CC_CONFIG`           | the `config` of the agent's manifest, as JSON                                                                                                                                                                                                                                                                                                                    |
+| `CC_SYSTEM_PROMPT`    | the benchmark's system prompt, when it has one outside the instruction                                                                                                                                                                                                                                                                                           |
+| `CC_HARNESS_TOOLS`    | comma-separated MCP tools the harness owns (tau3's runtime controls): listed by the server, never to be offered to the model, since calling one undoes the trial's setup                                                                                                                                                                                         |
+| `CC_CACHE_BUST_TOOL`  | the name of the trial's cache-bust tool (Payloads, above): an agent that builds its own tool list opens it with a tool of this name, described "Never call this tool.", answers a call to it with `{"success": true}` itself, and leaves such calls out of `env_tool_calls`. An agent whose tool list is not its own to build (harbor's Codex) gets no such tool |
 
 Call the task's tools one at a time, in the order the model asked for them,
 as the course's own loop does: tau3's runtime logs each call for its

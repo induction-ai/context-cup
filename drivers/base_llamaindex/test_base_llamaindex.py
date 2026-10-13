@@ -64,6 +64,8 @@ mcp.run()
 """
 
 REPLIES: list[dict[str, Any]] = [
+    # The course's cache-bust tool, called anyway: answered by the agent.
+    {"content": "", "tool_calls": [("b1", "cache_bust_trial", {})]},
     {"content": "", "tool_calls": [("c1", "add", {"a": 2, "b": 3})]},
     {"content": ""},  # blank: asked again
     {"content": "It is 5."},
@@ -161,7 +163,7 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
     for name, value in {
         "CC_TARGET_JSON": json.dumps({"provider": "openai", "model": "gpt-5.5"}),
         "CC_DRIVER_DIR": str(tmp_path),
-        "CC_CONFIG": json.dumps({"max_bytes": 10}),
+        "CC_CONFIG": json.dumps({"max_bytes": 20}),
         "CC_INSTRUCTION_FILE": str(tmp_path / "instruction.md"),
         "CC_MCP_SERVERS_JSON": json.dumps(servers(tmp_path)),
         "CC_RESULT_FILE": str(tmp_path / "result.json"),
@@ -169,6 +171,7 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
         "OPENAI_API_KEY": "cc-proxy",
         "CC_SYSTEM_PROMPT": "Work in /workspace.",
         "CC_HARNESS_TOOLS": "configure_run,record_termination",
+        "CC_CACHE_BUST_TOOL": "cache_bust_trial",
     }.items():
         monkeypatch.setenv(name, value)
     scripted = ScriptedLLM(replies=list(REPLIES), sent=[], tools=[])
@@ -179,18 +182,24 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
     assert [m.role for m in first] == [MessageRole.SYSTEM, MessageRole.USER]
     assert first[0].content == "Work in /workspace."
     assert first[1].content == "Add 2 and 3."
-    assert scripted.tools[0] == ["add"]
-    last = scripted.sent[1][-1]
+    assert scripted.tools[0] == ["cache_bust_trial", "add"]
+    answered = scripted.sent[1][-1]
+    assert answered.role == MessageRole.TOOL
+    assert answered.additional_kwargs["tool_call_id"] == "b1"
+    assert answered.content == '{"success": true}'
+    last = scripted.sent[2][-1]
     assert last.role == MessageRole.TOOL
     assert last.additional_kwargs["tool_call_id"] == "c1"
     assert (
-        last.content == "5 xxxxxxxx\n\n[truncated by base_llamaindex: 42 bytes removed]"
+        last.content
+        == "5 xxxxxxxxxxxxxxxxxx\n\n[truncated by base_llamaindex: 32 bytes removed]"
     )
     # Asked again after the blank reply, from the conversation without it.
-    assert [m.role for m in scripted.sent[2]][-1] == MessageRole.TOOL
+    assert [m.role for m in scripted.sent[3]][-1] == MessageRole.TOOL
     result = json.loads((tmp_path / "result.json").read_text())
     assert result["stop_reason"] == "agent_done"
-    assert (result["turns"], result["env_tool_calls"]) == (2, 1)
+    # The cache-bust call was a turn but no environment tool call.
+    assert (result["turns"], result["env_tool_calls"]) == (3, 1)
     assert result["messages"][-1]["blocks"][0]["text"] == "It is 5."
 
 

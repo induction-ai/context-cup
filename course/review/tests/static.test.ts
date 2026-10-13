@@ -88,6 +88,43 @@ function typescriptDriver(): Record<string, string> {
   };
 }
 
+const AGENT_PYPROJECT = `[project]
+name = "my-agent"
+version = "0.1.0"
+description = "A whole agent of its own."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.context-cup]
+kind = "agent"
+providers = ["openai"]
+`;
+
+const AGENT_PY = `import os
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": os.environ["CC_CACHE_BUST_TOOL"],
+            "description": "Never call this tool.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+]
+`;
+
+/** A script agent that passes every check. */
+function agentDriver(): Record<string, string> {
+  return {
+    "pyproject.toml": AGENT_PYPROJECT,
+    "agent.sh": 'exec uv run --project "$CC_SELF_DIR" python agent.py\n',
+    "agent.py": AGENT_PY,
+    "README.md": "# my_agent\n\nIts own loop over the task's tools.\n",
+    "test_my_agent.py": "def test_nothing() -> None:\n    pass\n",
+  };
+}
+
 /** A workspace in a temp dir: the real engines, and drivers written here. */
 let root: string;
 let tracked: string[];
@@ -206,6 +243,27 @@ describe("driver", () => {
     files["driver.py"] = "def helper() -> None:\n    pass\n";
     delete files["README.md"];
     expect(checks(errors(reviewNew(files)))).toEqual(["Entry point", "README"]);
+  });
+
+  it("requires a script agent to take up the trial's cache-bust tool", async () => {
+    const passing = reviewNew(agentDriver(), { name: "my_agent" });
+    expect(errors(passing)).toEqual([]);
+    expect(passing.passed).toContain("Reads the cache-bust tool's name");
+
+    const files = agentDriver();
+    files["agent.py"] = "tools = []\n";
+    // A test that mentions it is not the agent reading it.
+    files["test_my_agent.py"] =
+      'def test_it() -> None:\n    assert "CC_CACHE_BUST_TOOL"\n';
+    const review = reviewNew(files, { name: "other_agent" });
+    expect(checks(errors(review))).toEqual(["Cache-bust tool"]);
+    expect(errors(review)[0]!.message).toContain("CC_CACHE_BUST_TOOL");
+    expect(errors(review)[0]!.file).toBe("drivers/other_agent/agent.sh");
+
+    // A turn-protocol driver never builds the list, so it owes nothing here.
+    expect(reviewNew(pythonDriver()).passed).not.toContain(
+      "Reads the cache-bust tool's name"
+    );
   });
 
   it("fails an engine, a harbor agent, or a driver that can't run at the reference target", async () => {

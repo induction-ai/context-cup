@@ -78,7 +78,13 @@ def test_two_turn_happy_path_openai(workspace):
 
     payload = second["context_payload"]
     assert payload["instructions"] == "sys"
-    assert payload["tools"][0] == {
+    # The trial's cache-bust tool opens the list, ahead of the environment's.
+    assert [t["name"] for t in payload["tools"]] == [
+        "cache_bust_task-1__abc123",
+        "echo",
+    ]
+    assert payload["tools"][0]["description"] == "Never call this tool."
+    assert payload["tools"][1] == {
         "type": "function",
         "name": "echo",
         "description": "",
@@ -172,7 +178,11 @@ def test_two_turn_happy_path_other_providers(workspace, provider):
             {"type": "tool_result", "tool_use_id": "c1", "content": "ok:echo"}
         ]
         assert payload["thinking"] == {"type": "enabled", "budget_tokens": 2048}
-        assert payload["tools"][0]["input_schema"] == {"type": "object"}
+        assert [t["name"] for t in payload["tools"]] == [
+            "cache_bust_task-1__abc123",
+            "echo",
+        ]
+        assert payload["tools"][1]["input_schema"] == {"type": "object"}
     else:
         roles = [c["role"] for c in payload["contents"]]
         assert roles == ["user", "model", "user", "model", "user"]
@@ -187,7 +197,8 @@ def test_two_turn_happy_path_other_providers(workspace, provider):
             }
         ]
         assert payload["systemInstruction"] == {"parts": [{"text": "sys"}]}
-        assert payload["tools"][0]["functionDeclarations"][0]["name"] == "echo"
+        declared = payload["tools"][0]["functionDeclarations"]
+        assert [d["name"] for d in declared] == ["cache_bust_task-1__abc123", "echo"]
     trajectory = json.loads((workspace["agent"] / "trajectory.json").read_text())
     assert [s["source"] for s in trajectory["steps"]] == [
         "system",
@@ -414,6 +425,45 @@ def test_stop_tool_and_max_steps(workspace):
     )
     assert result.stop_reason == "max_steps"
     assert result.turns == 3
+
+
+def test_the_cache_bust_tool_is_answered_by_the_loop_not_the_environment(workspace):
+    bust = "cache_bust_task-1__abc123"
+    write_script(
+        workspace["driver"],
+        [
+            # Only the cache-bust tool: the environment hears nothing, the
+            # trial goes on.
+            {"text": None, "tool_calls": [call("b1", bust)]},
+            # Beside an environment call: each gets its own answer, in order.
+            {"text": None, "tool_calls": [call("c1", "echo", x=1), call("b2", bust)]},
+            {"text": "all done"},
+        ],
+    )
+    env = MemoryEnvironment()
+    result = run(Trial(make_settings(workspace), env))
+
+    assert result.stop_reason == "final_message"
+    assert result.turns == 3
+    assert result.env_tool_calls == 1
+    assert [c.id for c in env.received[0]] == ["c1"]
+    assert env.received[1] == "all done"
+
+    inputs = turn_inputs(workspace["agent"])
+    outputs = [
+        (i["call_id"], i["output"])
+        for i in inputs[2]["original_payload"]["input"]
+        if i.get("type") == "function_call_output"
+    ]
+    assert outputs == [
+        ("b1", '{"success": true}'),
+        ("c1", "ok:echo"),
+        ("b2", '{"success": true}'),
+    ]
+    trajectory = json.loads((workspace["agent"] / "trajectory.json").read_text())
+    assert trajectory["agent"]["tool_definitions"][0]["function"]["name"] == bust
+    summary = json.loads((workspace["agent"] / "summary.json").read_text())
+    assert summary["env_tool_calls"] == 1
 
 
 def test_user_replies_are_appended(workspace):

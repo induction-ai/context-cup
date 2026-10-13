@@ -28,6 +28,13 @@ placeholder keys, and:
   CC_HARNESS_TOOLS      comma-separated MCP tools the harness owns (tau3's
                         runtime controls): listed by the server, not for the
                         model; calling one undoes the trial's setup
+  CC_CACHE_BUST_TOOL    the name of the trial's cache-bust tool: an agent
+                        that builds its own tool list opens it with a tool
+                        of this name, described "Never call this tool.", so
+                        no two trials share a provider's cached prompt
+                        prefix, and answers a call to it with
+                        {"success": true} itself (docs/protocol.md,
+                        "Payloads")
 
 The agent works the task and exits; a non-zero exit fails the trial. Its
 output goes to the trial's runner.txt. What it writes to CC_RESULT_FILE, all
@@ -48,7 +55,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from context_cup_protocol import adapter_for
+from context_cup_protocol import adapter_for, cache_bust_tool_name
 
 from . import __version__
 from .atif import build_trajectory
@@ -120,6 +127,7 @@ def run(env: dict[str, str]) -> int:
             "CC_AGENT_DIR": str(agent_dir),
             "CC_RESULT_FILE": str(result_file),
             "CC_CONFIG": json.dumps(package.config),
+            "CC_CACHE_BUST_TOOL": cache_bust_tool_name(trial_id),
             **setup,
         },
     )

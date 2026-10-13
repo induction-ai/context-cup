@@ -2,6 +2,12 @@
 and the engines: the models of `input.json` and `output.json`, one adapter
 per provider for native payloads, and a provider-neutral view of them."""
 
+from .cache_bust import (
+    CACHE_BUST_TOOL_PREFIX,
+    CACHE_BUST_TOOL_RESULT,
+    cache_bust_tool,
+    cache_bust_tool_name,
+)
 from .engine import EngineContext, run_engine
 from .manifest import Manifest, read_manifest, read_pyproject
 from .models import (
@@ -34,6 +40,8 @@ from .snapshot import load_snapshot, save_snapshot
 from .view import Conversation, Message, Tool, ToolCall, view, write
 
 __all__ = [
+    "CACHE_BUST_TOOL_PREFIX",
+    "CACHE_BUST_TOOL_RESULT",
     "PLACEHOLDER_KEY",
     "PROTOCOL_VERSION",
     "PROVIDERS",
@@ -61,6 +69,8 @@ __all__ = [
     "Utterance",
     "Wire",
     "adapter_for",
+    "cache_bust_tool",
+    "cache_bust_tool_name",
     "function_schemas",
     "load_snapshot",
     "proxy_base_url",

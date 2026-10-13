@@ -34,6 +34,19 @@ def test_typescript_and_python_agree_on_providers_and_wires() -> None:
     )
 
 
+@pytest.mark.parametrize("agent", ["base_agent", "base_langchain", "base_llamaindex"])
+def test_the_script_agents_offer_the_cache_bust_tool_as_the_course_describes_it(
+    agent: str,
+) -> None:
+    """The agents can't import the protocol (their venvs are their own), so
+    they restate the tool's description and answer; this keeps them equal."""
+    source = (ROOT / "drivers" / agent / "agent.py").read_text()
+    assert "CC_CACHE_BUST_TOOL" in source
+    assert f'"{protocol.cache_bust.CACHE_BUST_TOOL_DESCRIPTION}"' in source
+    assert 'json.dumps({"success": True})' in source
+    assert json.dumps({"success": True}) == protocol.CACHE_BUST_TOOL_RESULT
+
+
 def test_a_runner_built_input_is_what_the_engine_reads() -> None:
     adapter = protocol.adapter_for("openai")
     payload = adapter.initial_payload(

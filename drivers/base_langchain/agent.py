@@ -46,7 +46,7 @@ from langchain_core.messages import (
     ToolMessage,
     messages_to_dict,
 )
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.sessions import Connection
@@ -278,12 +278,33 @@ async def connect(
     return tools
 
 
-def summary(messages: list[BaseMessage], max_steps: int) -> dict[str, Any]:
+CACHE_BUST_RESULT = json.dumps({"success": True})
+
+
+def cache_bust_tool(name: str) -> BaseTool:
+    """The trial's cache-bust tool, named by the course (`CC_CACHE_BUST_TOOL`):
+    it opens the tool list so no two trials share a provider's cached prompt
+    prefix. The model is told never to call it; a call is answered here."""
+
+    def never_call() -> str:
+        return CACHE_BUST_RESULT
+
+    return StructuredTool.from_function(
+        func=never_call, name=name, description="Never call this tool."
+    )
+
+
+def summary(
+    messages: list[BaseMessage], max_steps: int, cache_bust: str | None
+) -> dict[str, Any]:
     replies = [m for m in messages if isinstance(m, AIMessage)]
     counts = {
         # A blank reply the run gave up on is not a turn, as in base_agent.
         "turns": len(replies) - (1 if blank(messages) else 0),
-        "env_tool_calls": sum(isinstance(m, ToolMessage) for m in messages),
+        "env_tool_calls": sum(
+            isinstance(m, ToolMessage) and not (cache_bust and m.name == cache_bust)
+            for m in messages
+        ),
     }
     if len(replies) > max_steps:
         # ModelCallLimitMiddleware ended the run with a message of its own
@@ -312,6 +333,9 @@ async def main() -> int:
             # controls) are listed by the server but never offered.
             hidden = set(filter(None, env.get("CC_HARNESS_TOOLS", "").split(",")))
             tools = await connect(stack, json.loads(env["CC_MCP_SERVERS_JSON"]), hidden)
+            cache_bust = env.get("CC_CACHE_BUST_TOOL")
+            if cache_bust:
+                tools.insert(0, cache_bust_tool(cache_bust))
             print(f"[agent] {len(tools)} tools", flush=True)
             agent = create_agent(
                 model(target),
@@ -333,7 +357,7 @@ async def main() -> int:
                 config={"recursion_limit": NODES_PER_STEP * max_steps + 10},
             )
             messages = state["messages"]
-            result.update(summary(messages, max_steps))
+            result.update(summary(messages, max_steps, cache_bust))
             if result["stop_reason"] == "agent_done":
                 print(f"[agent] done: {messages[-1].text[:500]}", flush=True)
     finally:

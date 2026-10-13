@@ -10,7 +10,7 @@ from context_cup_runner.script_agent import run
 
 AGENT = """#!/usr/bin/env bash
 set -euo pipefail
-echo "$CC_INSTRUCTION_FILE|$OPENAI_BASE_URL|$OPENAI_API_KEY|$CC_MAX_STEPS" > "$CC_AGENT_DIR/seen.txt"
+echo "$CC_INSTRUCTION_FILE|$OPENAI_BASE_URL|$OPENAI_API_KEY|$CC_MAX_STEPS|$CC_CACHE_BUST_TOOL" > "$CC_AGENT_DIR/seen.txt"
 echo "${CC_SYSTEM_PROMPT:-none}" > "$CC_AGENT_DIR/system.txt"
 echo "$CC_CONFIG" > "$CC_AGENT_DIR/config.txt"
 cat > "$CC_RESULT_FILE" <<'JSON'
@@ -56,7 +56,7 @@ def test_the_agent_gets_the_task_and_the_proxy_and_its_result_is_kept(
     assert run(env) == 0
     agent_dir = tmp_path / "agent"
     assert (agent_dir / "seen.txt").read_text().strip() == (
-        "/i.md|http://127.0.0.1:18080/t/trial-1/openai/v1|cc-proxy|200"
+        "/i.md|http://127.0.0.1:18080/t/trial-1/openai/v1|cc-proxy|200|cache_bust_trial-1"
     )
     summary = json.loads((agent_dir / "summary.json").read_text())
     assert summary["stop_reason"] == "agent_done"

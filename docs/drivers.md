@@ -36,7 +36,12 @@ In the engine lanes the course owns the loop: every turn it writes
 tools it asked for, appends the results, and calls you again. A turn ends
 when the model asks for an environment tool or answers in text. Tools a
 driver owns itself (a memory, a summariser) run inside your turn and never
-reach the course. Neither environment cuts a tool result: it reaches your
+reach the course. The first tool in every payload is the trial's cache-bust
+tool, `cache_bust_<trial id>`, which the model is told never to call: it
+keeps one trial's prompt cache from discounting another's, so every trial
+pays its own way. Leave it in place if you rebuild the tool list; should the
+model call it anyway, the course answers it and the turn counts as a turn
+([protocol.md](protocol.md), "Payloads"). Neither environment cuts a tool result: it reaches your
 driver whole, however long, and what to keep of it is your call. Upstream
 Toolathlon cuts results over 100,000 characters and offers tools to page the
 rest; the course leaves that to drivers. Two Toolathlon tasks,
@@ -251,8 +256,10 @@ compare your branch, uncommitted work included, with `origin/main`.
 The **static check** reads your files without running them. It fails on a
 change outside the driver directory, a manifest the course can't load, a
 missing entry point or README, anything that would run on the host, a
-committed `node_modules` or `.env`, something that looks like a key, and
-imports from the course beyond `context_cup_protocol` and the engines. It
+committed `node_modules` or `.env`, something that looks like a key,
+imports from the course beyond `context_cup_protocol` and the engines, and
+a script agent that never reads `CC_CACHE_BUST_TOOL` (the trial's cache-bust
+tool, which an agent that builds its own tool list must offer). It
 warns where a reviewer looks first: benchmark or task names in the code,
 URLs other than the model endpoint, binary or large files, and a
 `setup.sh`, and a PR that changes an entry already on main. Warnings

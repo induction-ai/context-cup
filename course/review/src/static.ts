@@ -83,6 +83,8 @@ export function warnings(review: Review): Finding[] {
  *  TypeScript driver's dependencies in the workspace lockfile. */
 const LOCKFILE = "pnpm-lock.yaml";
 const DRIVER_NAME = /^[a-z][a-z0-9_]*$/;
+/** The variable the runner hands a script agent its cache-bust tool's name in. */
+const CACHE_BUST_TOOL_VAR = "CC_CACHE_BUST_TOOL";
 /** How many outside paths a finding names before it summarises. */
 const MAX_LISTED = 10;
 
@@ -519,6 +521,32 @@ function reviewDriver(
       }
     }
   });
+
+  if (lane === "agent") {
+    // A script agent builds its own tool list, so the course can't put the
+    // trial's cache-bust tool in it: the agent must, from the name it is
+    // handed, or its trials share other trials' prompt caches and its cost
+    // is not its own (docs/protocol.md, "Payloads"). A static read can only
+    // see that the name is taken up; the Claude review checks what is done
+    // with it.
+    r.check("Reads the cache-bust tool's name", () => {
+      const reads = files.some(
+        (f) =>
+          f.text !== undefined &&
+          f.rel !== "README.md" &&
+          !LOCKFILES.has(f.rel) &&
+          !isTestFile(f.rel) &&
+          f.text.includes(CACHE_BUST_TOOL_VAR)
+      );
+      if (!reads) {
+        r.error(
+          "Cache-bust tool",
+          `Nothing reads \`${CACHE_BUST_TOOL_VAR}\`. A script agent opens its tool list with a tool of that name, described “Never call this tool.”, and answers a call to it with \`{"success": true}\` itself, so no two trials share a provider’s prompt cache; see \`base_agent\` and docs/protocol.md, “Agent drivers”.`,
+          at("agent.sh")
+        );
+      }
+    });
+  }
 
   r.check("Has a README", () => {
     if (!byRel.has("README.md")) {

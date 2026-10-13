@@ -43,6 +43,11 @@ trials to count, so no score rests on a single attempt.
 - A suite's score and cost are the means of its tasks' values.
 
 Every model call a driver makes is in its cost with the model(s) it used.
+Each trial's tool list opens with a tool named after the trial, which the
+model is told never to call, so no trial's prompt cache discounts another's:
+a trial's cost is its own, whatever ran beside or before it. The exception
+is an agent entered as it is (Codex), whose tool list is not the course's to
+change; its trials may share a cache with each other.
 
 ## Rules
 

@@ -24,11 +24,13 @@ from pathlib import Path
 from typing import Any
 
 from context_cup_protocol import (
+    CACHE_BUST_TOOL_RESULT,
     Extracted,
     Payload,
     ProviderAdapter,
     ToolCallRef,
     adapter_for,
+    cache_bust_tool,
 )
 
 from . import __version__
@@ -173,6 +175,8 @@ class Trial:
         self.context: Payload = {}
         self.state: Any = {}
         self.tools: list[dict[str, Any]] = []
+        self.cache_bust_tool = cache_bust_tool(settings.trial_id)
+        self.cache_bust_name: str = self.cache_bust_tool["function"]["name"]
         self.workspace_dir: str | None = None
         self.turn_records: list[TurnRecord] = []
         self.errors: list[dict[str, Any]] = []
@@ -340,25 +344,49 @@ class Trial:
     # -- the loop ---------------------------------------------------------
 
     async def _apply(self, extracted: Extracted) -> StepResult:
-        if extracted.tool_calls:
-            self.env_tool_calls += len(extracted.tool_calls)
+        # The trial's cache-bust tool is the loop's own: a call to it (by its
+        # exact name; a near miss is the environment's to refuse) is answered
+        # here, never reaches the environment, and counts as no environment
+        # tool call.
+        answers = {
+            call.id: CACHE_BUST_TOOL_RESULT
+            for call in extracted.tool_calls
+            if call.name == self.cache_bust_name
+        }
+        env_calls = [c for c in extracted.tool_calls if c.id not in answers]
+        if env_calls:
+            self.env_tool_calls += len(env_calls)
             try:
-                result = await self.environment.on_tool_calls(
-                    extracted.tool_calls, extracted.text
-                )
+                result = await self.environment.on_tool_calls(env_calls, extracted.text)
             except Exception as exc:
                 raise EnvironmentFailure(f"{type(exc).__name__}: {exc}") from exc
-            by_id = {call.id: call for call in extracted.tool_calls}
-            pairs: list[tuple[ToolCallRef, str]] = []
+            known = {call.id for call in env_calls}
             for tool_result in result.tool_results:
-                call = by_id.get(tool_result.tool_call_id)
-                if call is None:
+                if tool_result.tool_call_id not in known:
                     print(
                         f"[runner] result for unknown call {tool_result.tool_call_id!r} dropped",
                         flush=True,
                     )
                     continue
-                pairs.append((call, tool_result.content))
+                answers[tool_result.tool_call_id] = tool_result.content
+        elif answers:
+            # Only the cache-bust tool was called: the environment is not
+            # told (any text beside the call was aimed at a tool step, not at
+            # the user, so it is not delivered as a message either), and the
+            # model is asked again with the tool's answer.
+            if extracted.text and extracted.text.strip():
+                print(
+                    "[runner] text beside a cache-bust-only call not delivered: "
+                    f"{extracted.text[:200]!r}",
+                    flush=True,
+                )
+            result = StepResult()
+        if extracted.tool_calls:
+            pairs: list[tuple[ToolCallRef, str]] = [
+                (call, answers[call.id])
+                for call in extracted.tool_calls
+                if call.id in answers
+            ]
             self.adapter.append_tool_results(self.original, pairs)
             self.adapter.append_tool_results(self.context, pairs)
         else:
@@ -376,7 +404,9 @@ class Trial:
             start = await self.environment.open()
         except Exception as exc:
             raise EnvironmentFailure(f"{type(exc).__name__}: {exc}") from exc
-        self.tools = list(start.tools)
+        # The trial's cache-bust tool opens the list, so the tools, which
+        # every trial of a task otherwise shares, differ per trial.
+        self.tools = [self.cache_bust_tool, *start.tools]
         self.workspace_dir = start.workspace_dir
         self.original = self.adapter.initial_payload(
             model=self.settings.target.model,

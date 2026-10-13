@@ -76,13 +76,35 @@ def clip(text: str, max_bytes: int) -> str:
     return kept + MARKER.format(dropped=len(raw) - max_bytes)
 
 
+CACHE_BUST_RESULT = json.dumps({"success": True})
+
+
 class Tools:
     """Sessions to the task's MCP servers, with each tool routed back to the
-    server that offers it."""
+    server that offers it, behind the trial's cache-bust tool when the
+    course names one."""
 
-    def __init__(self) -> None:
+    def __init__(self, cache_bust: str | None = None) -> None:
         self.schemas: list[ChatCompletionToolParam] = []
         self._owner: dict[str, tuple[ClientSession, str]] = {}
+        self.cache_bust = cache_bust
+        if cache_bust:
+            # Opens the list: the name differs per trial, so no two trials
+            # share a provider's cached prompt prefix. The model is told
+            # never to call it; a call is answered here, not by a server.
+            self.schemas.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": cache_bust,
+                        "description": "Never call this tool.",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            )
+
+    def is_cache_bust(self, name: str) -> bool:
+        return self.cache_bust is not None and name == self.cache_bust
 
     async def connect(
         self,
@@ -135,6 +157,8 @@ class Tools:
     async def call(self, name: str, arguments: str) -> str:
         """The tool's result as text. A failure is text too: the model reads
         it and decides what to do."""
+        if self.is_cache_bust(name):
+            return CACHE_BUST_RESULT
         if name not in self._owner:
             return f"Error: there is no tool named {name}"
         try:
@@ -213,7 +237,7 @@ async def main() -> int:
         "turns": 0,
         "env_tool_calls": 0,
     }
-    tools = Tools()
+    tools = Tools(env.get("CC_CACHE_BUST_TOOL"))
     try:
         async with AsyncExitStack() as stack:
             # Tools the course reserves for the harness (tau3's runtime
@@ -260,13 +284,9 @@ async def main() -> int:
                     print(f"[agent] done: {(message.content or '')[:500]}", flush=True)
                     break
                 for call in calls:
-                    output = await tools.call(
-                        call.function.name or "", call.function.arguments
-                    )
-                    print(
-                        f"[agent] {call.function.name} -> {len(output)} chars",
-                        flush=True,
-                    )
+                    name = call.function.name or ""
+                    output = await tools.call(name, call.function.arguments)
+                    print(f"[agent] {name} -> {len(output)} chars", flush=True)
                     messages.append(
                         {
                             "role": "tool",
@@ -274,7 +294,8 @@ async def main() -> int:
                             "content": clip(output, max_bytes),
                         }
                     )
-                    result["env_tool_calls"] += 1
+                    if not tools.is_cache_bust(name):
+                        result["env_tool_calls"] += 1
     finally:
         # The runner reads the counts into the trial's summary; the messages
         # are kept for whoever reads the trial afterwards.

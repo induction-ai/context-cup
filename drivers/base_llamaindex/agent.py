@@ -285,8 +285,28 @@ def blank(message: ChatMessage) -> bool:
     )
 
 
+CACHE_BUST_RESULT = json.dumps({"success": True})
+
+
+def cache_bust_tool(name: str) -> FunctionTool:
+    """The trial's cache-bust tool, named by the course (`CC_CACHE_BUST_TOOL`):
+    it opens the tool list so no two trials share a provider's cached prompt
+    prefix. The model is told never to call it; a call is answered here."""
+
+    def never_call() -> str:
+        return CACHE_BUST_RESULT
+
+    return FunctionTool.from_defaults(
+        fn=never_call, name=name, description="Never call this tool."
+    )
+
+
 async def work(
-    agent: FunctionAgent, instruction: str, max_steps: int, result: dict[str, Any]
+    agent: FunctionAgent,
+    instruction: str,
+    max_steps: int,
+    result: dict[str, Any],
+    cache_bust: str | None = None,
 ) -> list[ChatMessage]:
     """Run the agent on the task, counting its steps as they stream by, and
     return its memory: the conversation as it ended."""
@@ -306,7 +326,8 @@ async def work(
         try:
             async for event in handler.stream_events():
                 if isinstance(event, ToolCallResult):
-                    result["env_tool_calls"] += 1
+                    if event.tool_name != cache_bust:
+                        result["env_tool_calls"] += 1
                 elif isinstance(event, AgentOutput) and not blank(event.response):
                     result["turns"] += 1
             await handler
@@ -364,6 +385,9 @@ async def main() -> int:
                 # the first loop that contends it.
                 asyncio.Lock(),
             )
+            cache_bust = env.get("CC_CACHE_BUST_TOOL")
+            if cache_bust:
+                tools.insert(0, cache_bust_tool(cache_bust))
             print(f"[agent] {len(tools)} tools", flush=True)
             agent = FunctionAgent(
                 tools=list(tools),
@@ -373,7 +397,7 @@ async def main() -> int:
                 system_prompt=env.get("CC_SYSTEM_PROMPT") or SYSTEM,
                 streaming=False,
             )
-            messages = await work(agent, instruction, max_steps, result)
+            messages = await work(agent, instruction, max_steps, result, cache_bust)
     finally:
         # The runner reads the counts into the trial's summary; the messages
         # are kept for whoever reads the trial afterwards.
