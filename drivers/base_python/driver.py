@@ -4,13 +4,13 @@ write one strategy that works on every provider through the provider-neutral
 view, while the native payload changes only where you changed something.
 See engines/python/README.md for everything `ctx` holds."""
 
-from typing import Any
-
 import httpx
 from anthropic import Anthropic
+from anthropic.types import Message
 from openai import OpenAI
+from openai.types.responses import Response
 
-from context_cup_engine import PythonContext
+from context_cup_engine import Payload, PythonContext
 
 MARKER = "\n\n[truncated by base_python: {dropped} bytes removed]"
 MARKER_PREFIX = "\n\n[truncated by base_python:"
@@ -26,7 +26,7 @@ def clip(text: str, max_bytes: int) -> str:
     return kept + MARKER.format(dropped=len(raw) - max_bytes)
 
 
-def call(ctx: PythonContext) -> Any:
+def call(ctx: PythonContext) -> Response | Message | Payload:
     """Send `context_payload` to the run's provider. Each SDK already points at
     the trial's proxy (base URL and placeholder key set by the runner), so none
     needs configuring; the proxy adds the real key and records the call."""
@@ -45,7 +45,7 @@ def call(ctx: PythonContext) -> Any:
     return response.json()
 
 
-def run(ctx: PythonContext) -> Any:
+def run(ctx: PythonContext) -> Response | Message | Payload:
     # Tunables live in pyproject.toml's [tool.context-cup.config], so a variant
     # is a manifest edit.
     max_bytes = int(ctx.config.get("max_bytes", 100_000))

@@ -16,7 +16,8 @@ def run(ctx):
 
 ## What comes in
 
-`ctx` is a `LitellmContext`. Messages are plain `dict`s in OpenAI
+`ctx` is a `LitellmContext` (`from context_cup_litellm import
+LitellmContext`). Messages are plain `dict`s in OpenAI
 chat-completions shape, typed as litellm's own `AllMessageValues`, the type
 `litellm.completion(messages=...)` takes.
 

@@ -20,15 +20,16 @@ competition runs both full benchmark suites, `tau_banking` and
 
 ## Pick a lane
 
-| lane                                          | `run(ctx)` receives                                                                    | `run(ctx)` returns                                           | copy this         | pick it when                                                                                                                                           |
-| --------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`engines/python`](../engines/python)         | the provider's native request body, plus a provider-neutral view of it                 | the provider's response: the SDK object or its JSON          | `base_python`     | you want exact control: reasoning items, cache-control blocks, and thought signatures are all in front of you. Bring any SDK.                          |
-| [`engines/pydantic`](../engines/pydantic)     | read-only turn facts                                                                   | Pydantic AI capabilities (a list), or a whole `Agent`        | `base_pydantic`   | your strategy is a Pydantic AI (Harness) capability: compaction, tool-output limits, your own history processor.                                       |
-| [`engines/litellm`](../engines/litellm)       | the conversation as litellm chat messages, and `ctx.llm`, a litellm handle for the run | a litellm response from `ctx.llm.completion(...)`            | `base_litellm`    | you want one strategy for OpenAI, Anthropic, and Gemini over chat messages, and can live without OpenAI reasoning items and Anthropic thinking blocks. |
-| [`engines/typescript`](../engines/typescript) | the Python engine's `ctx` in TypeScript: the native request body and the same view     | the provider's response as JSON                              | `base_typescript` | you want the Python lane's exact control, in TypeScript, with npm SDKs.                                                                                |
-| [`engines/aisdk`](../engines/aisdk)           | the conversation as AI SDK messages, and `ctx.llm`, an AI SDK handle for the run       | a result from `ctx.llm.generateText(...)`                    | `base_aisdk`      | you want one strategy for OpenAI, Anthropic, and Gemini over the AI SDK's messages, with each provider's reasoning carried for you.                    |
-| `kind: "agent"`, a script                     | harbor's instruction and the task's MCP servers, in `agent.sh`'s environment           | nothing: the agent works the task and the verifier scores it | `base_agent`      | you want your own whole agent, written from scratch in any language: its own loop, its own context. Compared on score and cost.                        |
-| `kind: "agent"`, harbor's own                 | nothing: harbor runs a whole agent against the task                                    | nothing: the agent works the task and the verifier scores it | `base_codex`      | you are entering an existing agent (Codex, Claude Code) as it is. Compared on score and cost only.                                                     |
+| lane                                              | `run(ctx)` receives                                                                                | `run(ctx)` returns                                           | copy this                                                                               | pick it when                                                                                                                                           |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`engines/python`](../engines/python)             | the provider's native request body, plus a provider-neutral view of it                             | the provider's response: the SDK object or its JSON          | `base_python`                                                                           | you want exact control: reasoning items, cache-control blocks, and thought signatures are all in front of you. Bring any SDK.                          |
+| [`engines/pydantic`](../engines/pydantic)         | read-only turn facts                                                                               | Pydantic AI capabilities (a list), or a whole `Agent`        | `base_pydantic`                                                                         | your strategy is a Pydantic AI (Harness) capability: compaction, tool-output limits, your own history processor.                                       |
+| [`engines/litellm`](../engines/litellm)           | the conversation as litellm chat messages, and `ctx.llm`, a litellm handle for the run             | a litellm response from `ctx.llm.completion(...)`            | `base_litellm`                                                                          | you want one strategy for OpenAI, Anthropic, and Gemini over chat messages, and can live without OpenAI reasoning items and Anthropic thinking blocks. |
+| [`engines/typescript`](../engines/typescript)     | the Python engine's `ctx` in TypeScript: the native request body and the same view                 | the provider's response as JSON                              | `base_typescript`                                                                       | you want the Python lane's exact control, in TypeScript, with npm SDKs.                                                                                |
+| [`engines/aisdk`](../engines/aisdk)               | the conversation as AI SDK messages, and `ctx.llm`, an AI SDK handle for the run                   | a result from `ctx.llm.generateText(...)`                    | `base_aisdk`                                                                            | you want one strategy for OpenAI, Anthropic, and Gemini over the AI SDK's messages, with each provider's reasoning carried for you.                    |
+| [`engines/aisdk_python`](../engines/aisdk_python) | the AI SDK engine's `ctx` in Python: the conversation as AI SDK for Python messages, and `ctx.llm` | a message from `ctx.llm.generate(...)`                       | `base_aisdk_python`                                                                     | you want the AI SDK lane in Python, for OpenAI and Anthropic (the SDK has no Gemini provider).                                                         |
+| `kind: "agent"`, a script                         | harbor's instruction and the task's MCP servers, in `agent.sh`'s environment                       | nothing: the agent works the task and the verifier scores it | `base_agent`, or `base_langchain` / `base_llamaindex` for the same agent on a framework | you want your own whole agent, written from scratch in any language: its own loop, its own context. Compared on score and cost.                        |
+| `kind: "agent"`, harbor's own                     | nothing: harbor runs a whole agent against the task                                                | nothing: the agent works the task and the verifier scores it | `base_codex`                                                                            | you are entering an existing agent (Codex, Claude Code) as it is. Compared on score and cost only.                                                     |
 
 In the engine lanes the course owns the loop: every turn it writes
 `input.json`, runs your `run(ctx)` once, reads the model's response, runs any
@@ -76,8 +77,8 @@ A TypeScript driver's is its `package.json`, with the same fields in a
 `contextCup` block (see `drivers/base_typescript`).
 
 - `extends`: the engine's folder name (`python`, `litellm`, `pydantic`,
-  `typescript`, `aisdk`), which decides what `ctx` is and what `run`
-  returns.
+  `typescript`, `aisdk`, `aisdk_python`), which decides what `ctx` is and
+  what `run` returns.
 - `providers`: the providers your driver can drive. `bin/suite` refuses a
   target on any other provider. Omitted, it inherits the engine's list.
 - `config`: free-form; it arrives as `ctx.config`. Keep tunables here so a
@@ -93,8 +94,9 @@ library), and nothing else from the course.
 ### Dependencies
 
 Every engine installs what its lane calls with: the Python engine the
-`openai` and `anthropic` SDKs and `httpx`, the LiteLLM and Pydantic engines
-their libraries, the TypeScript engines their npm packages. For anything
+`openai` and `anthropic` SDKs and `httpx`, the LiteLLM, Pydantic, and AI
+SDK for Python engines their libraries, the TypeScript engines their npm
+packages. For anything
 more, declare it; the course installs it.
 
 A Python driver lists extra packages in a `pyproject.toml` of its own and

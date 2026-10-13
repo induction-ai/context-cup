@@ -4,7 +4,9 @@ strategy for OpenAI, Anthropic, and Gemini over chat messages: edit
 `ctx.context_messages`, call `ctx.llm.completion()`, return its response.
 See engines/litellm/README.md for everything `ctx` holds."""
 
-from typing import Any
+from litellm import ModelResponse
+
+from context_cup_litellm import LitellmContext
 
 MARKER = "\n\n[truncated by base_litellm: {dropped} bytes removed]"
 MARKER_PREFIX = "\n\n[truncated by base_litellm:"
@@ -20,7 +22,7 @@ def clip(text: str, max_bytes: int) -> str:
     return kept + MARKER.format(dropped=len(raw) - max_bytes)
 
 
-def run(ctx: Any) -> Any:
+def run(ctx: LitellmContext) -> ModelResponse:
     # Tunables live in pyproject.toml's [tool.context-cup.config], so a variant
     # is a manifest edit.
     max_bytes = int(ctx.config.get("max_bytes", 100_000))

@@ -1,0 +1,14 @@
+[project]
+name = "base-aisdk-python"
+version = "0.1.0"
+description = "Clips any tool result larger than max_bytes before it reaches the model. base_python, on the AI SDK for Python."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.context-cup]
+kind = "driver"
+extends = "aisdk_python"
+providers = ["openai", "anthropic"]
+
+[tool.context-cup.config]
+max_bytes = 100_000

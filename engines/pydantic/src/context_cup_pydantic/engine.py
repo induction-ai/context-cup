@@ -104,7 +104,7 @@ class PydanticContext:
         return self.turn.original_payload
 
 
-def finish(ctx: PydanticContext, result: Any) -> Payload:
+def finish(ctx: PydanticContext, result: object) -> Payload:
     if isinstance(result, Agent):
         agent: Agent[Any, Any] = result
     elif isinstance(result, Sequence) and not isinstance(result, str):

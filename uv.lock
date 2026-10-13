@@ -12,11 +12,35 @@ resolution-markers = [
 [manifest]
 members = [
     "context-cup",
+    "context-cup-aisdk-python",
     "context-cup-engine",
     "context-cup-litellm",
     "context-cup-protocol",
     "context-cup-pydantic",
     "context-cup-runner",
+]
+
+[[package]]
+name = "ai"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx2" },
+    { name = "modelsdotdev" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d7/ea/06b154054189fdc14116246f0231df0e28e138cc1627c3aab4b2a47b137e/ai-0.8.0.tar.gz", hash = "sha256:ff4e8541f990e15839e9c86b0285d435fe60516eb430db8ecb6e2ba5a9cf79b1", size = 1234217, upload-time = "2026-09-29T22:39:28.144Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/52/50/caf9a78a781777655e9cc8f0431df3540fe18f5568572387e2af030e1abb/ai-0.8.0-py3-none-any.whl", hash = "sha256:d2ba66992d3117996d37a96c9a2a4f36bfef16c862bfac5c311a963c3e084903", size = 213685, upload-time = "2026-09-29T22:39:26.197Z" },
+]
+
+[package.optional-dependencies]
+anthropic = [
+    { name = "anthropic" },
+]
+openai = [
+    { name = "openai" },
 ]
 
 [[package]]
@@ -520,6 +544,27 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "ruff", specifier = ">=0.9" },
+]
+
+[[package]]
+name = "context-cup-aisdk-python"
+version = "0.1.0"
+source = { editable = "engines/aisdk_python" }
+dependencies = [
+    { name = "ai", extra = ["anthropic", "openai"] },
+    { name = "anthropic" },
+    { name = "context-cup-protocol" },
+    { name = "httpx2" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ai", extras = ["anthropic", "openai"], specifier = ">=0.8.0,<0.9" },
+    { name = "anthropic" },
+    { name = "context-cup-protocol", editable = "course/protocol" },
+    { name = "httpx2" },
+    { name = "pydantic", specifier = ">=2" },
 ]
 
 [[package]]
@@ -1357,6 +1402,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ba/93/0142dc84a666daf8ad51a34268f34c12fd6fda4f3810c4be2504eecc8212/mcp-1.30.0.tar.gz", hash = "sha256:445414625fce5c295faa505bb11bacece661ab6f4028d57c935db57820b7a3e4", size = 680511, upload-time = "2026-09-07T14:34:15.845Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f5/f4/e58bc33317c92a0203664daaf00bf6f41166cc0149e5d6870a03f7cd004a/mcp-1.30.0-py3-none-any.whl", hash = "sha256:666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0", size = 234581, upload-time = "2026-09-07T14:34:14.266Z" },
+]
+
+[[package]]
+name = "modelsdotdev"
+version = "0.20260818.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/34/e5d0b54bf967bee3e37cb7d8261143670a79603f6e770fb8a68d8ffcd17a/modelsdotdev-0.20260818.0.tar.gz", hash = "sha256:375e6793dc5bc731075e7631ee32b7d0a3be6a4a6cade3e3d417664dae40d8fd", size = 1087820, upload-time = "2026-08-18T08:14:47.009Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/92/242f3c5a20d64e964895a02fe5c86ae66ed09e6317be600c67012bc1addc/modelsdotdev-0.20260818.0-py3-none-any.whl", hash = "sha256:dd55b13bfd029e2a8345f7326e4239dcb8b972d2bbd174f422aa0ca59da1ad9c", size = 1096608, upload-time = "2026-08-18T08:14:45.326Z" },
 ]
 
 [[package]]

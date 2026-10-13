@@ -49,8 +49,9 @@ back Pydantic AI capabilities and runs the agent itself; the LiteLLM engine
 hands over the conversation as litellm chat messages with a litellm handle
 for the call. The TypeScript engine and the AI SDK engine are the Python and
 LiteLLM engines' shapes in TypeScript, the second with the AI SDK's messages
-and an AI SDK handle. [drivers.md](drivers.md) and each engine's README have
-the details.
+and an AI SDK handle; the AI SDK for Python engine is that second shape back
+in Python. [drivers.md](drivers.md) and each engine's README have the
+details.
 
 ```
 drivers/base_python/
@@ -464,12 +465,15 @@ proxy.
 ## Naming
 
 Drivers shipped with the course are prefixed `base_`, one per lane.
-`base_python`, `base_litellm`, `base_typescript`, `base_aisdk`, and
-`base_pydantic` all run the same strategy, clipping any tool result over
-`max_bytes`, one per lane (Python, LiteLLM, TypeScript, AI SDK, and Pydantic
-engines), so the lanes can be compared on it. `base_agent` is a whole agent
-written from scratch that clips the same way (script agent), and `base_codex`
-is OpenAI's Codex CLI (harbor agent).
+`base_python`, `base_litellm`, `base_typescript`, `base_aisdk`,
+`base_aisdk_python`, and `base_pydantic` all run the same strategy, clipping
+any tool result over `max_bytes`, one per lane (Python, LiteLLM, TypeScript,
+AI SDK, AI SDK for Python, and Pydantic engines), so the lanes can be
+compared on it. `base_agent` is a whole agent written from scratch that clips
+the same way (script agent), `base_langchain` and `base_llamaindex` are the
+same agent on LangChain and LlamaIndex (script agents, each clipping where
+its framework puts a tool's result), and `base_codex` is OpenAI's Codex CLI
+(harbor agent).
 Contestants pick any other prefix.
 
 ## Agent drivers
@@ -523,6 +527,12 @@ placeholder keys, `agent.sh` gets:
 | `CC_CONFIG`           | the `config` of the agent's manifest, as JSON                                                                                                                            |
 | `CC_SYSTEM_PROMPT`    | the benchmark's system prompt, when it has one outside the instruction                                                                                                   |
 | `CC_HARNESS_TOOLS`    | comma-separated MCP tools the harness owns (tau3's runtime controls): listed by the server, never to be offered to the model, since calling one undoes the trial's setup |
+
+Call the task's tools one at a time, in the order the model asked for them,
+as the course's own loop does: tau3's runtime logs each call for its
+verifier, and calls made concurrently interleave the log, which fails the
+trial's scoring. (The `base_` agents on frameworks hold a lock around every
+call, since each framework runs a turn's calls concurrently by default.)
 
 The agent works the task and exits; a non-zero exit fails the trial, and its
 output is the trial's `runner.txt`. Its manifest's `config` arrives as

@@ -129,11 +129,14 @@ bin/suite smoke_tau --driver base_python --target gpt-5.5@medium --dry_run
   the example for drivers built on Pydantic AI (`engines/pydantic`); `base_litellm` does the same clipping on litellm chat
   messages, the baseline for litellm-based drivers (`engines/litellm`);
   `base_typescript` clips oversized tool results in TypeScript
-  (`engines/typescript`), and `base_aisdk` does the same clipping on the AI SDK, the
-  baseline for AI SDK drivers (`engines/aisdk`); `base_agent` is a whole
+  (`engines/typescript`), `base_aisdk` does the same clipping on the AI SDK, the
+  baseline for AI SDK drivers (`engines/aisdk`), and `base_aisdk_python` does
+  it on the AI SDK for Python (`engines/aisdk_python`); `base_agent` is a whole
   agent written from scratch, its own loop over the task's MCP tools, the
-  example for agents of your own; `base_codex` is a whole agent
-  run by harbor and compared on score and cost only.
+  example for agents of your own; `base_langchain` and `base_llamaindex` are
+  that agent on LangChain and LlamaIndex, each clipping the same way where its
+  framework puts a tool's result; `base_codex` is a whole agent run by harbor
+  and compared on score and cost only.
 - `--count` is attempts per task. `--task` narrows to named tasks.
 - `--harbor_env` picks where the tasks run: `daytona` or `docker` (the
   default). Use `daytona`; see below.

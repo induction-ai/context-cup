@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["course/protocol", "course/runner", "engines/python", "engines/pydantic", "engines/litellm"]
+members = ["course/protocol", "course/runner", "engines/python", "engines/pydantic", "engines/litellm", "engines/aisdk_python"]
 
 [dependency-groups]
 dev = ["pytest>=8.3", "ruff>=0.9", "pytest-asyncio>=0.24", "mypy>=1.14", "anthropic"]
@@ -15,7 +15,7 @@ dev = ["pytest>=8.3", "ruff>=0.9", "pytest-asyncio>=0.24", "mypy>=1.14", "anthro
 line-length = 88
 target-version = "py312"
 # First-party roots, so import sorting groups the workspace packages together.
-src = ["course/protocol/src", "course/runner/src", "engines/python/src", "engines/pydantic/src", "engines/litellm/src"]
+src = ["course/protocol/src", "course/runner/src", "engines/python/src", "engines/pydantic/src", "engines/litellm/src", "engines/aisdk_python/src"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "RUF", "PT", "ASYNC", "BLE"]
@@ -24,13 +24,13 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "RUF", "PT", "ASYNC", "BLE
 ignore = ["E501", "PT018"]
 
 [tool.pytest.ini_options]
-testpaths = ["course/protocol/tests", "course/runner/tests", "engines/python/tests", "engines/pydantic/tests", "engines/litellm/tests", "drivers", "tests"]
+testpaths = ["course/protocol/tests", "course/runner/tests", "engines/python/tests", "engines/pydantic/tests", "engines/litellm/tests", "engines/aisdk_python/tests", "drivers", "tests"]
 
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["course/protocol/src", "engines/python/src", "engines/pydantic/src", "engines/litellm/src", "course/runner/src"]
-mypy_path = "course/protocol/src:engines/python/src:engines/pydantic/src:engines/litellm/src:course/runner/src:.harbor/repo/src"
+files = ["course/protocol/src", "engines/python/src", "engines/pydantic/src", "engines/litellm/src", "engines/aisdk_python/src", "course/runner/src"]
+mypy_path = "course/protocol/src:engines/python/src:engines/pydantic/src:engines/litellm/src:engines/aisdk_python/src:course/runner/src:.harbor/repo/src"
 warn_unreachable = true
 
 [[tool.mypy.overrides]]

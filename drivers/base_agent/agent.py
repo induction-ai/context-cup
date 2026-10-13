@@ -25,13 +25,15 @@ from collections.abc import Collection
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict, cast
 
 # Before litellm is imported: its bundled price map, not one fetched over
 # the network (a trial container has no business reaching for it).
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
 import litellm
+from litellm.types.llms.openai import ChatCompletionToolParam
+from litellm.types.utils import ModelResponse
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -47,6 +49,25 @@ EMPTY_RETRIES = 3
 TOOL_TIMEOUT = timedelta(seconds=270)
 
 
+class Target(TypedDict):
+    """The run's target, from CC_TARGET_JSON."""
+
+    provider: str
+    model: str
+    reasoning_effort: NotRequired[str | None]
+
+
+class Server(TypedDict):
+    """A task MCP server, from CC_MCP_SERVERS_JSON: `url` for streamable-http
+    and sse, `command` and `args` for stdio."""
+
+    name: str
+    transport: str
+    url: NotRequired[str]
+    command: NotRequired[str]
+    args: NotRequired[list[str]]
+
+
 def clip(text: str, max_bytes: int) -> str:
     raw = text.encode("utf-8")
     if len(raw) <= max_bytes:
@@ -60,13 +81,13 @@ class Tools:
     server that offers it."""
 
     def __init__(self) -> None:
-        self.schemas: list[dict[str, Any]] = []
+        self.schemas: list[ChatCompletionToolParam] = []
         self._owner: dict[str, tuple[ClientSession, str]] = {}
 
     async def connect(
         self,
         stack: AsyncExitStack,
-        servers: list[dict[str, Any]],
+        servers: list[Server],
         hidden: Collection[str] = (),
     ) -> None:
         for server in servers:
@@ -160,14 +181,16 @@ def connection(provider: str) -> dict[str, str]:
     }
 
 
-async def complete(**kwargs: Any) -> Any:
+async def complete(**kwargs: Any) -> ModelResponse:
     """One model call. Kept apart so a test can stand in for the model."""
-    return await litellm.acompletion(**kwargs)
+    # Never streamed, so always a ModelResponse; litellm's own type is a
+    # union with the stream wrapper.
+    return cast(ModelResponse, await litellm.acompletion(**kwargs))
 
 
 async def main() -> int:
     env = os.environ
-    target = json.loads(env["CC_TARGET_JSON"])
+    target: Target = json.loads(env["CC_TARGET_JSON"])
     provider = target["provider"]
     # The runner hands over the manifest's `config` (pyproject.toml's
     # [tool.context-cup.config]) as JSON.
@@ -238,7 +261,7 @@ async def main() -> int:
                     break
                 for call in calls:
                     output = await tools.call(
-                        call.function.name, call.function.arguments
+                        call.function.name or "", call.function.arguments
                     )
                     print(
                         f"[agent] {call.function.name} -> {len(output)} chars",

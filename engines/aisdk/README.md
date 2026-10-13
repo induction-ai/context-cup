@@ -7,7 +7,8 @@ is an AI SDK handle already set up for the run. A driver edits
 `ctx.contextMessages` if it wants to, and returns the `generateText` result
 of the call that is its turn. One strategy serves OpenAI, Anthropic, and
 Gemini. Start from [`base_aisdk`](../../drivers/base_aisdk); the overview is
-[docs/drivers.md](../../docs/drivers.md).
+[docs/drivers.md](../../docs/drivers.md). The same lane in Python is
+[`engines/aisdk_python`](../aisdk_python).
 
 ```ts
 import type { AisdkContext } from "@context-cup/engine-aisdk";

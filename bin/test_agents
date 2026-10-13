@@ -1,0 +1,18 @@
+#!/bin/bash
+# The framework agents' tests, each in its driver's own venv: their packages
+# (LangChain, LlamaIndex) are not in the workspace, so `uv run pytest` skips
+# these. Pass pytest arguments through.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+failed=()
+for driver in base_langchain base_llamaindex; do
+  echo "==> $driver"
+  uv run --quiet --project "drivers/$driver" --with pytest pytest "drivers/$driver" "$@" \
+    || failed+=("$driver")
+done
+
+if [ ${#failed[@]} -gt 0 ]; then
+  echo "Failed: ${failed[*]}" >&2
+  exit 1
+fi

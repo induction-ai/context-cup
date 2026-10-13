@@ -154,7 +154,7 @@ export default async function Home() {
           >
             <Tabs labels={drivers.map((d) => d.lane)} className="px-1 pt-1">
               {drivers.map((d) => (
-                <div key={d.lane}>
+                <div key={d.path}>
                   <div className="small text-body-secondary font-monospace px-2 pt-2">
                     {d.path}
                   </div>

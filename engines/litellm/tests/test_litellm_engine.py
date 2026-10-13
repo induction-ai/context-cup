@@ -331,7 +331,9 @@ def test_gemini_thought_signatures_go_back_on_their_function_calls(
 ) -> None:
     ctx = context("gemini", tmp_path)
     call = ctx.context_messages[-2]["tool_calls"][0]
-    assert call["provider_specific_fields"] == {"thought_signature": "real-signature=="}
+    assert call["function"]["provider_specific_fields"] == {
+        "thought_signature": "real-signature=="
+    }
     ctx.llm.completion()
     parts = [p for c in json.loads(sent[-1].content)["contents"] for p in c["parts"]]
     signed = [p for p in parts if "function_call" in p or "functionCall" in p]

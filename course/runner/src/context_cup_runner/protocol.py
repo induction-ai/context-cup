@@ -12,18 +12,19 @@ from pydantic import BaseModel, ConfigDict
 from context_cup_protocol import (
     PLACEHOLDER_KEY,
     PROTOCOL_VERSION,
+    PROVIDER_API,
     Dirs,
     DriverInfo,
     Extracted,
     Payload,
     Provider,
     ProviderAdapter,
-    ProviderApi,
     ProviderClient,
     ProviderInfo,
     TurnInput,
     TurnOutput,
     Wire,
+    proxy_base_url,
 )
 from context_cup_protocol import Target as TargetSpec
 from context_cup_protocol.providers.base import ensure_json_dict
@@ -68,19 +69,6 @@ class Target(BaseModel):
     provider: Provider
     model: str
     reasoning_effort: str | None = None
-
-
-# Where each provider's API lives behind the proxy: `<proxy>/t/<trial>/<provider><suffix>`.
-PROVIDER_API: dict[Provider, tuple[str, ProviderApi]] = {
-    "openai": ("/v1", "responses"),
-    "anthropic": ("/v1", "messages"),
-    "gemini": ("/v1beta", "generate_content"),
-}
-
-
-def proxy_base_url(proxy_url: str, trial_id: str, provider: Provider) -> str:
-    suffix, _ = PROVIDER_API[provider]
-    return f"{proxy_url.rstrip('/')}/t/{trial_id}/{provider}{suffix}"
 
 
 def proxy_client(proxy_url: str, trial_id: str, provider: Provider) -> ProviderClient:

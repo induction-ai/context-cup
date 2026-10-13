@@ -19,7 +19,14 @@ from typing import Any, cast
 import httpx
 import litellm
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
-from litellm.types.llms.openai import AllMessageValues
+from litellm.types.llms.openai import (
+    AllMessageValues,
+    ChatCompletionAssistantMessage,
+    ChatCompletionAssistantToolCall,
+    ChatCompletionToolCallFunctionChunk,
+    ChatCompletionToolParam,
+)
+from litellm.types.utils import ModelResponse
 
 from context_cup_protocol import (
     Conversation,
@@ -30,7 +37,9 @@ from context_cup_protocol import (
     Target,
     TurnInput,
     load_snapshot,
+    route,
     save_snapshot,
+    trial_root,
     view,
 )
 
@@ -77,13 +86,13 @@ def chat_messages(
     conversation: Conversation,
     signatures: dict[str, str] | None = None,
     start: int = 0,
-) -> list[dict[str, Any]]:
+) -> list[AllMessageValues]:
     """The conversation as chat messages. Gemini thought signatures on function
     calls ride along where litellm reads them; other opaque parts (OpenAI
     reasoning items, Anthropic thinking blocks) have no chat form and are
     dropped."""
     signatures = signatures or {}
-    out: list[dict[str, Any]] = []
+    out: list[AllMessageValues] = []
     if conversation.system and start == 0:
         out.append({"role": "system", "content": conversation.system})
     for m in conversation.messages[start:]:
@@ -98,33 +107,31 @@ def chat_messages(
         elif m.role == "user":
             out.append({"role": "user", "content": m.text or ""})
         elif m.tool_calls or m.text:
-            message: dict[str, Any] = {"role": "assistant", "content": m.text}
-            if m.tool_calls:
-                message["tool_calls"] = [
-                    {
-                        "id": c.id,
-                        "type": "function",
-                        "function": {
-                            "name": c.name,
-                            "arguments": json.dumps(c.arguments),
-                        },
-                        **(
-                            {
-                                "provider_specific_fields": {
-                                    "thought_signature": signatures[c.id]
-                                }
-                            }
-                            if c.id in signatures
-                            else {}
-                        ),
+            tool_calls: list[ChatCompletionAssistantToolCall] = []
+            for c in m.tool_calls or []:
+                function: ChatCompletionToolCallFunctionChunk = {
+                    "name": c.name,
+                    "arguments": json.dumps(c.arguments),
+                }
+                if c.id in signatures:
+                    # Where litellm's Gemini route reads it back onto the part.
+                    function["provider_specific_fields"] = {
+                        "thought_signature": signatures[c.id]
                     }
-                    for c in m.tool_calls
-                ]
+                tool_calls.append(
+                    {"id": c.id, "type": "function", "function": function}
+                )
+            message: ChatCompletionAssistantMessage = {
+                "role": "assistant",
+                "content": m.text,
+            }
+            if tool_calls:
+                message["tool_calls"] = tool_calls
             out.append(message)
     return out
 
 
-def chat_tools(conversation: Conversation) -> list[dict[str, Any]]:
+def chat_tools(conversation: Conversation) -> list[ChatCompletionToolParam]:
     return [
         {
             "type": "function",
@@ -138,18 +145,16 @@ def chat_tools(conversation: Conversation) -> list[dict[str, Any]]:
     ]
 
 
-def route(model: str, default: Provider) -> tuple[str, Provider]:
-    """A litellm model route and its provider. A bare name is the run's
-    provider; a name with a provider prefix is kept as the driver wrote it."""
-    for provider in ROUTE:
-        if model.startswith(f"{provider}/"):
-            return model, provider
-    return ROUTE[default] + model, default
+def litellm_route(model: str, default: Provider) -> tuple[str, Provider]:
+    """A litellm model route and its provider: the protocol's `route`, with
+    litellm's own prefix for the provider put back on."""
+    provider, name = route(model, default)
+    return ROUTE[provider] + name, provider
 
 
 @dataclass
 class Call:
-    response: Any
+    response: ModelResponse
     raw: Payload
     provider: Provider
 
@@ -163,20 +168,18 @@ class LLM:
         self.calls: list[Call] = []
 
     def api_base(self, provider: Provider) -> str:
-        info = self._ctx.provider
-        root = info.client.base_url.rstrip("/").rsplit(f"/{info.name}", 1)[0]
-        return f"{root}/{provider}{VERSION[provider]}"
+        return f"{trial_root(self._ctx.provider)}/{provider}{VERSION[provider]}"
 
     def completion(
         self,
-        messages: list[dict[str, Any]] | None = None,
+        messages: list[AllMessageValues] | None = None,
         *,
         purpose: str = "turn",
         **kwargs: Any,
-    ) -> Any:
+    ) -> ModelResponse:
         ctx = self._ctx
         model = str(kwargs.pop("model", None) or ctx.target.model)
-        litellm_model, provider = route(model, ctx.provider.name)
+        litellm_model, provider = litellm_route(model, ctx.provider.name)
         raws: list[Payload] = []
 
         def keep(response: httpx.Response) -> None:
@@ -213,7 +216,9 @@ class LLM:
         params.update(kwargs, extra_headers=headers)
         if body:
             params["extra_body"] = body
-        response = litellm.completion(**params)
+        # Never streamed, so always a ModelResponse; litellm's own type is
+        # a union with the stream wrapper.
+        response = cast(ModelResponse, litellm.completion(**params))
         if not raws:
             raise RuntimeError(f"no response body was captured for {litellm_model}")
         self.calls.append(Call(response, raws[-1], provider))
@@ -251,7 +256,7 @@ class LitellmContext:
     """The working copy: last turn's (with the driver's edits) plus what came
     in since. What the driver leaves here is kept for the next turn, and it
     is what `ctx.llm` sends by default."""
-    tools: list[dict[str, Any]] = field(init=False)
+    tools: list[ChatCompletionToolParam] = field(init=False)
     """The course's tools in chat form, the default `ctx.llm` offers."""
     llm: LLM = field(init=False)
     seen: int = field(init=False)
@@ -270,7 +275,7 @@ class LitellmContext:
                 gemini_signatures(payload, conversation) if provider == "gemini" else {}
             )
             chat = chat_messages(conversation, signatures, start)
-            return cast(list[AllMessageValues], chat), conversation
+            return chat, conversation
 
         self.original_messages, _ = messages(self.turn.original_payload)
         kept = load_snapshot(self.turn, CONTEXT_SNAPSHOT)
@@ -304,7 +309,7 @@ class LitellmContext:
         return self.turn.original_payload
 
 
-def finish(ctx: LitellmContext, result: Any) -> Payload:
+def finish(ctx: LitellmContext, result: object) -> Payload:
     """The raw provider body of the call whose response `run` returned."""
     call = next((c for c in reversed(ctx.llm.calls) if c.response is result), None)
     if call is None:

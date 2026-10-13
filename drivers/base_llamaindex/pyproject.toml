@@ -1,0 +1,22 @@
+# The agent's own dependencies, which the runner installs into a venv of its
+# own (`$CC_SELF_DIR/.venv`), pinned by uv.lock beside this file.
+[project]
+name = "base-llamaindex"
+version = "0.1.0"
+description = "A whole agent on LlamaIndex: a FunctionAgent over the task's MCP tools, clipping tool results over max_bytes in each tool's callback, like base_python."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "llama-index-core>=0.14,<0.15",
+  "llama-index-llms-openai>=0.8,<1",
+  "llama-index-llms-anthropic>=0.12,<1",
+  "llama-index-llms-google-genai>=0.11,<1",
+  "llama-index-tools-mcp>=0.4,<1",
+  "mcp>=1.25,<2",
+]
+
+[tool.context-cup]
+kind = "agent"
+providers = ["openai", "anthropic", "gemini"]
+
+[tool.context-cup.config]
+max_bytes = 100_000

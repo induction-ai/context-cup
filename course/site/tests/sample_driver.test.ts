@@ -1,11 +1,17 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import {
   describe,
   expect,
   it,
 } from "@context-cup/shared/test_helpers/index.js";
 import {
+  GAP,
   loadSampleDrivers,
   runFunction,
+  SAMPLE_DRIVERS,
+  SAMPLE_EXCERPTS,
   showDefaults,
 } from "../src/lib/sample_driver.ts";
 
@@ -55,15 +61,25 @@ describe("showDefaults", () => {
 });
 
 describe("loadSampleDrivers", () => {
-  it("reads every lane's base driver down to its run", async () => {
+  it("shows one tab per lane", async () => {
     const drivers = await loadSampleDrivers();
     expect(drivers.map((d) => d.lane)).toEqual([
       "Python",
       "TypeScript",
       "LiteLLM",
-      "AI SDK",
+      "AI SDK · TS",
+      "AI SDK · Py",
       "Pydantic AI",
+      "LangChain",
+      "LlamaIndex",
     ]);
+  });
+
+  it("cuts a base driver down to its run, tunables as their defaults", async () => {
+    const drivers = (await loadSampleDrivers()).filter((d) =>
+      SAMPLE_DRIVERS.some((s) => s.path === d.path)
+    );
+    expect(drivers).toHaveLength(SAMPLE_DRIVERS.length);
     for (const d of drivers) {
       expect(d.code).toMatch(
         d.language === "python"
@@ -71,6 +87,21 @@ describe("loadSampleDrivers", () => {
           : /^export async function run\(ctx/
       );
       expect(d.code).not.toMatch(/ctx\.config|Tunables/);
+    }
+  });
+
+  it("shows an excerpted driver as lines its file still has", async () => {
+    const drivers = (await loadSampleDrivers()).filter((d) =>
+      SAMPLE_EXCERPTS.some((s) => s.path === d.path)
+    );
+    expect(drivers).toHaveLength(SAMPLE_EXCERPTS.length);
+    for (const d of drivers) {
+      const source = await readFile(path.join(REPO_ROOT, d.path), "utf8");
+      const lines = source.split("\n").map((line) => line.trim());
+      for (const line of d.code.split("\n")) {
+        if (line === "" || line === GAP) continue;
+        expect(lines, `${d.path}: ${line}`).toContain(line.trim());
+      }
     }
   });
 });

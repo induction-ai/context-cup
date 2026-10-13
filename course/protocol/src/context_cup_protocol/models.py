@@ -11,6 +11,7 @@ PROTOCOL_VERSION = 2
 
 # Mirrors PROVIDERS and WIRES in course/shared/src/provider.ts.
 Provider = Literal["openai", "anthropic", "gemini"]
+PROVIDERS: tuple[Provider, ...] = ("openai", "anthropic", "gemini")
 Wire = Literal["responses", "completions", "anthropic", "gemini"]
 ProviderApi = Literal["responses", "messages", "generate_content"]
 

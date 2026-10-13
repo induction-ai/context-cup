@@ -7,6 +7,7 @@ from .manifest import Manifest, read_manifest, read_pyproject
 from .models import (
     PLACEHOLDER_KEY,
     PROTOCOL_VERSION,
+    PROVIDERS,
     Dirs,
     DriverInfo,
     Payload,
@@ -28,12 +29,15 @@ from .providers import (
     adapter_for,
     function_schemas,
 )
+from .proxy import PROVIDER_API, proxy_base_url, route, trial_root
 from .snapshot import load_snapshot, save_snapshot
 from .view import Conversation, Message, Tool, ToolCall, view, write
 
 __all__ = [
     "PLACEHOLDER_KEY",
     "PROTOCOL_VERSION",
+    "PROVIDERS",
+    "PROVIDER_API",
     "Conversation",
     "Dirs",
     "DriverInfo",
@@ -59,10 +63,13 @@ __all__ = [
     "adapter_for",
     "function_schemas",
     "load_snapshot",
+    "proxy_base_url",
     "read_manifest",
     "read_pyproject",
+    "route",
     "run_engine",
     "save_snapshot",
+    "trial_root",
     "view",
     "write",
 ]
