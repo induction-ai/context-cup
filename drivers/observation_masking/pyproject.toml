@@ -1,0 +1,15 @@
+[project]
+name = "observation-masking"
+version = "0.1.0"
+description = "Replaces tool results older than the last N turns with a placeholder (The Complexity Trap, NeurIPS 2025)."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.context-cup]
+kind = "driver"
+extends = "python"
+providers = ["openai", "anthropic", "gemini"]
+
+[tool.context-cup.config]
+# Tool results that are `window` turns old get masked/stubbed.
+window = 10
