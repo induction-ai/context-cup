@@ -21,6 +21,7 @@ import {
   deleteSandboxes,
   listSandboxes,
   olderThan,
+  pending,
   reserved,
   SUITE_LABEL,
   type DaytonaClient,
@@ -37,21 +38,27 @@ async function sweep(
   sandboxes: Sandbox[],
   dry_run: boolean
 ): Promise<void> {
-  if (sandboxes.length === 0) {
+  const { toDelete, alreadyDestroying } = pending(sandboxes);
+  if (alreadyDestroying.length > 0) {
+    // Harbor already asked Daytona to destroy these; a second request only
+    // gets 409 until the first completes, so they are reported, not failed.
+    console.log(`Daytona is already destroying ${describe(alreadyDestroying)}`);
+    for (const s of alreadyDestroying)
+      console.log(`  ${s.id} ${s.state} since ${s.updatedAt ?? "?"}`);
+  }
+  if (toDelete.length === 0) {
     console.log("nothing to delete");
     return;
   }
-  console.log(
-    `${dry_run ? "would delete" : "deleting"} ${describe(sandboxes)}`
-  );
+  console.log(`${dry_run ? "would delete" : "deleting"} ${describe(toDelete)}`);
   if (dry_run) {
-    for (const s of sandboxes)
+    for (const s of toDelete)
       console.log(`  ${s.id} ${s.state} ${s.createdAt ?? ""}`);
     return;
   }
   const { deleted, failed } = await deleteSandboxes(
     client,
-    sandboxes.map((s) => s.id)
+    toDelete.map((s) => s.id)
   );
   console.log(`deleted ${deleted.length}, failed ${failed.size}`);
   for (const [id, reason] of failed) console.log(`  ${id}: ${reason}`);

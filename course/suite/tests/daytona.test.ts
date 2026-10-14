@@ -9,6 +9,7 @@ import {
   deleteSandboxes,
   listSandboxes,
   olderThan,
+  pending,
   SUITE_LABEL,
   type Sandbox,
 } from "../src/daytona.ts";
@@ -108,6 +109,30 @@ describe("daytona", () => {
     ]);
     expect(outcome.deleted).toEqual([]);
     expect(outcome.failed.get("a")).toBe("409 busy");
+  });
+
+  it("sets aside sandboxes Daytona is already destroying", async () => {
+    const started = sandbox("started");
+    const stopping = { ...sandbox("stopping"), state: "stopping" };
+    // Harbor's own delete leaves a sandbox like this; it has sat there for
+    // hours, answering every further delete with 409.
+    const destroying = {
+      ...sandbox("destroying"),
+      state: "destroying",
+      desiredState: "destroyed",
+    };
+    const marked = { ...sandbox("marked"), desiredState: "destroyed" };
+    const { toDelete, alreadyDestroying } = pending([
+      started,
+      stopping,
+      destroying,
+      marked,
+    ]);
+    expect(toDelete.map((s) => s.id)).toEqual(["started", "stopping"]);
+    expect(alreadyDestroying.map((s) => s.id)).toEqual([
+      "destroying",
+      "marked",
+    ]);
   });
 
   it("keeps sandboxes older than the cutoff", async () => {

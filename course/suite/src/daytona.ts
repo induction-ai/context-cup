@@ -20,7 +20,9 @@ export const DAYTONA_API = "https://app.daytona.io/api";
 const zSandbox = z.object({
   id: z.string(),
   state: z.string(),
+  desiredState: z.string().nullish(),
   createdAt: z.string().nullish(),
+  updatedAt: z.string().nullish(),
   cpu: z.number().nullish(),
   memory: z.number().nullish(),
   disk: z.number().nullish(),
@@ -88,8 +90,32 @@ export async function listSandboxes(
   return found;
 }
 
-/** Daytona answers 409 while a sandbox changes state, which is where an
- *  exiting harbor leaves it; the transition takes seconds. */
+/** Whether Daytona is already destroying the sandbox. Harbor asks for this
+ *  as it exits, and Daytona answers every further delete with 409 until the
+ *  destroy completes, which usually takes seconds but has taken hours. There
+ *  is nothing more to ask for, so a sweep leaves these alone. */
+export function destroying(sandbox: Sandbox): boolean {
+  return (
+    sandbox.state === "destroying" ||
+    sandbox.state === "destroyed" ||
+    sandbox.desiredState === "destroyed"
+  );
+}
+
+/** Splits sandboxes into those a sweep must delete and those Daytona is
+ *  already destroying. */
+export function pending(sandboxes: readonly Sandbox[]): {
+  toDelete: Sandbox[];
+  alreadyDestroying: Sandbox[];
+} {
+  return {
+    toDelete: sandboxes.filter((s) => !destroying(s)),
+    alreadyDestroying: sandboxes.filter(destroying),
+  };
+}
+
+/** Daytona answers 409 while a sandbox changes state, such as stopping; the
+ *  transition takes seconds. */
 const CONFLICT_ATTEMPTS = 3;
 
 /** Deletes each sandbox, carrying on past failures so one stuck sandbox does
