@@ -1,9 +1,9 @@
 {
   "tasks": {
-    "banking_001": {
+    "banking_076": {
       "runner": "tau3",
       "tau3": {
-        "customer": "banking_001"
+        "customer": "banking_076"
       }
     }
   }
