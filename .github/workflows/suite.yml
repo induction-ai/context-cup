@@ -77,12 +77,14 @@ on:
           - docker
 
 concurrency:
-  # Serialize any run that may touch the single, rotating
-  # TOOLATHLON_MCP_AUTH_B64 grant into one shared group, so two runs can't
-  # both restore and refresh it and invalidate each other's token.
+  # Toolathlon tasks act on shared live accounts (the Notion workspace,
+  # Canvas, GitHub, mail, ...), and a task's preprocess resets what the task
+  # before it changed. Two full runs on the same accounts would corrupt each
+  # other's state, so they take turns. The smoke and local suites stay out:
+  # their tasks are self-contained.
   group: >-
-    ${{ (inputs.suite == 'toolathlon' || inputs.suite == 'smoke_toolathlon')
-    && format('{0}-notion-grant', github.workflow)
+    ${{ inputs.suite == 'toolathlon'
+    && format('{0}-toolathlon', github.workflow)
     || format('{0}-{1}', github.workflow, github.run_id) }}
 
 jobs:
@@ -154,6 +156,11 @@ jobs:
           mkdir -p secrets
           printf '%s' "$AUTH_B64" | base64 -d > secrets/toolathlon_auth_configs.zip
 
+      # The notion tasks' login, kept fresh by the Notion Grant Refresh
+      # workflow (notion_grant_refresh.yml). Only that workflow may hold the
+      # refresh token: a refresh here would rotate the grant behind it and a
+      # second use of the spent token revokes everything. The access token
+      # alone lasts the run.
       - name: Restore notion MCP auth state
         if: steps.suite_kind.outputs.toolathlon == 'true'
         env:
@@ -165,9 +172,15 @@ jobs:
           fi
           mkdir -p secrets/mcp
           printf '%s' "$MCP_AUTH_B64" | base64 -d | tar xzf - -C secrets/mcp
-          # Snapshot the restored refresh token so the write-back step can tell
-          # whether this run rotated it.
-          sha256sum secrets/mcp/*/*_tokens.json > secrets/mcp/.restored-sums 2>/dev/null || true
+          # The mtime stays: the token's remaining life is measured from it.
+          # No tokens file (a mis-tarred secret) is left for bin/suite to
+          # report, with the login instructions, when a notion task launches.
+          shopt -s nullglob
+          for f in secrets/mcp/*/*_tokens.json; do
+            jq 'del(.refresh_token)' "$f" > "$f.tmp"
+            touch -r "$f" "$f.tmp"
+            mv "$f.tmp" "$f"
+          done
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -242,56 +255,6 @@ jobs:
           for dir in .temp/suites/*/; do
             bin/daytona_sweep suite --suite_id "$(basename "$dir")"
           done
-
-      # Mint a short-lived installation token for the induction-bot app
-      - name: Generate bot token for grant write-back
-        id: grant-token
-        if: always() && steps.suite_kind.outputs.toolathlon == 'true'
-        continue-on-error: true
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.INDUCTION_BOT_APP_ID }}
-          private-key: ${{ secrets.INDUCTION_BOT_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-          permission-secrets: write
-
-      # Notion rotates the refresh token on every refresh and kills the previous
-      # one. A suite sometimes refreshes, so if the last one isn't pushed back,
-      # the next suite restores a spent token and fails.
-      - name: Persist rotated notion MCP grant
-        if: always() && steps.suite_kind.outputs.toolathlon == 'true'
-        env:
-          GH_TOKEN: ${{ steps.grant-token.outputs.token }}
-        run: |
-          set -euo pipefail
-          # Detect rotation first: only a rotated token must be persisted, so
-          # runs that didn't rotate stay green without needing a token at all.
-          if ! ls secrets/mcp/*/*_tokens.json >/dev/null 2>&1; then
-            echo "No notion grant on disk (no notion tasks / no restore); nothing to persist."
-            exit 0
-          fi
-          if sha256sum -c --status secrets/mcp/.restored-sums 2>/dev/null; then
-            echo "Notion refresh token unchanged since restore; no rotation to persist."
-            exit 0
-          fi
-          # Rotation happened: the stored secret now holds a spent token.
-          # Persist the new one or fail loudly; a silent skip breaks the next run.
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::notion grant rotated but no bot token to persist it (induction-bot missing secrets:write here?); next run would restore a dead grant."
-            exit 1
-          fi
-          echo "Notion refresh token rotated this run; writing it back to TOOLATHLON_MCP_AUTH_B64."
-          # Encode to a temp file (not straight into the pipe) so a tar/base64
-          # failure can't hand gh a truncated body that it stores as success.
-          tmp="$(mktemp)"
-          trap 'rm -f "$tmp"' EXIT
-          tar czf - -C secrets/mcp --exclude=.restored-sums . | base64 -w0 > "$tmp"
-          if [ ! -s "$tmp" ]; then
-            echo "::error::encoded notion grant is empty; refusing to overwrite the secret."
-            exit 1
-          fi
-          gh secret set TOOLATHLON_MCP_AUTH_B64 --repo "$GITHUB_REPOSITORY" < "$tmp"
 
       - name: Upload suite logs
         if: always()

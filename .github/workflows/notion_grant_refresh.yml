@@ -1,0 +1,104 @@
+name: Notion Grant Refresh
+
+# The one holder of CI's notion refresh token. Notion's access token lives
+# about eight hours and its refresh token rotates on every use, with a reused
+# one revoking the whole grant. Suite runs restore the access token only
+# (suite.yml), so nothing they do can spend it. This workflow restores the
+# grant, refreshes the token when it has under seven hours left, and writes
+# the rotation back to the TOOLATHLON_MCP_AUTH_B64 secret with the
+# induction-bot app. A red run means the grant is dead; DEVELOPING.md
+# "Running in GitHub Actions" has the login that repairs it.
+on:
+  schedule:
+    # A suite copies the access token when it is queued and must outlive its
+    # wait plus its run (up to six hours) on that copy.
+    - cron: "23 */3 * * *"
+  workflow_dispatch:
+
+# GitHub reads a repository secret when a run is queued, so a run queued
+# behind another one holds the token that run is about to spend. The refresh
+# step skips when any run of this workflow finished after this one was queued.
+concurrency:
+  group: ${{ github.workflow }}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Restore notion MCP auth state
+        env:
+          MCP_AUTH_B64: ${{ secrets.TOOLATHLON_MCP_AUTH_B64 }}
+        run: |
+          if [ -z "$MCP_AUTH_B64" ]; then
+            echo "::error::TOOLATHLON_MCP_AUTH_B64 not set; DEVELOPING.md describes the login that creates it."
+            exit 1
+          fi
+          mkdir -p secrets/mcp
+          printf '%s' "$MCP_AUTH_B64" | base64 -d | tar xzf - -C secrets/mcp
+          sha256sum secrets/mcp/*/*_tokens.json > secrets/mcp/.saved-sums
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      # Minted before the refresh: a rotation that cannot be saved would leave
+      # the secret holding a spent token, so no bot token means no refresh.
+      - name: Generate bot token for the grant save
+        id: grant-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.INDUCTION_BOT_APP_ID }}
+          private-key: ${{ secrets.INDUCTION_BOT_PRIVATE_KEY }}
+          permission-secrets: write
+
+      - name: Refresh notion MCP grant
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Any finished run counts, whatever its conclusion: a run can save
+          # the rotated token and still end as failed or cancelled. The status
+          # is filtered here, not with --status, which returns stale results.
+          queued="$(gh run view "$GITHUB_RUN_ID" --json createdAt --jq .createdAt)"
+          newest="$(gh run list --workflow notion_grant_refresh.yml --limit 10 --json status,updatedAt --jq '[.[] | select(.status == "completed") | .updatedAt] | max // ""')"
+          if [[ "$newest" > "$queued" ]]; then
+            echo "A run of this workflow finished at $newest, after this run was queued at $queued, so the token restored here may already be spent. Skipping."
+            exit 0
+          fi
+          bin/refresh_mcp_auth --when_under_min 420
+
+      - name: Save rotated notion MCP grant
+        env:
+          GH_TOKEN: ${{ steps.grant-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          if sha256sum -c --status secrets/mcp/.saved-sums; then
+            echo "Notion refresh token unchanged; nothing to save."
+            exit 0
+          fi
+          echo "Notion refresh token rotated; writing it back to TOOLATHLON_MCP_AUTH_B64."
+          # Encode to a temp file (not straight into the pipe) so a tar/base64
+          # failure can't hand gh a truncated body that it stores as success.
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          tar czf - -C secrets/mcp --exclude=.saved-sums . | base64 -w0 > "$tmp"
+          if [ ! -s "$tmp" ]; then
+            echo "::error::encoded notion grant is empty; refusing to overwrite the secret."
+            exit 1
+          fi
+          # Only the save is retried: a second refresh would spend the token
+          # that is still waiting to be saved.
+          for attempt in 1 2 3; do
+            if gh secret set TOOLATHLON_MCP_AUTH_B64 --repo "$GITHUB_REPOSITORY" < "$tmp"; then exit 0; fi
+            echo "Save attempt $attempt failed."
+            sleep 5
+          done
+          echo "::error::could not save the rotated notion grant; the next refresh would restore a spent token."
+          exit 1

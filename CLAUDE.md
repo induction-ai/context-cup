@@ -57,6 +57,9 @@ bin/review_driver [--claude] [--smoke] [--base <ref>]
 bin/deploy [--yes]         push origin/main to the production branch, which Render deploys
 bin/daytona_sweep suite --suite_id <id> | errors [--dry_run]
                            delete Daytona sandboxes a run left behind
+bin/refresh_mcp_auth --when_under_min <N>
+                           refresh the notion MCP token in secrets/mcp when it has under
+                           N minutes left (the Notion Grant Refresh workflow's step)
 bin/drivers sync | status  write drivers/ (with fingerprints) to the database; list what
                            each driver owes (the driver_status view)
 bin/db generate            write a migration for schema.ts changes

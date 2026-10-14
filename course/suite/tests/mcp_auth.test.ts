@@ -19,14 +19,19 @@ import {
   MCP_REMOTE_VERSION,
   mcpTokensFile,
   refreshMcpAuthIfStale,
+  requireLiveMcpAuth,
   resetBakeState,
 } from "../src/mcp_auth.ts";
 
 const NOW = new Date("2026-09-23T12:00:00Z");
 
 /** An mcp-remote login under a fresh dir, its tokens written `ageMinutes`
- *  before NOW with an 8 hour lifetime. */
-function login(ageMinutes: number): { dir: string; tokens: string } {
+ *  before NOW with an 8 hour lifetime. Without `refresh` it is a CI suite's
+ *  copy: the access token alone. */
+function login(
+  ageMinutes: number,
+  { refresh = true }: { refresh?: boolean } = {}
+): { dir: string; tokens: string } {
   const dir = mkdtempSync(path.join(tmpdir(), "cc-mcp-"));
   const state = path.join(dir, `mcp-remote-${MCP_REMOTE_VERSION}`);
   mkdirSync(state);
@@ -35,7 +40,7 @@ function login(ageMinutes: number): { dir: string; tokens: string } {
     tokens,
     JSON.stringify({
       access_token: "old-access",
-      refresh_token: "old-refresh",
+      ...(refresh ? { refresh_token: "old-refresh" } : {}),
       expires_in: 8 * 3600,
       token_type: "bearer",
     })
@@ -105,6 +110,43 @@ describe("refreshMcpAuthIfStale", () => {
     ]);
   });
 
+  it("refreshes under the caller's own threshold", async () => {
+    const { dir, tokens } = login(2 * 60);
+    const { fetch, calls } = oauthFetch();
+    await refreshMcpAuthIfStale(() => {}, { dir, fetch, now: NOW });
+    expect(calls).toEqual([]);
+    await refreshMcpAuthIfStale(() => {}, {
+      dir,
+      fetch,
+      now: NOW,
+      when_under_min: 420,
+    });
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://auth.test/.well-known/oauth-authorization-server".replace(
+        "https://auth.test",
+        "https://mcp.notion.com"
+      ),
+      "https://auth.test/token",
+    ]);
+    expect(JSON.parse(readFileSync(tokens, "utf8")).refresh_token).toBe(
+      "new-refresh"
+    );
+  });
+
+  it("leaves a stale token without a refresh token alone, saying so", async () => {
+    const { dir, tokens } = login(7.5 * 60, { refresh: false });
+    const { fetch, calls } = oauthFetch();
+    const lines: string[] = [];
+    await refreshMcpAuthIfStale((l) => lines.push(l), { dir, fetch, now: NOW });
+    expect(calls).toEqual([]);
+    expect(lines).toEqual([
+      "harbor: the notion MCP token has 30m of life left and no refresh token here, so it stays as it is",
+    ]);
+    expect(JSON.parse(readFileSync(tokens, "utf8")).access_token).toBe(
+      "old-access"
+    );
+  });
+
   it("fails loudly on a dead grant", async () => {
     const { dir } = login(9 * 60);
     const { fetch } = oauthFetch(400);
@@ -117,6 +159,65 @@ describe("refreshMcpAuthIfStale", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "cc-mcp-"));
     expect(mcpTokensFile(dir)).toBeUndefined();
     await refreshMcpAuthIfStale(() => {}, { dir, fetch: oauthFetch().fetch });
+  });
+});
+
+describe("requireLiveMcpAuth", () => {
+  type Probe = { authorization: string | null; body: string | null };
+
+  function probeFetch(verdict: number | Error): {
+    fetch: typeof fetch;
+    probes: Probe[];
+  } {
+    const probes: Probe[] = [];
+    const impl = async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe("https://mcp.notion.com/mcp");
+      probes.push({
+        authorization: new Headers(init?.headers).get("authorization"),
+        body: init?.body ? String(init.body) : null,
+      });
+      if (verdict instanceof Error) throw verdict;
+      return new Response("{}", { status: verdict });
+    };
+    return { fetch: impl as typeof fetch, probes };
+  }
+
+  it("sends the access token with an initialize request and reports the verdict", async () => {
+    const { dir } = login(0);
+    const { fetch, probes } = probeFetch(200);
+    const lines: string[] = [];
+    await requireLiveMcpAuth((l) => lines.push(l), { dir, fetch });
+    expect(probes).toHaveLength(1);
+    expect(probes[0]!.authorization).toBe("Bearer old-access");
+    expect(JSON.parse(probes[0]!.body!).method).toBe("initialize");
+    expect(lines).toEqual([
+      "harbor: notion MCP accepted the access token (HTTP 200)",
+    ]);
+  });
+
+  it("fails loudly when Notion rejects the token", async () => {
+    const { dir } = login(0);
+    const { fetch } = probeFetch(401);
+    await expect(requireLiveMcpAuth(() => {}, { dir, fetch })).rejects.toThrow(
+      /rejected the access token \(401\): the grant is dead/
+    );
+  });
+
+  it("lets a transport failure pass, saying so", async () => {
+    const { dir } = login(0);
+    const { fetch } = probeFetch(new Error("fetch failed\nsomething"));
+    const lines: string[] = [];
+    await requireLiveMcpAuth((l) => lines.push(l), { dir, fetch });
+    expect(lines).toEqual([
+      "harbor: the notion MCP probe did not reach the server (fetch failed)",
+    ]);
+  });
+
+  it("does nothing without a login", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cc-mcp-"));
+    const { fetch, probes } = probeFetch(401);
+    await requireLiveMcpAuth(() => {}, { dir, fetch });
+    expect(probes).toEqual([]);
   });
 });
 
@@ -133,6 +234,22 @@ describe("bakeMcpAuthIntoTaskConfigs", () => {
 
   const entries = (zip: string) =>
     execFileSync("unzip", ["-Z1", zip]).toString().trim().split("\n").sort();
+
+  it("bakes the access token without the refresh token", async () => {
+    const { dir } = login(0);
+    const tasks = tasksDir();
+    bakeMcpAuthIntoTaskConfigs(tasks, () => {}, dir);
+    const baked = execFileSync("unzip", [
+      "-p",
+      path.join(tasks, "notion-hr/environment/configs.zip"),
+      `.mcp-auth/mcp-remote-${MCP_REMOTE_VERSION}/abc_tokens.json`,
+    ]).toString();
+    expect(JSON.parse(baked)).toEqual({
+      access_token: "old-access",
+      expires_in: 8 * 3600,
+      token_type: "bearer",
+    });
+  });
 
   it("adds .mcp-auth/ to the notion tasks' configs.zip only, once per token", async () => {
     const { dir } = login(0);

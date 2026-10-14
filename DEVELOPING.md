@@ -157,10 +157,13 @@ MCP_REMOTE_CONFIG_DIR=secrets/mcp npx -y mcp-remote@0.1.16 https://mcp.notion.co
 # approve in the browser, then Ctrl-C once it prints "Proxy established successfully"
 ```
 
-Its refresh token rotates on every use. Docker trials mount `secrets/mcp`
-live. Daytona sandboxes cannot mount a host path, so before each notion job
-`bin/suite` refreshes a token with under an hour left and bakes a snapshot
-into the notion tasks' `configs.zip` (`course/suite/src/mcp_auth.ts`).
+Its refresh token rotates on every use, and reusing a spent one revokes the
+whole grant, so only one holder may ever refresh. Docker trials mount
+`secrets/mcp` live. Daytona sandboxes cannot mount a host path, so before
+each notion job `bin/suite` refreshes a token with under an hour left,
+checks that Notion still accepts it, and bakes a copy without the refresh
+token into the notion tasks' `configs.zip` (`course/suite/src/mcp_auth.ts`),
+so a sandbox can never rotate the grant behind the host.
 
 ### Daytona or Docker
 
@@ -236,14 +239,26 @@ straight away, with no edit to the workflow. It runs on Daytona by default. It r
 suite against the deployed database (the site's deploy migrates it), deletes the run's Daytona sandboxes (including
 after a cancel), writes the results table to the run summary, and uploads
 two artifacts: `suite-summary` (results and the suite log) and `suite-logs`
-(all of `.temp/suites/`). Toolathlon runs take turns, restore the notion
-login, and write it back when it rotated. The suite row records the
+(all of `.temp/suites/`). Full `toolathlon` runs take turns, since the
+tasks act on shared live accounts, and restore the notion login's access
+token, never its refresh token. The suite row records the
 workflow run id, attempt, and repository, and the results site links back to
 the run. The suite and target option lists mirror `suites/` and
 `targets.json`, and a test fails when they drift.
 
 **Daytona sweep** runs hourly and deletes context-cup sandboxes
 whose build failed more than 12 hours earlier.
+
+**Notion grant refresh** (`.github/workflows/notion_grant_refresh.yml`) is
+the one holder of CI's notion refresh token. Every three hours it restores
+the `TOOLATHLON_MCP_AUTH_B64` secret, refreshes a token with under seven
+hours left (`bin/refresh_mcp_auth --when_under_min 420`), and writes the
+rotated grant back with the induction-bot app. GitHub hands a run the
+secrets as they were when it was queued, so a run queued behind another
+skips its refresh when that run finished first. A red run means the grant
+is dead; the login below repairs it. GitHub disables a scheduled workflow
+after 60 days without a commit, so after a quiet spell check the Actions
+tab for a paused schedule before running toolathlon.
 
 **Driver review** (`.github/workflows/driver_review.yml`) reviews an entry's
 pull request in three steps, each starting only when the one before passes
@@ -294,20 +309,20 @@ smoke run. A maintainer adds a merged driver to the Suite workflow's
 
 Repository secrets:
 
-| secret                                                  | for                                                                                                            |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                          | the production Postgres; the runner must be able to reach it                                                   |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` | the providers the chosen target and driver call                                                                |
-| `DAYTONA_API_KEY`                                       | Daytona runs and the sweep                                                                                     |
-| `TOOLATHLON_AUTH_CONFIGS_B64`                           | optional: `base64 < secrets/toolathlon_auth_configs.zip \| gh secret set TOOLATHLON_AUTH_CONFIGS_B64`          |
-| `TOOLATHLON_MCP_AUTH_B64`                               | the notion tasks' login; see below                                                                             |
-| `INDUCTION_BOT_APP_ID`, `INDUCTION_BOT_PRIVATE_KEY`     | the induction-bot GitHub App, installed on this repository with Secrets write, to store a rotated notion login |
+| secret                                                  | for                                                                                                                                      |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                          | the production Postgres; the runner must be able to reach it                                                                             |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` | the providers the chosen target and driver call                                                                                          |
+| `DAYTONA_API_KEY`                                       | Daytona runs and the sweep                                                                                                               |
+| `TOOLATHLON_AUTH_CONFIGS_B64`                           | optional: `base64 < secrets/toolathlon_auth_configs.zip \| gh secret set TOOLATHLON_AUTH_CONFIGS_B64`                                    |
+| `TOOLATHLON_MCP_AUTH_B64`                               | the notion tasks' login; see below                                                                                                       |
+| `INDUCTION_BOT_APP_ID`, `INDUCTION_BOT_PRIVATE_KEY`     | the induction-bot GitHub App, installed on this repository with Secrets write; the notion grant refresh stores the rotated login with it |
 
 The repository variable `SITE_URL` points printed links at the deployed
 results site.
 
 CI gets its own Notion login, since a refresh from either copy would spend
-the other's token. To set it:
+the other's token. To set it, or to replace a dead one:
 
 ```
 mkdir /tmp/ci-grant
@@ -316,6 +331,9 @@ MCP_REMOTE_CONFIG_DIR=/tmp/ci-grant npx -y mcp-remote@0.1.16 https://mcp.notion.
 COPYFILE_DISABLE=1 tar czf - -C /tmp/ci-grant . | base64 | gh secret set TOOLATHLON_MCP_AUTH_B64
 rm -rf /tmp/ci-grant
 ```
+
+Then run the Notion Grant Refresh workflow once from the Actions tab; a
+green run confirms the new grant.
 
 ## Results site
 

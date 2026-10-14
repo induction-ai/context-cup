@@ -1,0 +1,4 @@
+#!/bin/bash
+# Refresh the notion MCP token in secrets/mcp when it is near expiry (see course/suite/src/refresh_mcp_auth.ts).
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" && exec node_modules/.bin/tsx course/suite/src/refresh_mcp_auth.ts "$@"
