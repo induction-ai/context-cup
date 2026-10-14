@@ -7,6 +7,7 @@ import {
   driver,
   driverStatus,
   job,
+  runEligibility,
   suite,
   trial,
 } from "@context-cup/db/schema.js";
@@ -115,6 +116,7 @@ async function run(options: {
   suite_name?: string;
   target_name?: string;
   reward?: number;
+  github_run_id?: string;
 }): Promise<string> {
   const db = getCurrentTransaction();
   const id = `s_${++seq}`;
@@ -130,6 +132,7 @@ async function run(options: {
     model: "gpt-5.5",
     count: 2,
     driver_fingerprint: options.fingerprint,
+    github_run_id: options.github_run_id,
     harbor_env: "docker",
     log_dir: "/tmp",
     started_at: options.started_at,
@@ -182,6 +185,35 @@ async function statuses() {
     .orderBy(asc(driverStatus.driver_name));
   return Object.fromEntries(rows.map((r) => [r.driver_name, r]));
 }
+
+describe("run_eligibility", () => {
+  it("names the workflow run a suite came from", async () => {
+    await writeCompetition(getCurrentTransaction(), [BENCH]);
+    const from_ci = await run({
+      driver_name: "d",
+      fingerprint: "fp",
+      started_at: T0,
+      github_run_id: "123456",
+    });
+    const local = await run({
+      driver_name: "d",
+      fingerprint: "fp",
+      started_at: T1,
+    });
+    const rows = await getCurrentTransaction()
+      .select({
+        suite_id: runEligibility.suite_id,
+        github_run_id: runEligibility.github_run_id,
+        eligible: runEligibility.eligible,
+      })
+      .from(runEligibility)
+      .orderBy(asc(runEligibility.suite_id));
+    expect(rows).toEqual([
+      { suite_id: from_ci, github_run_id: "123456", eligible: true },
+      { suite_id: local, github_run_id: null, eligible: true },
+    ]);
+  });
+});
 
 describe("driver_status", () => {
   async function register(...list: DriverFacts[]) {

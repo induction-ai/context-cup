@@ -69,7 +69,8 @@ so the site, `bin/drivers`, and anything else reading the database agree:
   that decide it, and `on_board`, the run each driver stands on. This is the
   only statement of the eligibility rule; the site's leaderboard and suites
   pages read it, and `disqualifications` in `standings.ts` only words its
-  facts.
+  facts. It also carries the run's `github_run_id`, so a Suite workflow run
+  can be matched to the suite it wrote (and topped up with `--append`).
 - `driver_status`: one row per registered driver and competition suite: its
   standing run's score, its latest run and why that run does or doesn't
   count, and a status: `current` (its standing run ran its present code),

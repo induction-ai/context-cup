@@ -316,6 +316,10 @@ export const runEligibility = pgView("run_eligibility", {
   driver_fingerprint: text(),
   started_at: timestamp({ withTimezone: true }).notNull(),
   finished_at: timestamp({ withTimezone: true }),
+  /** The GitHub Actions run that started it (`suite.github_run_id`), so a
+   *  workflow run can be matched to the suite it wrote; null for local
+   *  runs and for an `--append`, whose suite keeps its first run's. */
+  github_run_id: text(),
   /** The target the competition judges a suite of this name at; null when
    *  the suite isn't a competition suite. */
   competition_target: text(),
@@ -332,6 +336,7 @@ export const runEligibility = pgView("run_eligibility", {
   with judged as (
     select s.id as suite_id, s.name as suite_name, s.driver_name,
       s.target_name, s.driver_fingerprint, s.started_at, s.finished_at,
+      s.github_run_id,
       c.target_name as competition_target,
       c.min_done,
       coalesce(req.required, 0) as required_tasks,
