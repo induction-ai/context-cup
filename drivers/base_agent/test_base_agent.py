@@ -36,32 +36,39 @@ def add(a: int, b: int) -> str:
 mcp.run()
 """
 
+# Each reply's choices. LiteLLM's Responses bridge answers a preamble before
+# tool calls as two choices (the text, then the calls), as the second here.
 REPLIES = [
-    {
-        # The course's cache-bust tool, called anyway: answered by the agent.
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "b1",
-                "type": "function",
-                "function": {"name": "cache_bust_trial", "arguments": "{}"},
-            }
-        ],
-    },
-    {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "c1",
-                "type": "function",
-                "function": {"name": "add", "arguments": '{"a": 2, "b": 3}'},
-            }
-        ],
-    },
-    {"role": "assistant", "content": ""},  # blank: asked again
-    {"role": "assistant", "content": "It is 5."},
+    [
+        {
+            # The course's cache-bust tool, called anyway: answered by the agent.
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "b1",
+                    "type": "function",
+                    "function": {"name": "cache_bust_trial", "arguments": "{}"},
+                }
+            ],
+        }
+    ],
+    [
+        {"role": "assistant", "content": "Adding them."},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "add", "arguments": '{"a": 2, "b": 3}'},
+                }
+            ],
+        },
+    ],
+    [{"role": "assistant", "content": ""}],  # blank: asked again
+    [{"role": "assistant", "content": "It is 5."}],
 ]
 
 
@@ -94,7 +101,12 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
 
     async def complete(**kwargs):
         sent.append(json.loads(json.dumps(kwargs)))
-        return ModelResponse(choices=[{"message": REPLIES[len(sent) - 1]}])
+        return ModelResponse(
+            choices=[
+                {"message": message, "index": i}
+                for i, message in enumerate(REPLIES[len(sent) - 1])
+            ]
+        )
 
     monkeypatch.setattr(agent, "complete", complete)
     assert asyncio.run(agent.main()) == 0
@@ -117,6 +129,10 @@ def test_the_agent_works_the_task_with_the_servers_tools(tmp_path, monkeypatch):
         "tool_call_id": "b1",
         "content": '{"success": true}',
     }
+    # The preamble and its tool call, merged into one assistant message.
+    preamble = sent[-1]["messages"][-2]
+    assert preamble["content"] == "Adding them."
+    assert [c["id"] for c in preamble["tool_calls"]] == ["c1"]
     assert sent[-1]["messages"][-1] == {
         "role": "tool",
         "tool_call_id": "c1",

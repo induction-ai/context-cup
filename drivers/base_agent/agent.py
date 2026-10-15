@@ -33,7 +33,7 @@ os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
 import litellm
 from litellm.types.llms.openai import ChatCompletionToolParam
-from litellm.types.utils import ModelResponse
+from litellm.types.utils import Choices, Message, ModelResponse
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -212,6 +212,33 @@ async def complete(**kwargs: Any) -> ModelResponse:
     return cast(ModelResponse, await litellm.acompletion(**kwargs))
 
 
+def reply(response: ModelResponse) -> Message:
+    """The model's reply as one message.
+
+    LiteLLM's Responses bridge answers a reply that says something before
+    calling tools (a preamble, which OpenAI's reasoning models send often)
+    as two choices: the text, finishing "stop", then the tool calls. Taking
+    the first alone would end the task at the preamble. So every choice is
+    merged: the text joined, every tool call kept, and the reasoning items
+    (what the next call must send back) from whichever choice carries them.
+    """
+    messages = [cast(Choices, choice).message for choice in response.choices]
+    first = messages[0]
+    if len(messages) == 1:
+        return first
+    # LiteLLM's Message leaves a field it never set unset, so no attribute.
+    field = lambda m, name: getattr(m, name, None)  # noqa: E731
+    with_reasoning = next((m for m in messages if field(m, "reasoning_items")), first)
+    return Message(
+        role="assistant",
+        content="\n\n".join(m.content for m in messages if m.content) or None,
+        tool_calls=[call for m in messages for call in m.tool_calls or []] or None,
+        reasoning_content=field(with_reasoning, "reasoning_content"),
+        reasoning_items=field(with_reasoning, "reasoning_items"),
+        provider_specific_fields=field(with_reasoning, "provider_specific_fields"),
+    )
+
+
 async def main() -> int:
     env = os.environ
     target: Target = json.loads(env["CC_TARGET_JSON"])
@@ -265,7 +292,7 @@ async def main() -> int:
                     drop_params=True,
                     timeout=600,
                 )
-                message = response.choices[0].message
+                message = reply(response)
                 calls = message.tool_calls or []
                 if not calls and not (message.content or "").strip():
                     # A blank reply is a provider hiccup: ask again.
