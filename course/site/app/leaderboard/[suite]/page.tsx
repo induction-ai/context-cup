@@ -8,6 +8,7 @@ import {
   CostScoreChart,
   type ChartDot,
 } from "@/src/components/cost_score_chart";
+import { DriverLink } from "@/src/components/driver_link";
 import { change, dollars, reward, when } from "@/src/lib/format";
 import { loadBoard } from "@/src/lib/queries";
 import {
@@ -86,9 +87,10 @@ export default async function LeaderboardPage({
         <>
           {leader ? (
             <div className="alert alert-success">
-              <span className="font-monospace fw-semibold">
-                {leader.driver_name}
-              </span>{" "}
+              <DriverLink
+                className="font-monospace fw-semibold"
+                name={leader.driver_name}
+              />{" "}
               leads: score {reward(leader.mean_reward)} against the baseline’s{" "}
               {reward(bar)}, at {dollars(leader.run_cents)} per run against the
               baseline’s {dollars(budget)}.
@@ -194,7 +196,9 @@ function DriverRow({ s }: { s: Standing }) {
   return (
     <FocusRow focusKey={s.driver_name}>
       <td className="text-end font-monospace">{s.rank}</td>
-      <td className="font-monospace">{s.driver_name}</td>
+      <td className="font-monospace">
+        <DriverLink name={s.driver_name} />
+      </td>
       <td className="text-end font-monospace">{reward(s.mean_reward)}</td>
       <td className="text-end font-monospace">{change(s.score_ratio)}</td>
       <td className="text-end font-monospace">{dollars(s.run_cents)}</td>

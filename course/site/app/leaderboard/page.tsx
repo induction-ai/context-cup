@@ -8,6 +8,7 @@ import {
   CostScoreChart,
   type ChartDot,
 } from "@/src/components/cost_score_chart";
+import { DriverLink } from "@/src/components/driver_link";
 import { change, dollars, reward } from "@/src/lib/format";
 import { loadBoard } from "@/src/lib/queries";
 import {
@@ -78,9 +79,10 @@ export default async function CombinedLeaderboard() {
         <>
           {leader ? (
             <div className="alert alert-success">
-              <span className="font-monospace fw-semibold">
-                {leader.driver_name}
-              </span>{" "}
+              <DriverLink
+                className="font-monospace fw-semibold"
+                name={leader.driver_name}
+              />{" "}
               leads: it clears every baseline’s score, spending{" "}
               {(100 * (1 - (leader.cost_ratio ?? 1))).toFixed(1)}% less than the
               baselines (the geometric mean across benchmarks).
@@ -199,7 +201,9 @@ function DriverRow({ s }: { s: CombinedStanding }) {
   return (
     <FocusRow focusKey={s.driver_name}>
       <td className="text-end font-monospace">{s.rank}</td>
-      <td className="font-monospace">{s.driver_name}</td>
+      <td className="font-monospace">
+        <DriverLink name={s.driver_name} />
+      </td>
       {BENCHMARK_SUITES.map((name) => {
         const b = s.boards[name];
         if (!b) {

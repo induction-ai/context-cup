@@ -1,3 +1,4 @@
+import { DriverLink } from "@/src/components/driver_link";
 import {
   cents,
   count,
@@ -86,7 +87,7 @@ export default async function TrialPage({
           </Link>
         </Fact>
         <Fact label="driver" mono>
-          {suite.driver_name}
+          <DriverLink name={suite.driver_name} />
         </Fact>
         <Fact label="target">
           {suite.target_name}{" "}

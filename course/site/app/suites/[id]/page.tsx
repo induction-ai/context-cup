@@ -1,3 +1,4 @@
+import { DriverLink } from "@/src/components/driver_link";
 import { SortTh } from "@/src/components/sort_th";
 import {
   cellFor,
@@ -125,7 +126,7 @@ export default async function SuitePage({
               driver
             </dt>
             <dd className="col-8 col-md-9 font-monospace">
-              {suite.driver_name}
+              <DriverLink name={suite.driver_name} />
             </dd>
           </dl>
         </div>

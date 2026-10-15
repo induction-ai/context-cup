@@ -1,3 +1,4 @@
+import { DriverLink } from "@/src/components/driver_link";
 import { SortTh } from "@/src/components/sort_th";
 import {
   cents,
@@ -83,7 +84,9 @@ export default async function SuitesPage({
                       <Link href={`/suites/${s.id}`}>{s.id}</Link>
                     </td>
                     <td>{s.name}</td>
-                    <td className="font-monospace">{s.driver_name}</td>
+                    <td className="font-monospace">
+                      <DriverLink name={s.driver_name} />
+                    </td>
                     <td>
                       {s.target_name}
                       <br />

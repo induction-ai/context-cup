@@ -18,6 +18,12 @@ export const SPONSORS = [
   { name: "Daytona", url: DAYTONA_URL },
 ];
 
+/** A driver's folder in the repo: the course names drivers by folder, so
+ *  the name is the path. */
+export function driverUrl(driver_name: string): string {
+  return `${REPO_URL}/tree/main/drivers/${driver_name}`;
+}
+
 export const DOCS = {
   entering: `${REPO_URL}#entering`,
   drivers: `${REPO_URL}/blob/main/docs/drivers.md`,
