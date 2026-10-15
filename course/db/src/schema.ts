@@ -227,14 +227,12 @@ export const driver = pgTable("driver", {
   removed_at: timestamp({ withTimezone: true }),
 });
 
-/** Operator settings: one row per key, a JSON value each. Nothing in this
- *  repo reads or writes them; the table is here so the database's schema
- *  has one home and one migration history. A writer sets `updated_at`
- *  itself (there is no trigger). */
+/** Operator settings, one row per key (DEVELOPING.md "Operator settings"). */
 export const setting = pgTable("setting", {
   key: text().primaryKey(),
   value: jsonb().notNull(),
-  updated_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  /** No default: a writer states when it wrote, or the insert fails. */
+  updated_at: timestamp({ withTimezone: true }).notNull(),
 });
 
 /** The suites the competition is judged on and the target it judges them at,

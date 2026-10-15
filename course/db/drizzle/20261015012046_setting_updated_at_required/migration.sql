@@ -1,0 +1,1 @@
+ALTER TABLE "setting" ALTER COLUMN "updated_at" DROP DEFAULT;
