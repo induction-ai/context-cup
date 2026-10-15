@@ -15,7 +15,7 @@ describe("competition", () => {
       "toolathlon",
     ]);
     expect(facts[0]).toMatchObject({
-      target_name: "gpt-6-sol@medium",
+      target_name: "gpt-6.1-sol@medium",
       provider: "openai",
       min_done: 2,
     });

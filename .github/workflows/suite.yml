@@ -37,7 +37,7 @@ on:
         description: "Target model (targets.json); the driver must support its provider"
         required: true
         type: choice
-        default: gpt-6-sol@medium
+        default: gpt-6.1-sol@medium
         options:
           - claude-sonnet-4-6
           - claude-sonnet-5-5

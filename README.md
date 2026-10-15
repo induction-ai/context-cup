@@ -52,7 +52,7 @@ change; its trials may share a cache with each other.
 ## Rules
 
 - **Models**: a driver may call any model from the target's provider, as
-  often as it likes. At `gpt-6-sol@medium` that is any OpenAI model. The
+  often as it likes. At `gpt-6.1-sol@medium` that is any OpenAI model. The
   target is the default, not a requirement: a cheaper OpenAI model for
   summaries is fair game, an Anthropic or Gemini model is not.
 - **One endpoint**: every model call goes to the base URL the driver is
@@ -74,12 +74,12 @@ least money.
 ### Qualifying
 
 Each benchmark is judged on one suite at the reference target
-(`gpt-6-sol@medium`), against a fixed baseline:
+(`gpt-6.1-sol@medium`), against a fixed baseline:
 
 | benchmark  | suite         | baseline score | baseline $ per run |
 | ---------- | ------------- | -------------- | ------------------ |
-| tau3       | `tau_banking` | 0.42           | $40                |
-| Toolathlon | `toolathlon`  | 0.58           | $25                |
+| tau3       | `tau_banking` | 0.40           | $21                |
+| Toolathlon | `toolathlon`  | 0.62           | $24                |
 
 A driver qualifies for the cup when, on every benchmark, both hold:
 

@@ -114,7 +114,7 @@ history.
 A run is one suite file, one driver, and one target model.
 
 ```
-bin/suite tau_banking --driver base_python --harbor_env daytona    # at the reference target, gpt-6-sol@medium
+bin/suite tau_banking --driver base_python --harbor_env daytona    # at the reference target, gpt-6.1-sol@medium
 bin/suite toolathlon_local --driver base_python --target gpt-5.5@medium --count 2 --harbor_env daytona
 bin/suite smoke_tau --driver base_python --target gpt-5.5@medium --harbor_env daytona
 bin/suite smoke_tau --harbor_env daytona       # prompts for the driver

@@ -192,9 +192,9 @@ describe("BENCHMARK_TASKS", () => {
 
 describe("disqualifications", () => {
   const good = {
-    target_name: "gpt-6-sol@medium",
+    target_name: "gpt-6.1-sol@medium",
     finished_at: new Date("2026-09-25T00:00:00Z"),
-    competition_target: "gpt-6-sol@medium",
+    competition_target: "gpt-6.1-sol@medium",
     min_done: 2,
     required_tasks: 107,
     min_task_done: 2,
@@ -214,7 +214,7 @@ describe("disqualifications", () => {
         min_task_done: 1,
       })
     ).toEqual([
-      "target isn’t gpt-6-sol@medium",
+      "target isn’t gpt-6.1-sol@medium",
       "not finished",
       "a task has 1 completed trial, needs 2",
     ]);
