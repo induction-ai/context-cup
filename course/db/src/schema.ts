@@ -11,6 +11,7 @@ import {
   doublePrecision,
   index,
   integer,
+  jsonb,
   pgTable,
   pgView,
   primaryKey,
@@ -224,6 +225,16 @@ export const driver = pgTable("driver", {
   changed_at: timestamp({ withTimezone: true }),
   synced_at: timestamp({ withTimezone: true }).notNull(),
   removed_at: timestamp({ withTimezone: true }),
+});
+
+/** Operator settings: one row per key, a JSON value each. Nothing in this
+ *  repo reads or writes them; the table is here so the database's schema
+ *  has one home and one migration history. A writer sets `updated_at`
+ *  itself (there is no trigger). */
+export const setting = pgTable("setting", {
+  key: text().primaryKey(),
+  value: jsonb().notNull(),
+  updated_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
 /** The suites the competition is judged on and the target it judges them at,

@@ -95,6 +95,11 @@ bin/drivers sync [--dry_run]   write drivers/ and their fingerprints to the data
 bin/drivers status [--all]     what each driver owes (--all: current ones too)
 ```
 
+The `setting` table (one row per key, a JSON value each) is for operator
+settings: whatever runs the competition's operations keeps its switches
+there. Nothing in this repo reads or writes it, and a writer sets
+`updated_at` itself.
+
 drizzle-kit writes a migration's new views in alphabetical order, not the
 order they depend on one another; put `suite_score` before
 `run_eligibility` before `driver_status` by hand when a migration recreates
