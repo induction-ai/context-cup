@@ -79,7 +79,7 @@ Each benchmark is judged on one suite at the reference target
 | benchmark  | suite         | baseline score | baseline $ per run |
 | ---------- | ------------- | -------------- | ------------------ |
 | tau3       | `tau_banking` | 0.40           | $21                |
-| Toolathlon | `toolathlon`  | 0.62           | $24                |
+| Toolathlon | `toolathlon`  | 0.64           | $24                |
 
 A driver qualifies for the cup when, on every benchmark, both hold:
 
