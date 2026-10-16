@@ -327,6 +327,65 @@ def test_retries_exhausted_fail_the_trial(workspace, steps, expected):
     assert len(summary["errors"]) == 2
 
 
+def test_a_driver_failure_ends_the_trial_to_be_graded(workspace):
+    # The provider answered turn 1, then refused turn 2's request outright
+    # (a 400, say context_length_exceeded) on every attempt.
+    refused = {"crash": True, "calls": [{"status": 400}]}
+    write_script(
+        workspace["driver"],
+        [
+            {"tool_calls": [call("c1", "lookup")], "calls": [{"status": 200}]},
+            refused,
+            refused,
+        ],
+    )
+    env = MemoryEnvironment()
+    result = run(Trial(make_settings(workspace, turn_retries=1), env))
+
+    assert result.stop_reason == "driver_error"
+    assert result.turns == 1
+    assert env.closed_with == "driver_error"
+    summary = json.loads((workspace["agent"] / "summary.json").read_text())
+    assert summary["stop_reason"] == "driver_error"
+    assert (
+        "turn 2 failed after 2 attempts: driver exited 7" in summary["extra"]["error"]
+    )
+
+
+@pytest.mark.parametrize(
+    "calls",
+    [
+        [{"status": 503}],
+        [{"status": 429}],
+        # The turn timed out while the proxy was still backing off.
+        [{"status": 429, "error": "status 429, retried"}],
+        [{"status": 502, "error": "upstream unreachable: ECONNRESET"}],
+        [{"status": 200, "error": "upstream stream failed: terminated"}],
+    ],
+)
+def test_a_provider_failure_stays_an_error(workspace, calls):
+    failing = {"crash": True, "calls": calls}
+    write_script(
+        workspace["driver"],
+        [
+            {"tool_calls": [call("c1", "f")], "calls": [{"status": 200}]},
+            failing,
+            failing,
+        ],
+    )
+    env = MemoryEnvironment()
+    with pytest.raises(TrialError, match="turn 2 failed after 2 attempts"):
+        run(Trial(make_settings(workspace, turn_retries=1), env))
+    assert env.closed_with == "runner_error"
+
+
+def test_a_failure_before_the_provider_ever_answered_stays_an_error(workspace):
+    # Nothing shows the keys and the route work, so it may not be the driver.
+    write_script(workspace["driver"], [{"crash": True}, {"crash": True}])
+    with pytest.raises(TrialError):
+        run(Trial(make_settings(workspace, turn_retries=1), MemoryEnvironment()))
+
+
 def test_empty_replies_do_not_use_the_turn_s_attempts(workspace, capsys):
     write_script(workspace["driver"], [{"text": ""}, {"text": ""}, {"text": "finally"}])
     result = run(Trial(make_settings(workspace, turn_retries=0), MemoryEnvironment()))

@@ -73,7 +73,11 @@ and `driver_state/`.
 ## Failures
 
 A crash, a missing `output.json`, or a bad one uses one of the turn's
-`CC_TURN_RETRIES`. An empty reply is discarded instead and uses one of the
+`CC_TURN_RETRIES`. Running out of them is the driver's failure when the
+provider has answered the trial before and `calls.jsonl` shows no failure of
+the provider's in any attempt (any 429 or 5xx, even one the proxy retried,
+an unreachable upstream, a broken stream): the trial stops with `driver_error`, and the verifier grades
+it as it stands. Otherwise it fails with `runner_error`. An empty reply is discarded instead and uses one of the
 trial's `CC_EMPTY_RETRIES`; running out ends the trial with `agent_error`
 (which tau3's runtime records). An exception from the environment ends it
 with `env_error`, any other with `runner_error`, and Toolathlon's step cap

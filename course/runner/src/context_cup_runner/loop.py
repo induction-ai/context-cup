@@ -77,6 +77,54 @@ class EnvironmentFailure(TrialError):
         super().__init__(message, stop_reason="env_error")
 
 
+class DriverFailure(TrialError):
+    """A turn failed every attempt and the provider was never at fault: the
+    driver crashed, wrote a bad output.json, or sent a request the provider
+    refused. The trial ends there and is graded as it stands, so the failure
+    counts against the driver's score and cost instead of being left out as
+    an error."""
+
+    def __init__(self, message: str):
+        super().__init__(message, stop_reason="driver_error")
+
+
+PROVIDER_FAILURE_STATUS = frozenset({429, 500, 502, 503, 504, 529})
+"""Statuses that are the provider's (or the network's) doing, never the
+request's: rate limits, quota, outages."""
+
+
+def provider_failure(calls: list[dict[str, Any]], turn_ids: set[str]) -> bool:
+    """Whether the provider failed any call in `turn_ids`: a 429 or 5xx, an
+    unreachable upstream, or a stream that broke off. One the proxy retried
+    counts too, since its backoff can outlast the turn's timeout."""
+    for record in calls:
+        if record.get("turn_id") not in turn_ids:
+            continue
+        error = str(record.get("error") or "")
+        if record.get("status") in PROVIDER_FAILURE_STATUS or (
+            "unreachable" in error or "stream failed" in error
+        ):
+            return True
+    return False
+
+
+def read_calls(file: Path) -> list[dict[str, Any]]:
+    """The proxy's calls.jsonl, skipping a line cut off mid-write."""
+    try:
+        lines = file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    calls = []
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            calls.append(record)
+    return calls
+
+
 def announce_turn(proxy_url: str, trial_id: str, turn_id: str) -> None:
     """Tell the proxy which turn is starting so it tags the calls that
     follow. Best effort: a proxy that cannot be reached is logged, and the
@@ -285,6 +333,7 @@ class Trial:
         failures = 0
         attempt = 0
         last_error = "unknown"
+        failed_turn_ids: set[str] = set()
         while True:
             attempt += 1
             turn_id, output, extracted, error, discarded = self._run_once(turn_index)
@@ -320,14 +369,29 @@ class Trial:
                 )
                 continue
             failures += 1
+            failed_turn_ids.add(turn_id)
             print(
                 f"[runner] turn {turn_id} failed ({failures}/{attempts}): {last_error}",
                 flush=True,
             )
             if failures >= attempts:
-                raise TrialError(
+                message = (
                     f"turn {turn_index} failed after {attempts} attempts: {last_error}"
                 )
+                if self._drivers_fault(failed_turn_ids):
+                    raise DriverFailure(message)
+                raise TrialError(message)
+
+    def _drivers_fault(self, failed_turn_ids: set[str]) -> bool:
+        """Whether a turn that failed every attempt is the driver's to
+        answer for. Only when the provider has answered this trial before
+        (so the keys and the route work) and saw no failure of its own in
+        any of the attempts; otherwise it stays an error, to be retried."""
+        calls = read_calls(self.agent_dir / "calls.jsonl")
+        answered = any(
+            isinstance(c.get("status"), int) and c["status"] < 400 for c in calls
+        )
+        return answered and not provider_failure(calls, failed_turn_ids)
 
     def _record(self, output: TurnOutput) -> None:
         """Take the driver's response into both payloads, and its state and
@@ -443,6 +507,11 @@ class Trial:
                             f"exceeded {self.settings.max_steps} steps",
                             stop_reason="max_steps",
                         )
+        except DriverFailure as exc:
+            # Not raised: the trial ends as it stands and is graded.
+            stop_reason = exc.stop_reason
+            extra["error"] = str(exc)
+            print(f"[runner] {exc}; grading the trial as it stands", flush=True)
         except TrialError as exc:
             stop_reason = exc.stop_reason
             extra["error"] = str(exc)

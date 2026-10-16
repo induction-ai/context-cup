@@ -35,7 +35,11 @@ there are practice suites, which never count toward the standings:
 
 A trial is one attempt at one task. It is considered valid when it reaches a
 verdict without an error; errored or unfinished trials are left out, not
-counted as zero. Every task runs several times, and needs at least 2 valid
+counted as zero. A driver's own failure is not an error. When a turn fails
+on every retry and the provider was not at fault (the driver crashed, wrote a
+bad output, or sent a request the provider refused, such as one past the
+model's context window), the trial ends there and is graded as it stands. It
+scores what the agent had done, usually zero, and keeps the cost it ran up. Every task runs several times, and needs at least 2 valid
 trials to count, so no score rests on a single attempt.
 
 - A task's score is the mean reward over its valid trials, and its cost the
@@ -63,7 +67,13 @@ change; its trials may share a cache with each other.
   tools are the only ways out.
 - **No overfitting**: submissions are reviewed for anything that looks like
   overfitting to these benchmarks. Submit a generic context-management
-  solution.
+  solution. A driver must not change what it does based on which task or
+  benchmark it is running, and that includes giving up early on some.
+- **Oversized tool results**: some tool results are larger than the model can
+  take; on Toolathlon one runs to 18 million characters. A driver must
+  handle them in some way, by cutting, summarising, paging, or anything
+  else that fits its strategy. Sent whole, such a result fails the turn,
+  and the trial is graded as it stands.
 
 ## Winning
 

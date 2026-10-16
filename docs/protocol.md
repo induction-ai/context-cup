@@ -355,9 +355,14 @@ the tool an agent driver gets as `CC_CACHE_BUST_TOOL` (Agent drivers, below).
 
 A non-zero exit, a missing `output.json`, or a missing `response` fails the
 turn. The runner retries a failed turn up to `CC_TURN_RETRIES` times
-(default 3) with a fresh turn id, then ends the trial with an error that
-harbor records: the trial is unscored, not scored zero. Failed attempts are
-not turns. A reply with neither text nor tool calls is discarded and asked
+(default 3) with a fresh turn id, then ends the trial. If the provider
+answered an earlier call in the trial and none of the attempts met a failure
+of the provider's own (any 429 or 5xx, even one the proxy retried, an
+unreachable upstream, a stream that broke off, as the proxy recorded them), the failure is the driver's: the
+trial stops with `driver_error` and goes to the verifier as it stands, so it
+is scored (usually zero) and its cost counts. Otherwise it ends with an error
+that harbor records: the trial is unscored, not scored zero, and
+`--retry_errors` runs it again. Failed attempts are not turns. A reply with neither text nor tool calls is discarded and asked
 again with a fresh turn id; those re-asks come from a budget for the whole
 trial, `CC_EMPTY_RETRIES` (default 3), and running out ends the trial with
 `agent_error`. A discarded reply's calls stay in the proxy's call log and in

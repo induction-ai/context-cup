@@ -106,9 +106,14 @@ export default function Rules() {
         <p>
           A trial is one attempt at one task. It is considered valid when it
           reaches a verdict without an error. Errored or unfinished trials are
-          left out, not counted as zero. Every task runs several times, and
-          needs at least {ELIGIBILITY.min_done} valid trials to count, so no
-          score rests on a single attempt.
+          left out, not counted as zero. A driver’s own failure is not an error.
+          When a turn fails on every retry and the provider was not at fault
+          (the driver crashed, wrote a bad output, or sent a request the
+          provider refused, such as one past the model’s context window), the
+          trial ends there and is graded as it stands. It scores what the agent
+          had done, usually zero, and keeps the cost it ran up. Every task runs
+          several times, and needs at least {ELIGIBILITY.min_done} valid trials
+          to count, so no score rests on a single attempt.
         </p>
         <ul>
           <li>
@@ -151,7 +156,17 @@ export default function Rules() {
           <li>
             <strong>No overfitting</strong>: submissions are reviewed for
             anything that looks like overfitting to these benchmarks. Submit a
-            generic context-management solution.
+            generic context-management solution. A driver must not change what
+            it does based on which task or benchmark it is running, and that
+            includes giving up early on some.
+          </li>
+          <li>
+            <strong>Oversized tool results</strong>: some tool results are
+            larger than the model can take; on Toolathlon one runs to 18 million
+            characters. A driver must handle them in some way, by cutting,
+            summarising, paging, or anything else that fits its strategy. Sent
+            whole, such a result fails the turn, and the trial is graded as it
+            stands.
           </li>
         </ul>
       </Section>

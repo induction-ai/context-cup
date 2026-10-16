@@ -19,7 +19,9 @@ from context_cup_runner.protocol import Target
 
 # The fake engine reads a script of steps from the driver dir. Each step says
 # what the "model" replied: `text`, `tool_calls` [{id, name, args}], plus
-# failure modes. It renders the reply in the input's provider format.
+# failure modes. It renders the reply in the input's provider format. A step's
+# `calls` are the proxy's records for its turn, appended to calls.jsonl:
+# [{status, error?}].
 FAKE_ENGINE = """
 import json, os, sys
 from pathlib import Path
@@ -37,6 +39,10 @@ assert inp["protocol"] == 2 and isinstance(inp["first"], bool)
 script = json.loads(script_path.read_text())
 step = script.pop(0) if script else {"text": "done"}
 script_path.write_text(json.dumps(script))
+calls_file = Path(input_path).parents[2] / "calls.jsonl"
+for record in step.get("calls") or []:
+    with calls_file.open("a") as handle:
+        handle.write(json.dumps({"turn_id": inp["turn_id"], **record}) + "\\n")
 
 if step.get("crash"):
     print("boom", file=sys.stderr)

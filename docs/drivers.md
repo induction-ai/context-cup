@@ -44,11 +44,13 @@ model call it anyway, the course answers it and the turn counts as a turn
 ([protocol.md](protocol.md), "Payloads"). Neither environment cuts a tool result: it reaches your
 driver whole, however long, and what to keep of it is your call. Upstream
 Toolathlon cuts results over 100,000 characters and offers tools to page the
-rest; the course leaves that to drivers. Two Toolathlon tasks,
-`hk_top_conf` and `academic_pdf_report`, return results too long for the
-model to take whole, so they fail unless your driver cuts, summarises, or
-otherwise shrinks long tool results. The `base_` drivers' `max_bytes` clip
-is the simplest way through.
+rest; the course leaves that to drivers, and the rules require it
+([README](../README.md#rules), "Oversized tool results"). Several Toolathlon
+tasks, `nhl_b2b_analysis`, `ipad_edu_price`, `vlm_history_completer`,
+`hk_top_conf`, and `academic_pdf_report` among them, return results too long
+for the model to take whole, so they fail unless your driver cuts,
+summarises, or otherwise shrinks long tool results. The `base_` drivers'
+`max_bytes` clip is the simplest way through.
 
 ## Start a driver
 
@@ -211,7 +213,9 @@ page with its model calls.
 ## When a turn fails
 
 The run ends with a non-zero exit and a line pointing at the results page,
-where each errored trial shows its error. Each turn leaves a directory under
+where each errored trial shows its error. A trial your driver failed is not
+an error: it shows `driver_error` as its stop reason, and the message is in
+its `summary.json` (`extra.error`) and `runner.txt`. Each turn leaves a directory under
 the trial's agent logs,
 `.temp/suites/<suite>/<job>/harbor/<job>/<trial>/agent/turns/NNN_xxxxxx/`:
 
@@ -223,8 +227,13 @@ the trial's agent logs,
 | `stdout.txt`  | anything your driver printed                             |
 
 A failed turn is retried three times with a fresh turn id; four failures end
-the trial with the last error, which also shows on the trial's page, and the
-trial is left unscored. A reply with neither text nor tool calls is
+the trial with the last error. When the
+fault is the driver's (anything but the provider failing: a crash, a bad
+output, a request the provider refused, such as one past the model's context
+window), the trial stops with `driver_error` and is graded as it stands, so
+it scores (usually zero) and its cost counts. A provider failure (any 429 or
+5xx, an unreachable upstream) is never the driver's: it leaves the trial
+unscored, for `--retry_errors` to run again. A reply with neither text nor tool calls is
 discarded as well as retried: its calls show on the trial page marked
 "discarded" and stay out of the trial's tokens and cost. Any other failed
 attempt still counts toward cost. Beside
