@@ -131,6 +131,17 @@ bin/suite smoke_tau --driver base_python --target gpt-5.5@medium --dry_run
   overrides the path). Without `--target`, a run uses the reference target
   (`REFERENCE_TARGET` in `course/shared/src/reference_target.ts`) when the
   driver supports its provider, and otherwise prompts for one.
+- A task's and the target's caps count jobs on every machine, not just this
+  one: each run writes what it holds to the Postgres in `SUITE_DATABASE_URL`
+  (default `DATABASE_URL`), and a job whose task or target is full elsewhere
+  waits, logging who holds it, re-checked every minute. A task's cap is
+  keyed by its benchmark, so the smoke, local, and full suites share it. A
+  run re-asserts its holds every 20 seconds; one that stops for 4 minutes (a
+  crash, a closed laptop) loses them, and if another machine fills the
+  budget before it comes back, its job is killed and marked failed. The
+  suite's own `concurrency` and the docker cap stay per process. Set
+  `SUITE_DATABASE_URL` to the deployed database to take turns with the Suite
+  workflow's runs from your machine.
 - `--driver` is a package under `drivers/`; it must declare support for the
   target's provider in its manifest. `base_python`
   speaks the turn protocol directly, clipping oversized tool results; `base_pydantic` is a
@@ -248,9 +259,10 @@ straight away, with no edit to the workflow. It runs on Daytona by default. It r
 suite against the deployed database (the site's deploy migrates it), deletes the run's Daytona sandboxes (including
 after a cancel), writes the results table to the run summary, and uploads
 two artifacts: `suite-summary` (results and the suite log) and `suite-logs`
-(all of `.temp/suites/`). Full `toolathlon` runs take turns, since the
-tasks act on shared live accounts, and restore the notion login's access
-token, never its refresh token. The suite row records the
+(all of `.temp/suites/`). Toolathlon runs take turns per task through the
+database (the caps in `suites/toolathlon.json` mark the tasks that act on
+shared live accounts), so two runs interleave rather than queue, and they
+restore the notion login's access token, never its refresh token. The suite row records the
 workflow run id, attempt, and repository, and the results site links back to
 the run. The suite and target option lists mirror `suites/` and
 `targets.json`, and a test fails when they drift.

@@ -22,6 +22,7 @@
     "execa": "catalog:",
     "ignore": "^7.0.12",
     "nanoid": "catalog:",
+    "pg": "catalog:",
     "pino": "catalog:",
     "yargs": "catalog:",
     "zod": "catalog:"
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "@types/yargs": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",

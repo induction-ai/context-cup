@@ -8,6 +8,10 @@ run-name: >-
 # One bin/suite run: one suite file, one driver, one target. Results go to the
 # database in DATABASE_URL, and the suite row links back to this run. The
 # site's deploy migrates that database (pnpm prelaunch), so this doesn't.
+# Runs need no concurrency group: each task's cap in the suite file counts
+# jobs on every machine through that same database (course/suite/src/
+# shared_budgets.ts), so two toolathlon runs interleave their tasks and take
+# turns only on a task that acts on shared live accounts.
 # The suite and target option lists mirror suites/ and targets.json;
 # course/suite/tests/workflow.test.ts fails when they drift. The driver is
 # typed, not picked, so new drivers need no edit here.
@@ -75,17 +79,6 @@ on:
         options:
           - daytona
           - docker
-
-concurrency:
-  # Toolathlon tasks act on shared live accounts (the Notion workspace,
-  # Canvas, GitHub, mail, ...), and a task's preprocess resets what the task
-  # before it changed. Two full runs on the same accounts would corrupt each
-  # other's state, so they take turns. The smoke and local suites stay out:
-  # their tasks are self-contained.
-  group: >-
-    ${{ inputs.suite == 'toolathlon'
-    && format('{0}-toolathlon', github.workflow)
-    || format('{0}-{1}', github.workflow, github.run_id) }}
 
 jobs:
   suite:

@@ -74,10 +74,12 @@ import {
 import {
   dockerJobCap,
   processQueue,
+  type JobResult,
   type QueueEntry,
   type SchedulerOptions,
 } from "./scheduler.ts";
 import { scoredTrials } from "./scoring.ts";
+import { SharedBudgets, sharedBudgetsUrl } from "./shared_budgets.ts";
 import { describeTarget, loadTargets } from "./targets.ts";
 
 /** Where the results site is served; bin/suite prints a link into it. */
@@ -458,9 +460,20 @@ async function main(): Promise<void> {
     }
   };
 
+  // Each task's and the target's caps count jobs on every machine, through
+  // the database in SUITE_DATABASE_URL (DEVELOPING.md "Running a suite");
+  // without it the suite does not start. The invocation is this process,
+  // not the suite: an --append can run beside the run it tops up.
+  const budgets = await SharedBudgets.open({
+    invocation_id: `${suite_id}/${newId("s").slice(2)}`,
+    database_url: sharedBudgetsUrl(),
+    report,
+  });
+  report(`shared budgets: ${budgets.label}`);
   const queueOptions: SchedulerOptions = {
     suite_concurrency: file.concurrency,
     docker_jobs,
+    budgets,
     log_dir: suite_dir,
     verbose: argv.verbose,
     signal: controller.signal,
@@ -578,33 +591,37 @@ async function main(): Promise<void> {
       );
     },
   };
-  const results = await processQueue(entries, queueOptions);
-
+  const results: JobResult[] = [];
   const expected_trials = totalCount(runs);
-  for (let pass = 1; pass <= retry_errors; pass++) {
-    // Once results can't be stored, a retry would be lost the same way.
-    if (controller.signal.aborted || store_failure !== null) break;
-    const owed = shortfallRuns(runs, doneByTask());
-    const shortfall = totalCount(owed);
-    if (shortfall === 0) break;
-    if (!shouldRetryErrors(shortfall, expected_trials)) {
+  try {
+    results.push(...(await processQueue(entries, queueOptions)));
+    for (let pass = 1; pass <= retry_errors; pass++) {
+      // Once results can't be stored, a retry would be lost the same way.
+      if (controller.signal.aborted || store_failure !== null) break;
+      const owed = shortfallRuns(runs, doneByTask());
+      const shortfall = totalCount(owed);
+      if (shortfall === 0) break;
+      if (!shouldRetryErrors(shortfall, expected_trials)) {
+        report(
+          `\nretry_errors: ${shortfall} of ${expected_trials} trial(s) did not finish, over ${RETRY_ERRORS_MAX_FAILURE_RATE * 100}%; not retrying`
+        );
+        break;
+      }
       report(
-        `\nretry_errors: ${shortfall} of ${expected_trials} trial(s) did not finish, over ${RETRY_ERRORS_MAX_FAILURE_RATE * 100}%; not retrying`
+        `\nretry_errors: pass ${pass}/${retry_errors}, retrying ${shortfall} of ${expected_trials} trial(s) that did not finish`
       );
-      break;
+      const retries = interleave(owed).map(makeEntry);
+      try {
+        await storing("retry jobs", () =>
+          withTransaction(() => insertJobs(retries, first_pass + pass))
+        );
+      } catch {
+        break; // store_failure says why, after the results files are written
+      }
+      results.push(...(await processQueue(retries, queueOptions)));
     }
-    report(
-      `\nretry_errors: pass ${pass}/${retry_errors}, retrying ${shortfall} of ${expected_trials} trial(s) that did not finish`
-    );
-    const retries = interleave(owed).map(makeEntry);
-    try {
-      await storing("retry jobs", () =>
-        withTransaction(() => insertJobs(retries, first_pass + pass))
-      );
-    } catch {
-      break; // store_failure says why, after the results files are written
-    }
-    results.push(...(await processQueue(retries, queueOptions)));
+  } finally {
+    await budgets.close();
   }
   const unfinished = totalCount(shortfallRuns(runs, doneByTask()));
 

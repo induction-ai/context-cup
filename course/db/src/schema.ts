@@ -227,6 +227,30 @@ export const driver = pgTable("driver", {
   removed_at: timestamp({ withTimezone: true }),
 });
 
+/** One running job's share of a concurrency budget, as every `bin/suite` on
+ *  every machine sees it (course/suite/src/shared_budgets.ts). A task's or a
+ *  target's cap counts jobs on every machine; a row whose owner stops
+ *  refreshing `heartbeat_at` stops counting and is swept. */
+export const suiteBudgetHold = pgTable(
+  "suite_budget_hold",
+  {
+    /** `<runner>/task:<task>` or `target:<target>`. */
+    budget_key: text().notNull(),
+    /** The bin/suite process holding it: its suite id and a per-process
+     *  suffix, since an --append can run beside the run it tops up. */
+    invocation_id: text().notNull(),
+    /** The job holding it. */
+    job_id: text().notNull(),
+    /** Who runs it, for the log line of a run that has to wait. */
+    holder: text().notNull(),
+    /** The job's concurrent trials, its weight against the budget. */
+    weight: integer().notNull(),
+    acquired_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    heartbeat_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.budget_key, t.invocation_id, t.job_id] })]
+);
+
 /** Operator settings, one row per key (DEVELOPING.md "Operator settings"). */
 export const setting = pgTable("setting", {
   key: text().primaryKey(),

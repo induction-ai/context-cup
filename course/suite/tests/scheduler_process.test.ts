@@ -5,12 +5,26 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  afterEach,
+  beforeEach,
   describe,
   expect,
   it,
 } from "@context-cup/shared/test_helpers/index.js";
 import { processQueue, type QueueEntry } from "../src/scheduler.ts";
+import { SharedBudgets } from "../src/shared_budgets.ts";
 import { sampleRun } from "./helpers.ts";
+
+/** The shared budgets, opened per test; nothing else holds any here. */
+let budgets: SharedBudgets;
+beforeEach(async () => {
+  budgets = await SharedBudgets.open({
+    invocation_id: "scheduler_process_test",
+    database_url: process.env.DATABASE_URL!,
+    report: () => {},
+  });
+});
+afterEach(() => budgets.close());
 
 function entry(job_id: string, shell: string, timeout_minutes: number) {
   return {
@@ -98,6 +112,7 @@ describe.skipIf(process.platform === "win32")(
             ],
             {
               suite_concurrency: 1,
+              budgets,
               docker_jobs: 0,
               log_dir: dir,
               kill_grace_ms: 500,
@@ -146,6 +161,7 @@ describe.skipIf(process.platform === "win32")(
           [entry("a", `"${process.execPath}" "${forwarder}"`, 10)],
           {
             suite_concurrency: 1,
+            budgets,
             docker_jobs: 0,
             log_dir: dir,
             kill_grace_ms: 2_000,
@@ -182,6 +198,7 @@ describe.skipIf(process.platform === "win32")(
         [entry("a", "true", 10), entry("b", "true", 10)],
         {
           suite_concurrency: 1,
+          budgets,
           docker_jobs: 0,
           log_dir: dir,
           report: (l) => lines.push(l),
