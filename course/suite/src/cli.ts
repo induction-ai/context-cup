@@ -511,11 +511,16 @@ async function main(): Promise<void> {
         labels: { [SUITE_LABEL]: suite_id, [JOB_LABEL]: entry.job_id },
       });
       if (sandboxes.length === 0) return;
-      const { deleted, failed } = await deleteSandboxes(
+      const { deleted, alreadyDeleting, failed } = await deleteSandboxes(
         client,
         sandboxes.map((s) => s.id)
       );
       report(`[${entry.job_id}] deleted ${deleted.length} Daytona sandbox(es)`);
+      if (alreadyDeleting.length > 0) {
+        report(
+          `[${entry.job_id}] Daytona already deleting: ${alreadyDeleting.join(", ")}`
+        );
+      }
       if (failed.size > 0) {
         throw new Error(
           `${failed.size} Daytona sandbox(es) not deleted: ${[...failed].map(([id, why]) => `${id}: ${why}`).join("; ")}`

@@ -46,8 +46,6 @@ export type SandboxFilter = {
 export type DaytonaClient = {
   key: string;
   fetch?: typeof fetch;
-  /** Pause between delete attempts that hit a state transition. */
-  pauseMs?: number;
 };
 
 export function daytonaClient(env = process.env): DaytonaClient {
@@ -92,13 +90,15 @@ export async function listSandboxes(
 
 /** Whether Daytona is already destroying the sandbox. Harbor asks for this
  *  as it exits, and Daytona answers every further delete with 409 until the
- *  destroy completes, which usually takes seconds but has taken hours. There
- *  is nothing more to ask for, so a sweep leaves these alone. */
-export function destroying(sandbox: Sandbox): boolean {
+ *  destroy completes, which usually takes seconds but has taken hours.
+ *  A sandbox in `error` still gets deleted even when marked for
+ *  destruction: a destroy that failed can leave it there, and nothing else
+ *  will ask again. */
+function destroying(sandbox: Sandbox): boolean {
   return (
     sandbox.state === "destroying" ||
     sandbox.state === "destroyed" ||
-    sandbox.desiredState === "destroyed"
+    (sandbox.desiredState === "destroyed" && sandbox.state !== "error")
   );
 }
 
@@ -114,39 +114,33 @@ export function pending(sandboxes: readonly Sandbox[]): {
   };
 }
 
-/** Daytona answers 409 while a sandbox changes state, such as stopping; the
- *  transition takes seconds. */
-const CONFLICT_ATTEMPTS = 3;
-
 /** Deletes each sandbox, carrying on past failures so one stuck sandbox does
  *  not strand the rest. Returns why each failed one failed. */
 export async function deleteSandboxes(
   client: DaytonaClient,
   ids: readonly string[]
-): Promise<{ deleted: string[]; failed: Map<string, string> }> {
+): Promise<{
+  deleted: string[];
+  alreadyDeleting: string[];
+  failed: Map<string, string>;
+}> {
   const call = client.fetch ?? fetch;
-  const pause = client.pauseMs ?? 2_000;
   const deleted: string[] = [];
+  const alreadyDeleting: string[] = [];
   const failed = new Map<string, string>();
   for (const id of ids) {
-    for (let attempt = 1; ; attempt++) {
-      const response = await call(`${DAYTONA_API}/sandbox/${id}?force=true`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${client.key}` },
-      });
-      // 404: already gone, which is what the delete is for.
-      if (response.ok || response.status === 404) {
-        deleted.push(id);
-        break;
-      }
-      if (response.status !== 409 || attempt === CONFLICT_ATTEMPTS) {
-        failed.set(id, `${response.status} ${await response.text()}`);
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, pause));
-    }
+    const response = await call(`${DAYTONA_API}/sandbox/${id}?force=true`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${client.key}` },
+    });
+    // 404: already gone, which is what the delete is for.
+    if (response.ok || response.status === 404) deleted.push(id);
+    // Daytona answers 409 while a sandbox changes state, most often because a
+    // destroy is already under way; asking again only gets another 409.
+    else if (response.status === 409) alreadyDeleting.push(id);
+    else failed.set(id, `${response.status} ${await response.text()}`);
   }
-  return { deleted, failed };
+  return { deleted, alreadyDeleting, failed };
 }
 
 /** Sandboxes created more than `hours` ago. One without a creation time is

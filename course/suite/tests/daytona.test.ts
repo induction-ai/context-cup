@@ -76,39 +76,28 @@ describe("daytona", () => {
     );
   });
 
-  it("deletes, retrying a state transition and counting 404 as gone", async () => {
+  it("deletes, counting 404 as gone and 409 as already deleting", async () => {
     const { fetch, calls } = fakeFetch([
-      new Response("busy", { status: 409 }),
       new Response(null, { status: 200 }),
       new Response("gone", { status: 404 }),
+      new Response("busy", { status: 409 }),
       new Response("boom", { status: 500 }),
     ]);
-    const outcome = await deleteSandboxes({ key: "k", fetch, pauseMs: 0 }, [
+    const outcome = await deleteSandboxes({ key: "k", fetch }, [
       "a",
       "b",
       "c",
+      "d",
     ]);
     expect(outcome.deleted).toEqual(["a", "b"]);
-    expect([...outcome.failed]).toEqual([["c", "500 boom"]]);
+    expect(outcome.alreadyDeleting).toEqual(["c"]);
+    expect([...outcome.failed]).toEqual([["d", "500 boom"]]);
     expect(calls.map((c) => [c.method, c.url])).toEqual([
-      ["DELETE", `${DAYTONA_API}/sandbox/a?force=true`],
       ["DELETE", `${DAYTONA_API}/sandbox/a?force=true`],
       ["DELETE", `${DAYTONA_API}/sandbox/b?force=true`],
       ["DELETE", `${DAYTONA_API}/sandbox/c?force=true`],
+      ["DELETE", `${DAYTONA_API}/sandbox/d?force=true`],
     ]);
-  });
-
-  it("gives up on a sandbox that stays in transition", async () => {
-    const { fetch } = fakeFetch([
-      new Response("busy", { status: 409 }),
-      new Response("busy", { status: 409 }),
-      new Response("busy", { status: 409 }),
-    ]);
-    const outcome = await deleteSandboxes({ key: "k", fetch, pauseMs: 0 }, [
-      "a",
-    ]);
-    expect(outcome.deleted).toEqual([]);
-    expect(outcome.failed.get("a")).toBe("409 busy");
   });
 
   it("sets aside sandboxes Daytona is already destroying", async () => {
@@ -122,13 +111,20 @@ describe("daytona", () => {
       desiredState: "destroyed",
     };
     const marked = { ...sandbox("marked"), desiredState: "destroyed" };
+    // A destroy that failed leaves the sandbox in error, still marked.
+    const failed = { ...marked, id: "failed", state: "error" };
     const { toDelete, alreadyDestroying } = pending([
       started,
       stopping,
       destroying,
       marked,
+      failed,
     ]);
-    expect(toDelete.map((s) => s.id)).toEqual(["started", "stopping"]);
+    expect(toDelete.map((s) => s.id)).toEqual([
+      "started",
+      "stopping",
+      "failed",
+    ]);
     expect(alreadyDestroying.map((s) => s.id)).toEqual([
       "destroying",
       "marked",

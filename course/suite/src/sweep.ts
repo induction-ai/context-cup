@@ -42,7 +42,9 @@ async function sweep(
   if (alreadyDestroying.length > 0) {
     // Harbor already asked Daytona to destroy these; a second request only
     // gets 409 until the first completes, so they are reported, not failed.
-    console.log(`Daytona is already destroying ${describe(alreadyDestroying)}`);
+    // The total leaves out destroyed ones, which no longer hold quota.
+    const stillHeld = alreadyDestroying.filter((s) => s.state !== "destroyed");
+    console.log(`Daytona is already destroying ${describe(stillHeld)}`);
     for (const s of alreadyDestroying)
       console.log(`  ${s.id} ${s.state} since ${s.updatedAt ?? "?"}`);
   }
@@ -56,11 +58,14 @@ async function sweep(
       console.log(`  ${s.id} ${s.state} ${s.createdAt ?? ""}`);
     return;
   }
-  const { deleted, failed } = await deleteSandboxes(
+  const { deleted, alreadyDeleting, failed } = await deleteSandboxes(
     client,
     toDelete.map((s) => s.id)
   );
-  console.log(`deleted ${deleted.length}, failed ${failed.size}`);
+  console.log(
+    `deleted ${deleted.length}, already deleting ${alreadyDeleting.length}, failed ${failed.size}`
+  );
+  for (const id of alreadyDeleting) console.log(`  ${id}: already deleting`);
   for (const [id, reason] of failed) console.log(`  ${id}: ${reason}`);
   // A partial sweep still leaves quota held; the CI cleanup step should show
   // that rather than pass.
