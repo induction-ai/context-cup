@@ -23,6 +23,9 @@ runs:
       uses: actions/setup-node@v5
       with:
         node-version-file: .nvmrc
+        # The runner image's cached Node 24 can trail a security release;
+        # resolve the newest 24.x instead.
+        check-latest: true
         cache: pnpm
 
     # bin/suite runs harbor as a uv project on Python 3.12.

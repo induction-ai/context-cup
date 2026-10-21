@@ -18,7 +18,7 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
-NODE_VERSION = os.environ.get("CC_NODE_VERSION", "24.21.0")
+NODE_VERSION = os.environ.get("CC_NODE_VERSION", "24.22.1")
 NODE_RELEASES = "https://nodejs.org/dist"
 NODE_MUSL_RELEASES = "https://unofficial-builds.nodejs.org/download/release"
 NODE_HOST_CACHE = (
