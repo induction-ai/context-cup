@@ -17,65 +17,59 @@ export const TOKEN_USAGE_KEYS = [
 
 export type TokenUsageKey = (typeof TOKEN_USAGE_KEYS)[number];
 
-// Durable, immutable token-bucket record. The canonical in-memory shape
-// everything else passes around. Fields follow the Anthropic-shaped
-// convention and OVERLAP — `input` and `uncached` are rollups that mix
-// multiple pricing rates. The cost-side shape (`CostUsageCounts`)
-// deliberately diverges and exposes one priced bucket per rate; see there
-// for the rate-correct view.
-//
-// The `<M>` generic lets call sites preserve the literal model name
-// through the type system (e.g. `TokenUsageCounts<"gpt-4o">` is distinct
-// from `TokenUsageCounts<"claude-sonnet">`). It only brands the record's
-// `model` field; the TokenCount values inside are model-agnostic.
+/**
+ * Immutable token counts with overlapping totals: input includes base input,
+ * cache writes, and cache reads; uncached includes base input and cache writes.
+ * CostUsageCounts separates those pricing categories for cost aggregation.
+ *
+ * M preserves the record's model name through the type system, for example
+ * TokenUsageCounts<"gpt-4o">. Individual TokenCount values carry no model identity.
+ */
 export type TokenUsageCounts<M extends string = ClientModelName> = {
   readonly model: M;
-  // Full prompt: base_input + cache-write buckets + cached.
+  // Full prompt: base input + cache writes + cache reads.
   readonly input: TokenCount;
-  // Everything NOT served from a cache hit: base_input + cache writes.
+  // Input not served from cache: base input + cache writes.
   readonly uncached: TokenCount;
-  // Cache-read tokens (hits on a prior cached prefix).
+  /** Input served from a previously cached prefix. */
   readonly cached: TokenCount;
   // Slice of `output` attributed to reasoning tokens.
   readonly thinking?: TokenCount;
-  // Total generated tokens (includes thinking).
+  /** Generated tokens, including the thinking portion when reported. */
   readonly output: TokenCount;
-  // Tokens written at the model's default write SKU: newer OpenAI models'
-  // single SKU, or Anthropic's default 5-minute ephemeral TTL (both 1.25x
-  // input).
+  /** Tokens charged at the model's default cache-write rate. Anthropic's
+   * default covers five-minute retention; its one-hour writes are separate. */
   readonly cache_write?: TokenCount;
-  // Tokens written to Anthropic's extended 1-hour TTL. Anthropic-only.
+  // Tokens written to Anthropic's extended one-hour cache.
   readonly cache_write_1h?: TokenCount;
 };
 
 // Per-bucket dollar costs. Each field corresponds to exactly one pricing
 // rate, so aggregating across calls (`sumCostUsageCounts`) preserves
-// rate-correctness and no field is derivable by subtraction. Use
+// correct totals and no field is derivable by subtraction. Use
 // `totalCost(cost)` for the grand total across all buckets.
 export type CostUsageCounts = {
-  // base_input tokens × input rate (the model's primary input rate).
+  /** Cost of input excluding cache reads and both cache-write categories. */
   base_input: DollarAmount;
-  // cached (cache-read) tokens × cache_read rate.
+  /** Cache-read tokens multiplied by the applicable cache-read price. */
   cached: DollarAmount;
-  // cache_write tokens × the model's default write rate. Omitted for
-  // providers without a cache-write SKU.
+  /** Default-retention cache-write cost; absent without that pricing category. */
   cache_write?: DollarAmount;
-  // cache_write_1h tokens × cache_write_1h rate (Anthropic). Omitted as above.
+  /** One-hour cache-write cost; absent without that pricing category. */
   cache_write_1h?: DollarAmount;
-  // output tokens × output rate. Reasoning tokens bill at the output rate
-  // so they're already folded into this figure.
+  /** Generated-token cost, already including reasoning tokens. */
   output: DollarAmount;
-  // Proportional slice of `output` attributed to reasoning/thinking. Same
-  // rate as `output`; tracked separately for observability only.
+  // Proportional slice of output attributed to reasoning/thinking, at the
+  // same output rate. It is tracked separately for reporting and must not be
+  // added to the output cost again.
   thinking?: DollarAmount;
 };
 
 /**
- * The model's cache rates as multiples of its input rate, recorded next to a
- * cost breakdown so stored rows are self-describing (rates change over time).
- * Dimensionless ratios: cache reads are typically 0.1, writes 1.25 (newer OpenAI models,
- * Anthropic 5-minute TTL) or 2.0 (Anthropic 1-hour TTL). A write field is
- * absent when the model has no such SKU.
+ * Cache prices divided by the model's base input price, stored alongside costs
+ * so each record retains its pricing context. For example, 0.1 means one tenth
+ * of base input price; 1.25 means a 25% premium. Write fields are absent when
+ * the model has no corresponding cache-write price.
  */
 export type CacheRateMultipliers = {
   cached_rate_multiplier?: number;
@@ -103,8 +97,8 @@ export function emptyTokenUsageCounts<M extends string>(
   };
 }
 
-// Grand total across every priced bucket. `thinking` is excluded because
-// it's a slice of `output` (already counted) — including it would double-bill.
+// Thinking is already a slice of output; adding its cost here would count
+// the same tokens twice.
 export function totalCost(cost: CostUsageCounts): DollarAmount {
   const c = cost;
   return dollarValue(c.base_input)

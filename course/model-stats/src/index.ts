@@ -45,13 +45,13 @@ export type KnownModelNameByService = {
 };
 
 export type PricingTier = 0 | 1;
-export type CostServiceTier = "standard" | "priority";
+export type CostServiceTier = "standard" | "priority" | "ultrafast";
 
 // How a model's prompt cache is controlled: `implicit` (automatic prefix
 // caching), `breakpoints` (request marks cacheable spans — Anthropic
 // cache_control, newer OpenAI models), `seed` (cache pre-created as a named object
-// and referenced by handle — Gemini). Every model has `implicit` plus at most
-// one explicit mechanism.
+// and referenced by handle — Gemini). Every model that caches has `implicit`
+// plus at most one explicit mechanism.
 export type CacheMode = "breakpoints" | "implicit" | "seed";
 
 export interface CachingEntry {
@@ -105,7 +105,8 @@ function stripToFamily(id: string): string {
   return base;
 }
 
-// Ordered fallback targets per provider — first is the default baseline.
+// The first available model is the fallback baseline; order also breaks ties
+// between models with equal match scores.
 const POPULAR_MODELS: { [S in Service]: KnownModelNameByService[S][] } = {
   openai: [
     "gpt-4o",
@@ -122,6 +123,7 @@ const POPULAR_MODELS: { [S in Service]: KnownModelNameByService[S][] } = {
     "claude-sonnet-5-5",
     "claude-sonnet-4-6",
     "claude-opus-4-6",
+    "claude-haiku-5-5",
     "claude-haiku-4-5-20251001",
     "claude-sonnet-4-5-20250929",
   ],
@@ -137,7 +139,6 @@ const POPULAR_MODELS: { [S in Service]: KnownModelNameByService[S][] } = {
   ],
 };
 
-// Size/capability tier keywords that should align between input and candidate.
 const TIERS: Record<Service, string[]> = {
   openai: ["nano", "mini", "pro"],
   anthropic: ["opus", "sonnet", "haiku", "fable"],
@@ -149,7 +150,7 @@ function tokenize(id: string): string[] {
   return id.toLowerCase().split(/[-.]/).filter(Boolean);
 }
 
-// Caller must pass a non-empty `available`; fallbackModel guards this.
+// Requires at least one available model.
 function baselineFromPopular(provider: Service, available: string[]): string {
   for (const pop of POPULAR_MODELS[provider]) {
     if (available.includes(pop)) return pop;
@@ -159,9 +160,6 @@ function baselineFromPopular(provider: Service, available: string[]): string {
   return available[0]!;
 }
 
-// Prefix-based provider inference for models that aren't in our data.
-// Known models are routed via the flat lookup map; this only kicks in
-// for unknown ids that still need a fallback target.
 function inferServiceFromPrefix(model: ClientModelName): Service | undefined {
   if (model.startsWith("claude-")) return "anthropic";
   if (model.startsWith("gemini-") || model.startsWith("deep-research-"))
@@ -206,7 +204,6 @@ function scoreCandidate(
   const low = input.toLowerCase();
   const cand = candidate.toLowerCase();
 
-  // Substring containment is the strongest signal.
   if (low === cand) return 10_000;
   if (low.includes(cand)) return 1_000 + cand.length;
   if (cand.includes(low)) return 900 + low.length;
@@ -223,9 +220,8 @@ function scoreCandidate(
   const candTokens = new Set(tokenize(candidate));
   for (const t of inTokens) if (candTokens.has(t)) score += 10;
 
-  // Numeric proximity: reward candidates whose versions are close to the
-  // input's. When input has no numbers, prefer the "newest" same-tier
-  // candidate (highest max version).
+  // Prefer candidates with nearby version numbers. If the input has no version,
+  // favor the highest candidate version within the other matching constraints.
   const inNums = extractVersions(input);
   const candNums = extractVersions(candidate);
   if (candNums.length > 0) {
@@ -316,8 +312,6 @@ function getEncoding(): Tiktoken {
 
 const reduce = modelStats as ModelReduceFile;
 
-// Flat lookup over every known family + variant. Built once at module load
-// so the public API can take just a model id (no provider arg needed).
 const FLAT_LOOKUP = new Map<string, ReducedEntry>();
 for (const provider of [
   "openai",
@@ -330,9 +324,8 @@ for (const provider of [
   for (const [family, entry] of Object.entries(providerData)) {
     FLAT_LOOKUP.set(family, entry);
     for (const v of entry.variants) FLAT_LOOKUP.set(v, entry);
-    // A fireworks model reaches us under three spellings: the full account
-    // id the data files key on and the wire carries, plus the bare catalog
-    // name and fireworks/ short form the repo's targets and records use.
+    // Requests use full account IDs; targets and stored records also use bare
+    // names and fireworks/ aliases.
     if (provider === "fireworks") {
       for (const id of [family, ...entry.variants]) {
         const bare = id.replace(/^accounts\/fireworks\/models\//, "");
@@ -344,8 +337,6 @@ for (const provider of [
   }
 }
 
-// Identify the provider for any model id. Direct/variant/family-strip hits
-// cover every known model; unknown ids fall back to prefix inference.
 export function pickService(model: ClientModelName): Service | undefined {
   const direct = FLAT_LOOKUP.get(model);
   if (direct) return direct.provider;
@@ -363,26 +354,21 @@ interface ResolvedModel extends Resolution {
   entry: ReducedEntry;
 }
 
-// Always returns an entry. Known models hit the flat lookup directly;
-// unknown ids are routed by prefix (or openai as the global default when no
-// provider prefix matches) and then scored against that provider's
-// families. Never throws — callers should check `matched` to detect when
-// the lookup fell back.
+// Known models resolve by name, listed variant, or family. Unknown names use
+// their provider prefix (OpenAI when none matches), then the closest known
+// family from that provider. Check `matched` to distinguish a catalog match
+// from a guess; `entry.model_family` identifies the family actually returned.
+// Throws only when the model catalog has no entries.
 export function resolveModel(model: ClientModelName): ResolvedModel {
-  // 1. Direct hit on family or listed variant
   const direct = FLAT_LOOKUP.get(model);
   if (direct) return { entry: direct, matched: true };
 
-  // 2. Strip known suffixes and try the family
   const family = stripToFamily(model);
   if (family !== model) {
     const stripped = FLAT_LOOKUP.get(family);
     if (stripped) return { entry: stripped, matched: true };
   }
 
-  // 3. Fallback: infer provider from prefix (or default to openai), then
-  // score within it. Defaulting to openai gives us a sensible answer for
-  // ids that match no known provider naming (e.g. "foobar-99-ultra").
   const provider = inferServiceFromPrefix(model) ?? "openai";
   const providerData = reduce[provider];
   if (providerData) {
@@ -391,8 +377,6 @@ export function resolveModel(model: ClientModelName): ResolvedModel {
     if (fbEntry) return { entry: fbEntry, matched: false };
   }
 
-  // Last resort: return literally any entry. Only reachable if the data file
-  // is missing the default provider, which shouldn't happen in practice.
   for (const p of ["openai", "anthropic", "gemini", "fireworks"] as const) {
     const data = reduce[p];
     const first = data ? Object.values(data)[0] : undefined;
@@ -402,9 +386,6 @@ export function resolveModel(model: ClientModelName): ResolvedModel {
   throw new Error("No model data available");
 }
 
-// True only when `model` resolves to a known catalog entry (direct, variant,
-// or family-strip hit) — not a guessed fallback. Callers use this to validate
-// user-supplied model ids without hardcoding their own model lists.
 export function isKnownModel(model: ClientModelName): boolean {
   return resolveModel(model).matched;
 }
@@ -422,6 +403,8 @@ interface RateOptions {
   standardTier1: number | undefined;
   priorityTier0: number | undefined;
   priorityTier1: number | undefined;
+  ultrafastTier0: number | undefined;
+  ultrafastTier1: number | undefined;
   tier1Start: number | undefined;
   promptSize: number;
   serviceTier: CostServiceTier;
@@ -433,6 +416,8 @@ function pickRate({
   standardTier1,
   priorityTier0,
   priorityTier1,
+  ultrafastTier0,
+  ultrafastTier1,
   tier1Start,
   promptSize,
   serviceTier,
@@ -448,6 +433,16 @@ function pickRate({
     }
     if (priorityTier0 !== undefined) return priorityTier0;
     throw new Error(`Priority pricing is unavailable for model ${model}`);
+  }
+  if (serviceTier === "ultrafast") {
+    if (usesTier1) {
+      if (ultrafastTier1 !== undefined) return ultrafastTier1;
+      throw new Error(
+        `Ultrafast pricing for model ${model} is unavailable above ${tier1Start} input tokens`
+      );
+    }
+    if (ultrafastTier0 !== undefined) return ultrafastTier0;
+    throw new Error(`Ultrafast pricing is unavailable for model ${model}`);
   }
   if (usesTier1 && standardTier1 !== undefined) return standardTier1;
   return standardTier0;
@@ -477,7 +472,7 @@ function dollarsForTokens(
 // Input contract (matches `TokenUsageCounts`):
 //   `counts.uncached` is base-uncached input plus any cache-write tokens;
 //     cache-write buckets are split out via `counts.cache_write` (the
-//     default write SKU) / `counts.cache_write_1h` (Anthropic extended TTL).
+//     default cache-write rate) / `counts.cache_write_1h` (Anthropic extended TTL).
 //   `counts.input` is the full prompt: `uncached + cached`, which equals
 //     base + cache-write buckets + cached.
 //   `counts.output` is total billable output tokens.
@@ -498,12 +493,15 @@ export function getTokenCost(
   const baseInputTokens = uncachedTokens - cwTokens - cw1Tokens;
   const cachedTokens = counts.cached.toNumber();
   const outputTokens = counts.output.toNumber();
-  // `counts.input` already equals base + cache writes + cached, so it IS the
-  // full prompt size used for the long-context cliff check.
   const promptSize = counts.input.toNumber();
   if (serviceTier === "priority" && !resolved.matched) {
     throw new Error(
       `Priority pricing is unavailable for model ${counts.model}`
+    );
+  }
+  if (serviceTier === "ultrafast" && !resolved.matched) {
+    throw new Error(
+      `Ultrafast pricing is unavailable for model ${counts.model}`
     );
   }
 
@@ -512,6 +510,8 @@ export function getTokenCost(
     standardTier1: rates.input_tier1_cents_million_tokens,
     priorityTier0: rates.input_priority_tier0_cents_million_tokens,
     priorityTier1: rates.input_priority_tier1_cents_million_tokens,
+    ultrafastTier0: rates.input_ultrafast_tier0_cents_million_tokens,
+    ultrafastTier1: rates.input_ultrafast_tier1_cents_million_tokens,
     tier1Start: rates.input_tier1_start_tokens,
     promptSize,
     serviceTier,
@@ -522,6 +522,8 @@ export function getTokenCost(
     standardTier1: rates.output_tier1_cents_million_tokens,
     priorityTier0: rates.output_priority_tier0_cents_million_tokens,
     priorityTier1: rates.output_priority_tier1_cents_million_tokens,
+    ultrafastTier0: rates.output_ultrafast_tier0_cents_million_tokens,
+    ultrafastTier1: rates.output_ultrafast_tier1_cents_million_tokens,
     tier1Start: rates.output_tier1_start_tokens,
     promptSize,
     serviceTier,
@@ -532,6 +534,8 @@ export function getTokenCost(
     standardTier1: rates.cache_read_tier1_cents_million_tokens,
     priorityTier0: rates.cache_read_priority_tier0_cents_million_tokens,
     priorityTier1: rates.cache_read_priority_tier1_cents_million_tokens,
+    ultrafastTier0: rates.cache_read_ultrafast_tier0_cents_million_tokens,
+    ultrafastTier1: rates.cache_read_ultrafast_tier1_cents_million_tokens,
     tier1Start: rates.cache_read_tier1_start_tokens,
     promptSize,
     serviceTier,
@@ -544,6 +548,10 @@ export function getTokenCost(
           standardTier1: rates.cache_write_tier1_cents_million_tokens,
           priorityTier0: rates.cache_write_priority_tier0_cents_million_tokens,
           priorityTier1: rates.cache_write_priority_tier1_cents_million_tokens,
+          ultrafastTier0:
+            rates.cache_write_ultrafast_tier0_cents_million_tokens,
+          ultrafastTier1:
+            rates.cache_write_ultrafast_tier1_cents_million_tokens,
           tier1Start: rates.cache_write_tier1_start_tokens,
           promptSize,
           serviceTier,
@@ -557,6 +565,8 @@ export function getTokenCost(
           standardTier1: rates.cache_write_1h_tier1_cents_million_tokens,
           priorityTier0: undefined,
           priorityTier1: undefined,
+          ultrafastTier0: undefined,
+          ultrafastTier1: undefined,
           tier1Start: rates.cache_write_1h_tier1_start_tokens,
           promptSize,
           serviceTier,
@@ -577,8 +587,6 @@ export function getTokenCost(
     result.cache_write_1h = dollarsForTokens(cw1Tokens, cacheWrite1hRate);
   }
   if (counts.thinking !== undefined) {
-    // Thinking is a slice of output; attribute proportionally. Zero output
-    // implies zero thinking under the input contract.
     result.thinking =
       outputTokens > 0
         ? outputDollars.times(counts.thinking.toNumber() / outputTokens)

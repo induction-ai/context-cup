@@ -20,9 +20,11 @@ export type {
   KnownOpenAIModelName,
 } from "./models.ts";
 
-// A model name that came from outside our code, such as a client request or
-// the CLI: any string is allowed, and `string & {}` keeps the known names
-// offered by autocomplete.
+/**
+ * A model name supplied externally, such as a client request or CLI argument.
+ * Arbitrary strings are accepted; the string intersection keeps known names
+ * available in autocomplete.
+ */
 export type ClientModelName = KnownModelName | (string & {});
 export type ClientGeminiModelName = KnownGeminiModelName | (string & {});
 
@@ -33,18 +35,18 @@ const KNOWN_MODEL_NAMES: ReadonlySet<string> = new Set([
   ...FIREWORKS_MODEL_NAMES,
 ]);
 
-// Exact membership: a dated variant or family missing from the lists is not a
-// known name.
+/**
+ * Check exact list membership. Unlike family or dated-variant resolution, a
+ * name absent from the known-name lists returns false.
+ */
 export function isKnownModelName(name: string): name is KnownModelName {
   return KNOWN_MODEL_NAMES.has(name);
 }
 
-/** Parse a model name from one of our own inputs, such as a CLI flag, so a
- *  typo fails before anything runs. */
 export function parseKnownModelName(name: string): KnownModelName {
   if (isKnownModelName(name)) return name;
   throw new Error(
-    `Unknown model "${name}". Use one listed in @context-cup/model-stats/models.js`
+    `Unknown model "${name}". Use one listed in packages/shared/src/models.ts`
   );
 }
 

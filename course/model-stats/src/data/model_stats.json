@@ -1,24 +1,5 @@
 {
   "openai": {
-    "text-embedding-ada": {
-      "provider": "openai",
-      "model_family": "text-embedding-ada",
-      "variants": ["text-embedding-ada-002"],
-      "costs": {
-        "max_input_tokens": 8191,
-        "max_output_tokens": 8191,
-        "input_tier0_cents_million_tokens": 10,
-        "output_tier0_cents_million_tokens": 0,
-        "cache_read_tier0_cents_million_tokens": 10,
-        "cache_read_tier0_start_tokens": 0
-      },
-      "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 128,
-        "cache_modes": ["implicit"]
-      }
-    },
     "gpt-3.5-turbo": {
       "provider": "openai",
       "model_family": "gpt-3.5-turbo",
@@ -181,44 +162,6 @@
         "input_tier0_cents_million_tokens": 100,
         "output_tier0_cents_million_tokens": 200,
         "cache_read_tier0_cents_million_tokens": 100,
-        "cache_read_tier0_start_tokens": 0
-      },
-      "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 128,
-        "cache_modes": ["implicit"]
-      }
-    },
-    "text-embedding-3-small": {
-      "provider": "openai",
-      "model_family": "text-embedding-3-small",
-      "variants": ["text-embedding-3-small"],
-      "costs": {
-        "max_input_tokens": 8191,
-        "max_output_tokens": 8191,
-        "input_tier0_cents_million_tokens": 2,
-        "output_tier0_cents_million_tokens": 0,
-        "cache_read_tier0_cents_million_tokens": 2,
-        "cache_read_tier0_start_tokens": 0
-      },
-      "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 128,
-        "cache_modes": ["implicit"]
-      }
-    },
-    "text-embedding-3-large": {
-      "provider": "openai",
-      "model_family": "text-embedding-3-large",
-      "variants": ["text-embedding-3-large"],
-      "costs": {
-        "max_input_tokens": 8191,
-        "max_output_tokens": 8191,
-        "input_tier0_cents_million_tokens": 13,
-        "output_tier0_cents_million_tokens": 0,
-        "cache_read_tier0_cents_million_tokens": 13,
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
@@ -815,9 +758,7 @@
         "input_tier0_cents_million_tokens": 5,
         "output_tier0_cents_million_tokens": 40,
         "cache_read_tier0_cents_million_tokens": 0.5,
-        "cache_read_tier0_start_tokens": 0,
-        "input_priority_tier0_cents_million_tokens": 250,
-        "cache_read_priority_tier0_cents_million_tokens": 250
+        "cache_read_tier0_start_tokens": 0
       },
       "caching": {
         "cache_start_tokens_docs": 1024,
@@ -1602,19 +1543,27 @@
         "input_tier1_start_tokens": 272000,
         "input_priority_tier0_cents_million_tokens": 2000,
         "input_priority_tier1_cents_million_tokens": 4000,
+        "input_ultrafast_tier0_cents_million_tokens": 6000,
+        "input_ultrafast_tier1_cents_million_tokens": 12000,
         "output_tier1_cents_million_tokens": 7500,
         "output_tier1_start_tokens": 272000,
         "output_priority_tier0_cents_million_tokens": 10000,
         "output_priority_tier1_cents_million_tokens": 15000,
+        "output_ultrafast_tier0_cents_million_tokens": 30000,
+        "output_ultrafast_tier1_cents_million_tokens": 45000,
         "cache_read_tier1_cents_million_tokens": 200,
         "cache_read_tier1_start_tokens": 272000,
         "cache_read_priority_tier0_cents_million_tokens": 200,
         "cache_read_priority_tier1_cents_million_tokens": 400,
+        "cache_read_ultrafast_tier0_cents_million_tokens": 600,
+        "cache_read_ultrafast_tier1_cents_million_tokens": 1200,
         "cache_write_tier0_cents_million_tokens": 1250,
         "cache_write_tier1_cents_million_tokens": 2500,
         "cache_write_tier1_start_tokens": 272000,
         "cache_write_priority_tier0_cents_million_tokens": 2500,
-        "cache_write_priority_tier1_cents_million_tokens": 5000
+        "cache_write_priority_tier1_cents_million_tokens": 5000,
+        "cache_write_ultrafast_tier0_cents_million_tokens": 7500,
+        "cache_write_ultrafast_tier1_cents_million_tokens": 15000
       },
       "caching": {
         "cache_start_tokens_docs": 1024,
@@ -1713,19 +1662,64 @@
         "input_tier1_start_tokens": 272000,
         "input_priority_tier0_cents_million_tokens": 400,
         "input_priority_tier1_cents_million_tokens": 800,
+        "input_ultrafast_tier0_cents_million_tokens": 1200,
+        "input_ultrafast_tier1_cents_million_tokens": 2400,
         "output_tier1_cents_million_tokens": 1500,
         "output_tier1_start_tokens": 272000,
         "output_priority_tier0_cents_million_tokens": 2000,
         "output_priority_tier1_cents_million_tokens": 3000,
+        "output_ultrafast_tier0_cents_million_tokens": 6000,
+        "output_ultrafast_tier1_cents_million_tokens": 9000,
         "cache_read_tier1_cents_million_tokens": 20,
         "cache_read_tier1_start_tokens": 272000,
         "cache_read_priority_tier0_cents_million_tokens": 20,
         "cache_read_priority_tier1_cents_million_tokens": 40,
+        "cache_read_ultrafast_tier0_cents_million_tokens": 60,
+        "cache_read_ultrafast_tier1_cents_million_tokens": 120,
         "cache_write_tier0_cents_million_tokens": 250,
         "cache_write_tier1_cents_million_tokens": 500,
         "cache_write_tier1_start_tokens": 272000,
         "cache_write_priority_tier0_cents_million_tokens": 500,
-        "cache_write_priority_tier1_cents_million_tokens": 1000
+        "cache_write_priority_tier1_cents_million_tokens": 1000,
+        "cache_write_ultrafast_tier0_cents_million_tokens": 1500,
+        "cache_write_ultrafast_tier1_cents_million_tokens": 3000
+      },
+      "caching": {
+        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens": 1231,
+        "cache_block_size": 128,
+        "cache_modes": ["breakpoints", "implicit"],
+        "cache_start_tokens_test": 1231
+      }
+    },
+    "gpt-6.1-terra": {
+      "provider": "openai",
+      "model_family": "gpt-6.1-terra",
+      "variants": ["gpt-6.1-terra"],
+      "costs": {
+        "max_input_tokens": 922000,
+        "max_output_tokens": 128000,
+        "input_tier0_cents_million_tokens": 100,
+        "output_tier0_cents_million_tokens": 500,
+        "cache_read_tier0_cents_million_tokens": 5,
+        "cache_read_tier0_start_tokens": 0,
+        "input_tier1_cents_million_tokens": 200,
+        "input_tier1_start_tokens": 272000,
+        "input_priority_tier0_cents_million_tokens": 200,
+        "input_priority_tier1_cents_million_tokens": 400,
+        "output_tier1_cents_million_tokens": 750,
+        "output_tier1_start_tokens": 272000,
+        "output_priority_tier0_cents_million_tokens": 1000,
+        "output_priority_tier1_cents_million_tokens": 1500,
+        "cache_read_tier1_cents_million_tokens": 10,
+        "cache_read_tier1_start_tokens": 272000,
+        "cache_read_priority_tier0_cents_million_tokens": 10,
+        "cache_read_priority_tier1_cents_million_tokens": 20,
+        "cache_write_tier0_cents_million_tokens": 125,
+        "cache_write_tier1_cents_million_tokens": 250,
+        "cache_write_tier1_start_tokens": 272000,
+        "cache_write_priority_tier0_cents_million_tokens": 250,
+        "cache_write_priority_tier1_cents_million_tokens": 500
       },
       "caching": {
         "cache_start_tokens_docs": 1024,
@@ -1852,24 +1846,14 @@
       "model_family": "claude-sonnet-4-5",
       "variants": ["claude-sonnet-4-5-20250929"],
       "costs": {
-        "max_input_tokens": 1000000,
+        "max_input_tokens": 200000,
         "max_output_tokens": 64000,
         "input_tier0_cents_million_tokens": 300,
         "output_tier0_cents_million_tokens": 1500,
         "cache_read_tier0_cents_million_tokens": 30,
         "cache_read_tier0_start_tokens": 0,
-        "input_tier1_cents_million_tokens": 600,
-        "input_tier1_start_tokens": 200000,
-        "output_tier1_cents_million_tokens": 2250,
-        "output_tier1_start_tokens": 200000,
-        "cache_read_tier1_cents_million_tokens": 60,
-        "cache_read_tier1_start_tokens": 200000,
         "cache_write_tier0_cents_million_tokens": 375,
-        "cache_write_tier1_cents_million_tokens": 750,
-        "cache_write_tier1_start_tokens": 200000,
-        "cache_write_1h_tier0_cents_million_tokens": 600,
-        "cache_write_1h_tier1_cents_million_tokens": 1200,
-        "cache_write_1h_tier1_start_tokens": 200000
+        "cache_write_1h_tier0_cents_million_tokens": 600
       },
       "caching": {
         "cache_start_tokens_docs": 1024,
@@ -2181,10 +2165,42 @@
         "max_output_tokens": 128000,
         "input_tier0_cents_million_tokens": 200,
         "output_tier0_cents_million_tokens": 1000,
-        "cache_read_tier0_cents_million_tokens": 20,
+        "cache_read_tier0_cents_million_tokens": 10,
         "cache_read_tier0_start_tokens": 0,
         "cache_write_tier0_cents_million_tokens": 250,
         "cache_write_1h_tier0_cents_million_tokens": 400
+      },
+      "caching": {
+        "cache_start_tokens_docs": 512,
+        "cache_start_tokens": 733,
+        "cache_block_size": 128,
+        "cache_modes": ["breakpoints", "implicit"],
+        "cache_start_tokens_test": 733
+      }
+    },
+    "claude-haiku-5-5": {
+      "provider": "anthropic",
+      "model_family": "claude-haiku-5-5",
+      "variants": ["claude-haiku-5-5"],
+      "costs": {
+        "max_input_tokens": 1000000,
+        "max_output_tokens": 128000,
+        "input_tier0_cents_million_tokens": 10,
+        "output_tier0_cents_million_tokens": 50,
+        "cache_read_tier0_cents_million_tokens": 1,
+        "cache_read_tier0_start_tokens": 0,
+        "input_tier1_cents_million_tokens": 50,
+        "input_tier1_start_tokens": 100000,
+        "output_tier1_cents_million_tokens": 250,
+        "output_tier1_start_tokens": 100000,
+        "cache_read_tier1_cents_million_tokens": 5,
+        "cache_read_tier1_start_tokens": 100000,
+        "cache_write_tier0_cents_million_tokens": 12.5,
+        "cache_write_tier1_cents_million_tokens": 62.5,
+        "cache_write_tier1_start_tokens": 100000,
+        "cache_write_1h_tier0_cents_million_tokens": 20,
+        "cache_write_1h_tier1_cents_million_tokens": 100,
+        "cache_write_1h_tier1_start_tokens": 100000
       },
       "caching": {
         "cache_start_tokens_docs": 512,
@@ -2212,9 +2228,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 5.4
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens_docs": 2048,
         "cache_start_tokens": 1232,
-        "cache_block_size": 1024,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"],
         "cache_start_tokens_test": 1232
       }
@@ -2244,9 +2260,9 @@
         "cache_read_priority_tier1_cents_million_tokens": 45
       },
       "caching": {
-        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens_docs": 2048,
         "cache_start_tokens": 4559,
-        "cache_block_size": 4096,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"],
         "cache_start_tokens_test": 4559
       }
@@ -2302,9 +2318,9 @@
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 2048,
+        "cache_start_tokens": 2048,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2321,9 +2337,9 @@
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
-        "cache_start_tokens_docs": 4096,
-        "cache_start_tokens": 4096,
-        "cache_block_size": 4096,
+        "cache_start_tokens_docs": 2048,
+        "cache_start_tokens": 2048,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2343,9 +2359,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 13.5
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens_docs": 2048,
         "cache_start_tokens": 2216,
-        "cache_block_size": 1024,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"],
         "cache_start_tokens_test": 2216
       }
@@ -2398,9 +2414,9 @@
         "cache_read_priority_tier1_cents_million_tokens": 72
       },
       "caching": {
-        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens_docs": 2048,
         "cache_start_tokens": 4632,
-        "cache_block_size": 4096,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"],
         "cache_start_tokens_test": 4632
       }
@@ -2443,9 +2459,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 54
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 2048,
+        "cache_start_tokens": 2048,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2491,9 +2507,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 9
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens_docs": 4096,
         "cache_start_tokens": 2216,
-        "cache_block_size": 1024,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"],
         "cache_start_tokens_test": 2216
       }
@@ -2578,9 +2594,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 4.5
       },
       "caching": {
-        "cache_start_tokens_docs": 2048,
+        "cache_start_tokens_docs": 4096,
         "cache_start_tokens": 5636,
-        "cache_block_size": 2048,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"],
         "cache_start_tokens_test": 5636
       }
@@ -2642,9 +2658,9 @@
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 9282,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 10818,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"],
         "cache_start_tokens_test": 17539
       }
@@ -2662,9 +2678,32 @@
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit", "seed"]
+      }
+    },
+    "gemini-2.5-computer-use": {
+      "provider": "gemini",
+      "model_family": "gemini-2.5-computer-use",
+      "variants": ["gemini-2.5-computer-use-preview-10-2025"],
+      "costs": {
+        "max_input_tokens": 128000,
+        "max_output_tokens": 64000,
+        "input_tier0_cents_million_tokens": 125,
+        "output_tier0_cents_million_tokens": 1000,
+        "cache_read_tier0_cents_million_tokens": 125,
+        "cache_read_tier0_start_tokens": 0,
+        "input_tier1_cents_million_tokens": 250,
+        "input_tier1_start_tokens": 200000,
+        "output_tier1_cents_million_tokens": 1500,
+        "output_tier1_start_tokens": 200000
+      },
+      "caching": {
+        "cache_start_tokens_docs": 2048,
+        "cache_start_tokens": 2048,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2673,8 +2712,8 @@
       "model_family": "deep-research-pro",
       "variants": ["deep-research-pro-preview-12-2025"],
       "costs": {
-        "max_input_tokens": 65536,
-        "max_output_tokens": 32768,
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 65536,
         "input_tier0_cents_million_tokens": 200,
         "output_tier0_cents_million_tokens": 1200,
         "cache_read_tier0_cents_million_tokens": 200,
@@ -2704,9 +2743,9 @@
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 2048,
+        "cache_start_tokens": 2048,
+        "cache_block_size": 2048,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2723,9 +2762,9 @@
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2745,9 +2784,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 27
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens_docs": 4096,
         "cache_start_tokens": 4530,
-        "cache_block_size": 1024,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"],
         "cache_start_tokens_test": 4530
       }
@@ -2765,9 +2804,9 @@
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
-        "cache_start_tokens_docs": 2048,
-        "cache_start_tokens": 2048,
-        "cache_block_size": 2048,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2790,6 +2829,25 @@
         "cache_modes": ["implicit", "seed"]
       }
     },
+    "gemini-3.5-live-translate": {
+      "provider": "gemini",
+      "model_family": "gemini-3.5-live-translate",
+      "variants": ["gemini-3.5-live-translate-preview"],
+      "costs": {
+        "max_input_tokens": 131072,
+        "max_output_tokens": 65536,
+        "input_tier0_cents_million_tokens": 350,
+        "output_tier0_cents_million_tokens": 2100,
+        "cache_read_tier0_cents_million_tokens": 350,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit", "seed"]
+      }
+    },
     "gemini-3.5-flash-lite": {
       "provider": "gemini",
       "model_family": "gemini-3.5-flash-lite",
@@ -2806,9 +2864,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 5
       },
       "caching": {
-        "cache_start_tokens_docs": 2048,
-        "cache_start_tokens": 2048,
-        "cache_block_size": 2048,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2828,9 +2886,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 13.5
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2850,9 +2908,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 13.5
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2875,6 +2933,25 @@
         "cache_modes": ["implicit", "seed"]
       }
     },
+    "gemini-3.5-transcribe": {
+      "provider": "gemini",
+      "model_family": "gemini-3.5-transcribe",
+      "variants": ["gemini-3.5-transcribe"],
+      "costs": {
+        "max_input_tokens": 98304,
+        "max_output_tokens": 32768,
+        "input_tier0_cents_million_tokens": 200,
+        "output_tier0_cents_million_tokens": 1200,
+        "cache_read_tier0_cents_million_tokens": 200,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit", "seed"]
+      }
+    },
     "gemini-3.8-flash": {
       "provider": "gemini",
       "model_family": "gemini-3.8-flash",
@@ -2891,9 +2968,66 @@
         "cache_read_priority_tier0_cents_million_tokens": 13.5
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit", "seed"]
+      }
+    },
+    "gemini-3.5-transcribe-live": {
+      "provider": "gemini",
+      "model_family": "gemini-3.5-transcribe-live",
+      "variants": ["gemini-3.5-transcribe-live"],
+      "costs": {
+        "max_input_tokens": 131072,
+        "max_output_tokens": 65536,
+        "input_tier0_cents_million_tokens": 350,
+        "output_tier0_cents_million_tokens": 2100,
+        "cache_read_tier0_cents_million_tokens": 350,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit", "seed"]
+      }
+    },
+    "gemini-3.8-live": {
+      "provider": "gemini",
+      "model_family": "gemini-3.8-live",
+      "variants": ["gemini-3.8-live"],
+      "costs": {
+        "max_input_tokens": 131072,
+        "max_output_tokens": 65536,
+        "input_tier0_cents_million_tokens": 75,
+        "output_tier0_cents_million_tokens": 450,
+        "cache_read_tier0_cents_million_tokens": 75,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit", "seed"]
+      }
+    },
+    "gemini-3.8-live-extended-thinking": {
+      "provider": "gemini",
+      "model_family": "gemini-3.8-live-extended-thinking",
+      "variants": ["gemini-3.8-live-extended-thinking"],
+      "costs": {
+        "max_input_tokens": 131072,
+        "max_output_tokens": 65536,
+        "input_tier0_cents_million_tokens": 75,
+        "output_tier0_cents_million_tokens": 450,
+        "cache_read_tier0_cents_million_tokens": 75,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2913,9 +3047,9 @@
         "cache_read_priority_tier0_cents_million_tokens": 22.5
       },
       "caching": {
-        "cache_start_tokens_docs": 1024,
-        "cache_start_tokens": 1024,
-        "cache_block_size": 1024,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"]
       }
     },
@@ -2935,10 +3069,33 @@
         "cache_read_priority_tier0_cents_million_tokens": 22.5
       },
       "caching": {
-        "cache_start_tokens_docs": 2048,
-        "cache_start_tokens": 2048,
-        "cache_block_size": 2048,
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4096,
+        "cache_block_size": 4096,
         "cache_modes": ["implicit", "seed"]
+      }
+    },
+    "gemini-4-argon": {
+      "provider": "gemini",
+      "model_family": "gemini-4-argon",
+      "variants": ["gemini-4-argon"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 1048576,
+        "input_tier0_cents_million_tokens": 200,
+        "output_tier0_cents_million_tokens": 1000,
+        "cache_read_tier0_cents_million_tokens": 10,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 360,
+        "output_priority_tier0_cents_million_tokens": 1800,
+        "cache_read_priority_tier0_cents_million_tokens": 18
+      },
+      "caching": {
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4101,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit"],
+        "cache_start_tokens_test": 4101
       }
     }
   },
@@ -3180,7 +3337,10 @@
         "input_tier0_cents_million_tokens": 60,
         "output_tier0_cents_million_tokens": 240,
         "cache_read_tier0_cents_million_tokens": 12,
-        "cache_read_tier0_start_tokens": 0
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 75,
+        "output_priority_tier0_cents_million_tokens": 300,
+        "cache_read_priority_tier0_cents_million_tokens": 15
       },
       "caching": {
         "cache_start_tokens_docs": 0,
@@ -3325,7 +3485,10 @@
         "input_tier0_cents_million_tokens": 5,
         "output_tier0_cents_million_tokens": 20,
         "cache_read_tier0_cents_million_tokens": 1,
-        "cache_read_tier0_start_tokens": 0
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 6.25,
+        "output_priority_tier0_cents_million_tokens": 25,
+        "cache_read_priority_tier0_cents_million_tokens": 1.25
       },
       "caching": {
         "cache_start_tokens_docs": 0,
@@ -3344,7 +3507,10 @@
         "input_tier0_cents_million_tokens": 100,
         "output_tier0_cents_million_tokens": 405,
         "cache_read_tier0_cents_million_tokens": 17,
-        "cache_read_tier0_start_tokens": 0
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 100,
+        "output_priority_tier0_cents_million_tokens": 405,
+        "cache_read_priority_tier0_cents_million_tokens": 17
       },
       "caching": {
         "cache_start_tokens_docs": 0,
@@ -3445,13 +3611,57 @@
       "costs": {
         "max_input_tokens": 1048576,
         "max_output_tokens": 393216,
-        "input_tier0_cents_million_tokens": 22,
-        "output_tier0_cents_million_tokens": 66,
-        "cache_read_tier0_cents_million_tokens": 0.7,
+        "input_tier0_cents_million_tokens": 30,
+        "output_tier0_cents_million_tokens": 120,
+        "cache_read_tier0_cents_million_tokens": 0.6,
         "cache_read_tier0_start_tokens": 0,
-        "input_priority_tier0_cents_million_tokens": 27.5,
-        "output_priority_tier0_cents_million_tokens": 82.5,
-        "cache_read_priority_tier0_cents_million_tokens": 0.875
+        "input_priority_tier0_cents_million_tokens": 37.5,
+        "output_priority_tier0_cents_million_tokens": 150,
+        "cache_read_priority_tier0_cents_million_tokens": 0.75
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/models/deepseek-v4p1-flash-1017",
+      "variants": ["accounts/fireworks/models/deepseek-v4p1-flash-1017"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 393216,
+        "input_tier0_cents_million_tokens": 30,
+        "output_tier0_cents_million_tokens": 120,
+        "cache_read_tier0_cents_million_tokens": 0.6,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 37.5,
+        "output_priority_tier0_cents_million_tokens": 150,
+        "cache_read_priority_tier0_cents_million_tokens": 0.75
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/models/minimax-m3p1-flash": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/models/minimax-m3p1-flash",
+      "variants": ["accounts/fireworks/models/minimax-m3p1-flash"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 1048576,
+        "input_tier0_cents_million_tokens": 15,
+        "output_tier0_cents_million_tokens": 60,
+        "cache_read_tier0_cents_million_tokens": 1.5,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 22.5,
+        "output_priority_tier0_cents_million_tokens": 90,
+        "cache_read_priority_tier0_cents_million_tokens": 2.25
       },
       "caching": {
         "cache_start_tokens_docs": 0,

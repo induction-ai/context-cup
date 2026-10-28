@@ -71,9 +71,8 @@ export abstract class NumberValue<T extends NumberValue<T>> {
   gte(other: T | 0): boolean {
     return this.value >= this.val(other);
   }
-  // `this as unknown as T` is safe: subclasses set T to themselves
-  // (`class TokenCount extends NumberValue<TokenCount>`), so `this` is a T at
-  // runtime. TS can't see that, hence the cast.
+  // Subclasses must bind T to themselves, e.g. NumberValue<TokenCount>, so
+  // returning this satisfies T even though TypeScript cannot prove it.
   min(other: T | 0): T {
     if (typeof other === "number") {
       return this.value <= 0 ? (this as unknown as T) : this.create(0);
@@ -97,10 +96,9 @@ export abstract class NumberValue<T extends NumberValue<T>> {
     return this.value;
   }
 
-  // Allow string coercion (template literals, String(), .toString()) so log
-  // payloads and error messages render the value naturally. Numeric coercion
-  // (arithmetic, comparison) still throws — those paths must use the named
-  // helpers to avoid silent type confusion.
+  // Allow string coercion for templates, String(), and readable log messages.
+  // Reject numeric coercion so arithmetic and comparisons must use the named
+  // methods and cannot silently mix units.
   [Symbol.toPrimitive](hint: string): string {
     if (hint === "string") return String(this.value);
     throw new TypeError(
