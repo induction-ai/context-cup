@@ -31,8 +31,8 @@ import {
 } from "../src/migrations.ts";
 import * as schema from "../src/schema.ts";
 
-// drizzle-kit 1.0.0-beta.9's ESM bundle declares `createRequire` twice and
-// fails to parse; the CJS build is fine, so load it through require.
+// Loaded through require: only drizzle-kit's CJS build shares the prompts-*
+// chunk whose resolver the block below replaces; the ESM build inlines its own.
 const kitRequire = createRequire(import.meta.url);
 const { generateDrizzleJson, generateMigration, pushSchema } = kitRequire(
   "drizzle-kit/api-postgres"
