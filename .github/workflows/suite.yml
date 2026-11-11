@@ -196,7 +196,7 @@ jobs:
 
       # The deployed database takes no connections from the internet except
       # from addresses on its allow list. This adds the runner's address for
-      # the run, and the step after the run removes it.
+      # the run, and the close job removes it.
       - name: Open the database to this runner
         id: open_database
         env:
@@ -232,15 +232,6 @@ jobs:
           args+=(--retry_errors "${RETRY_ERRORS:-3}")
           [ -n "$APPEND" ] && args+=(--append "$APPEND")
           bin/suite "${args[@]}"
-
-      # Runs on failure and cancel too, and whenever the open step started,
-      # since it may have added the entry before it failed.
-      - name: Close the database to this runner
-        if: always() && steps.open_database.outcome != 'skipped'
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
-        run: bin/db_allow_list close --run "$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
 
       - name: Upload suite summaries
         if: always()
@@ -313,3 +304,27 @@ jobs:
         run: |
           docker system prune -af || true
           df -h /
+
+  # A job of its own so that it also runs when GitHub stops the suite job at
+  # its 6-hour limit, which skips that job's remaining steps. Closing a run
+  # that never opened changes nothing.
+  close_database:
+    needs: suite
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: suite
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Close the database to the suite's runner
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
+        run: bin/db_allow_list close --run "$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
