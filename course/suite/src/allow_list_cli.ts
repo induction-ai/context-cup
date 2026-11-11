@@ -54,7 +54,7 @@ async function main(): Promise<void> {
     .option("run", {
       type: "string",
       demandOption: true,
-      describe: "The run's id, unique per attempt",
+      describe: "The workflow run's id; a re-run of it replaces its entry",
     })
     .alias("h", "help")
     .strict()

@@ -205,7 +205,7 @@ jobs:
           RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
         run: |
           ip=$(curl -fsS --retry 3 https://api.ipify.org)
-          bin/db_allow_list open --run "$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT" --ip "$ip"
+          bin/db_allow_list open --run "$GITHUB_RUN_ID" --ip "$ip"
 
       - name: Run suite
         env:
@@ -327,4 +327,4 @@ jobs:
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
-        run: bin/db_allow_list close --run "$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+        run: bin/db_allow_list close --run "$GITHUB_RUN_ID"
