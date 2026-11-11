@@ -21,7 +21,7 @@ import {
   type CupPackage,
 } from "./packages.ts";
 import {
-  tau3TaskGlob,
+  tau3TaskDir,
   TOOLATHLON_NOTION_TASKS,
   toolathlonTaskDir,
 } from "./tasks.ts";
@@ -30,9 +30,9 @@ export type HarborEnv = "docker" | "daytona";
 
 // ---------------------------------------------------------------------------
 // Resolving the `harbor` CLI. By default a run uses the induction-ai fork,
-// which carries the toolathlon task bundles, checked out under `.harbor/repo`
-// and run from its own uv venv. HARBOR_DIR=global uses the `harbor` on PATH;
-// any other HARBOR_DIR is a local checkout to run from.
+// which carries the toolathlon and tau3 task bundles, checked out under
+// `.harbor/repo` and run from its own uv venv. HARBOR_DIR=global uses the
+// `harbor` on PATH; any other HARBOR_DIR is a local checkout to run from.
 // ---------------------------------------------------------------------------
 
 export const HARBOR_REPO_URL = "https://github.com/induction-ai/harbor";
@@ -69,6 +69,13 @@ export function toolathlonTasksDir(): string {
     process.env.TOOLATHLON_TASKS_DIR ??
       path.join(harborDir(), "induction", "tasks", "toolathlon")
   );
+}
+
+/** The fork's tau3 bundles install a pinned tau2-bench. Harbor's public
+ *  `sierra-research/tau3-bench` dataset installs tau2-bench's latest main when
+ *  its image builds, and its grader fails on tau2-bench 2.0. */
+export function tau3TasksDir(): string {
+  return path.join(harborDir(), "induction", "tasks", "tau3-bench");
 }
 
 function run(command: string, cwd: string): void {
@@ -271,10 +278,8 @@ export function envBuildTimeoutMultiplier(
 function taskArgs(run: SuiteRun): string[] {
   if (run.task.runner === "tau3") {
     return [
-      "--dataset",
-      "sierra-research/tau3-bench",
-      "--include-task-name",
-      tau3TaskGlob(run.task.tau3.customer),
+      "--path",
+      path.join(tau3TasksDir(), tau3TaskDir(run.task.tau3.customer)),
     ];
   }
   const dir = toolathlonTaskDir(run.task.toolathlon.task ?? run.task_name);

@@ -44,14 +44,14 @@ export const TAU3_BANKING_TASKS: string[] = Array.from(
   .filter((id) => !BANKING_GAPS.has(id))
   .map((id) => `banking_${String(id).padStart(3, "0")}`);
 
-/** The `--include-task-name` glob for a tau3 customer alias such as
- *  `banking_047`. Only the banking domain is wired up. */
-export function tau3TaskGlob(customer: string): string {
+/** The harbor task directory for a tau3 customer alias such as
+ *  `banking_047`. Only the banking domain is supported. */
+export function tau3TaskDir(customer: string): string {
   const match = /^banking_(\d{3})$/.exec(customer);
   if (!match || !TAU3_BANKING_TASKS.includes(customer)) {
     throw new Error(
       `Unknown tau3 customer: ${customer}. Expected banking_001 … banking_102 (minus upstream gaps).`
     );
   }
-  return `*tau3-banking_knowledge-task-${match[1]}`;
+  return `tau3-banking_knowledge-task-${match[1]}`;
 }
