@@ -85,6 +85,9 @@ jobs:
     runs-on: ubuntu-latest
     # GitHub's ceiling for a hosted runner.
     timeout-minutes: 360
+    # Holds the Render key that opens the database to this runner. Limit its
+    # deployment branches to main, so a branch's edit of this file can't read it.
+    environment: suite
     permissions:
       contents: read
 
@@ -191,6 +194,19 @@ jobs:
           sudo docker image prune -af || true
           echo "Disk after cleanup:"; df -h /
 
+      # The deployed database takes no connections from the internet except
+      # from addresses on its allow list. This adds the runner's address for
+      # the run, and the step after the run removes it.
+      - name: Open the database to this runner
+        id: open_database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
+        run: |
+          ip=$(curl -fsS --retry 3 https://api.ipify.org)
+          bin/db_allow_list open --run "$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT" --ip "$ip"
+
       - name: Run suite
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -216,6 +232,15 @@ jobs:
           args+=(--retry_errors "${RETRY_ERRORS:-3}")
           [ -n "$APPEND" ] && args+=(--append "$APPEND")
           bin/suite "${args[@]}"
+
+      # Runs on failure and cancel too, and whenever the open step started,
+      # since it may have added the entry before it failed.
+      - name: Close the database to this runner
+        if: always() && steps.open_database.outcome != 'skipped'
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_POSTGRES_ID: ${{ vars.RENDER_POSTGRES_ID }}
+        run: bin/db_allow_list close --run "$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
 
       - name: Upload suite summaries
         if: always()

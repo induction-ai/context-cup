@@ -1,0 +1,5 @@
+#!/bin/bash
+# Open or close the deployed database to one Suite run's runner
+# (see course/suite/src/allow_list_cli.ts).
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" && exec node_modules/.bin/tsx course/suite/src/allow_list_cli.ts "$@"

@@ -141,7 +141,8 @@ bin/suite smoke_tau --driver base_python --target gpt-5.5@medium --dry_run
   budget before it comes back, its job is killed and marked failed. The
   suite's own `concurrency` and the docker cap stay per process. Set
   `SUITE_DATABASE_URL` to the deployed database to take turns with the Suite
-  workflow's runs from your machine.
+  workflow's runs from your machine; it lets in only addresses on its allow
+  list (see "Deploying").
 - `--driver` is a package under `drivers/`; it must declare support for the
   target's provider in its manifest. `base_python`
   speaks the turn protocol directly, clipping oversized tool results; `base_pydantic` is a
@@ -342,6 +343,13 @@ Repository secrets:
 The repository variable `SITE_URL` points printed links at the deployed
 results site.
 
+The Suite job runs in the `suite` environment, whose secret
+`RENDER_API_KEY` and variable `RENDER_POSTGRES_ID` (the database's id on
+Render) let it add its runner's address to the database's allow list for
+the run and remove it afterwards (`bin/db_allow_list`). Limit the
+environment's deployment branches to `main`, so a branch that edits the
+workflow can't read the key.
+
 CI gets its own Notion login, since a refresh from either copy would spend
 the other's token. To set it, or to replace a dead one:
 
@@ -382,6 +390,9 @@ its own `render/` directory (`course/site/render/build.sh`,
 `production`, so a migration it needs must be deployed before the sync can
 write; until then each tick fails and the next tries again.
 
-The database accepts connections from anywhere, since `bin/suite` writes to
-it from wherever it runs; set the GitHub `DATABASE_URL` secret to its external
-connection string, and the `SITE_URL` variable to the site's address.
+The database takes connections from the internet only from addresses on its
+allow list, which is empty between runs: each Suite run adds its runner's
+address and removes it when it ends. To run `bin/suite` against it from your
+machine, a maintainer adds your address in Render. Set the GitHub
+`DATABASE_URL` secret to its external connection string, and the `SITE_URL`
+variable to the site's address.
