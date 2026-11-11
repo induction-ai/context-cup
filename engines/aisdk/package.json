@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.58",
-    "@ai-sdk/google": "^4.0.76",
+    "@ai-sdk/google": "^4.0.111",
     "@ai-sdk/openai": "^4.0.71",
     "@context-cup/protocol": "workspace:*",
     "ai": "catalog:"
