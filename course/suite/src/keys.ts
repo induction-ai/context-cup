@@ -3,7 +3,7 @@ import path from "node:path";
 import { PROVIDERS, type Provider } from "@context-cup/shared/provider.js";
 import { REPO_ROOT } from "@context-cup/shared/repo_root.js";
 import z from "zod";
-import { tau3TaskGlob, toolathlonTaskDir } from "./tasks.ts";
+import { tau3TaskDir, toolathlonTaskDir } from "./tasks.ts";
 
 export { PROVIDERS, type Provider };
 
@@ -73,7 +73,7 @@ export function suiteFilePath(key: string): string {
 export function parseSuiteFile(raw: unknown): SuiteFile {
   const file = zSuiteFile.parse(raw);
   for (const [name, task] of Object.entries(file.tasks)) {
-    if (task.runner === "tau3") tau3TaskGlob(task.tau3.customer);
+    if (task.runner === "tau3") tau3TaskDir(task.tau3.customer);
     else toolathlonTaskDir(task.toolathlon.task ?? name);
   }
   return file;
