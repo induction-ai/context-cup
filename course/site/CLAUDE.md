@@ -100,6 +100,3 @@ Keeping the theme tight:
   by `app/icon.tsx`, `app/apple-icon.tsx`, and `app/opengraph-image.tsx`
   from `src/lib/brand.tsx`, whose colours copy the `$cc-*` palette.
 - Tests: `bin/test --project site`. Build check: `pnpm site:build`.
-- `pnpm site:dev` runs webpack, not Turbopack: under Next 16.2.1 Turbopack's
-  dev server serves the first edit to a file and then never another, until
-  it restarts. Try dropping `--webpack` after a Next upgrade.
