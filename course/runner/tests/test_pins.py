@@ -61,7 +61,7 @@ def test_the_workspace_pins_what_the_runner_and_engines_install() -> None:
 
 def test_a_driver_is_pinned_by_its_own_current_lock() -> None:
     pins = package_pins(WORKSPACE / "drivers" / "base_agent").splitlines()
-    assert "litellm==1.83.0" in pins
+    assert "litellm==1.108.4" in pins
     assert any(line.startswith("mcp==") for line in pins)
 
 

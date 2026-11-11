@@ -514,7 +514,7 @@ installs into `$CC_SELF_DIR/.venv`:
 name = "base-agent"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["litellm==1.83.0", "mcp>=1.25,<2"]
+dependencies = ["litellm==1.108.4", "mcp>=1.25,<2"]
 
 [tool.context-cup]
 kind = "agent"
