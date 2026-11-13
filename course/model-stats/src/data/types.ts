@@ -25,7 +25,7 @@ export type FetchModelsFile = ServiceMap<ModelKey, Record<string, unknown>>;
 // --- data/model_costs.json ---
 export interface CostEntry {
   max_input_tokens: number;
-  max_output_tokens: number;
+  max_output_tokens?: number;
   input_tier0_cents_million_tokens: number;
   input_tier1_cents_million_tokens?: number;
   input_tier1_start_tokens?: number;

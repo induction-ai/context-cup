@@ -1,5 +1,23 @@
 {
   "openai": {
+    "text-embedding-ada": {
+      "provider": "openai",
+      "model_family": "text-embedding-ada",
+      "variants": ["text-embedding-ada-002"],
+      "costs": {
+        "max_input_tokens": 8191,
+        "input_tier0_cents_million_tokens": 10,
+        "output_tier0_cents_million_tokens": 0,
+        "cache_read_tier0_cents_million_tokens": 10,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens": 1024,
+        "cache_block_size": 128,
+        "cache_modes": ["implicit"]
+      }
+    },
     "gpt-3.5-turbo": {
       "provider": "openai",
       "model_family": "gpt-3.5-turbo",
@@ -162,6 +180,42 @@
         "input_tier0_cents_million_tokens": 100,
         "output_tier0_cents_million_tokens": 200,
         "cache_read_tier0_cents_million_tokens": 100,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens": 1024,
+        "cache_block_size": 128,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "text-embedding-3-small": {
+      "provider": "openai",
+      "model_family": "text-embedding-3-small",
+      "variants": ["text-embedding-3-small"],
+      "costs": {
+        "max_input_tokens": 8191,
+        "input_tier0_cents_million_tokens": 2,
+        "output_tier0_cents_million_tokens": 0,
+        "cache_read_tier0_cents_million_tokens": 2,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens": 1024,
+        "cache_block_size": 128,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "text-embedding-3-large": {
+      "provider": "openai",
+      "model_family": "text-embedding-3-large",
+      "variants": ["text-embedding-3-large"],
+      "costs": {
+        "max_input_tokens": 8191,
+        "input_tier0_cents_million_tokens": 13,
+        "output_tier0_cents_million_tokens": 0,
+        "cache_read_tier0_cents_million_tokens": 13,
         "cache_read_tier0_start_tokens": 0
       },
       "caching": {
@@ -2209,6 +2263,28 @@
         "cache_modes": ["breakpoints", "implicit"],
         "cache_start_tokens_test": 733
       }
+    },
+    "claude-fable-5-2": {
+      "provider": "anthropic",
+      "model_family": "claude-fable-5-2",
+      "variants": ["claude-fable-5-2"],
+      "costs": {
+        "max_input_tokens": 1000000,
+        "max_output_tokens": 128000,
+        "input_tier0_cents_million_tokens": 800,
+        "output_tier0_cents_million_tokens": 4000,
+        "cache_read_tier0_cents_million_tokens": 20,
+        "cache_read_tier0_start_tokens": 0,
+        "cache_write_tier0_cents_million_tokens": 1000,
+        "cache_write_1h_tier0_cents_million_tokens": 1600
+      },
+      "caching": {
+        "cache_start_tokens_docs": 512,
+        "cache_start_tokens": 733,
+        "cache_block_size": 128,
+        "cache_modes": ["breakpoints", "implicit"],
+        "cache_start_tokens_test": 733
+      }
     }
   },
   "gemini": {
@@ -2456,6 +2532,7 @@
         "cache_read_tier0_cents_million_tokens": 3,
         "cache_read_tier0_start_tokens": 0,
         "input_priority_tier0_cents_million_tokens": 54,
+        "output_priority_tier0_cents_million_tokens": 450,
         "cache_read_priority_tier0_cents_million_tokens": 54
       },
       "caching": {
@@ -2919,7 +2996,7 @@
       "model_family": "gemini-omni-1.1-flash",
       "variants": ["gemini-omni-1.1-flash"],
       "costs": {
-        "max_input_tokens": 1048576,
+        "max_input_tokens": 131072,
         "max_output_tokens": 65536,
         "input_tier0_cents_million_tokens": 150,
         "output_tier0_cents_million_tokens": 900,
@@ -3096,6 +3173,71 @@
         "cache_block_size": 4096,
         "cache_modes": ["implicit"],
         "cache_start_tokens_test": 4101
+      }
+    },
+    "gemini-omni-1.2-flash": {
+      "provider": "gemini",
+      "model_family": "gemini-omni-1.2-flash",
+      "variants": ["gemini-omni-1.2-flash"],
+      "costs": {
+        "max_input_tokens": 131072,
+        "max_output_tokens": 65536,
+        "input_tier0_cents_million_tokens": 150,
+        "output_tier0_cents_million_tokens": 900,
+        "cache_read_tier0_cents_million_tokens": 150,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 1024,
+        "cache_start_tokens": 1024,
+        "cache_block_size": 1024,
+        "cache_modes": ["implicit", "seed"]
+      }
+    },
+    "gemini-4-carbon": {
+      "provider": "gemini",
+      "model_family": "gemini-4-carbon",
+      "variants": ["gemini-4-carbon"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 1048576,
+        "input_tier0_cents_million_tokens": 200,
+        "output_tier0_cents_million_tokens": 1000,
+        "cache_read_tier0_cents_million_tokens": 10,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 360,
+        "output_priority_tier0_cents_million_tokens": 1800,
+        "cache_read_priority_tier0_cents_million_tokens": 18
+      },
+      "caching": {
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4417,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit"],
+        "cache_start_tokens_test": 4417
+      }
+    },
+    "gemini-4-hydrogen": {
+      "provider": "gemini",
+      "model_family": "gemini-4-hydrogen",
+      "variants": ["gemini-4-hydrogen"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 1048576,
+        "input_tier0_cents_million_tokens": 150,
+        "output_tier0_cents_million_tokens": 750,
+        "cache_read_tier0_cents_million_tokens": 7.5,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 270,
+        "output_priority_tier0_cents_million_tokens": 1350,
+        "cache_read_priority_tier0_cents_million_tokens": 13.5
+      },
+      "caching": {
+        "cache_start_tokens_docs": 4096,
+        "cache_start_tokens": 4938,
+        "cache_block_size": 4096,
+        "cache_modes": ["implicit"],
+        "cache_start_tokens_test": 4938
       }
     }
   },
@@ -3453,6 +3595,27 @@
         "cache_modes": ["implicit"]
       }
     },
+    "accounts/fireworks/models/qwen3p8-max": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/models/qwen3p8-max",
+      "variants": ["accounts/fireworks/models/qwen3p8-max"],
+      "costs": {
+        "max_input_tokens": 262144,
+        "input_tier0_cents_million_tokens": 200,
+        "output_tier0_cents_million_tokens": 600,
+        "cache_read_tier0_cents_million_tokens": 25,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 300,
+        "output_priority_tier0_cents_million_tokens": 900,
+        "cache_read_priority_tier0_cents_million_tokens": 37.5
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
     "accounts/fireworks/models/deepseek-v4-pro-0813": {
       "provider": "fireworks",
       "model_family": "accounts/fireworks/models/deepseek-v4-pro-0813",
@@ -3626,6 +3789,124 @@
         "cache_modes": ["implicit"]
       }
     },
+    "accounts/fireworks/models/ember-1": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/models/ember-1",
+      "variants": ["accounts/fireworks/models/ember-1"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "input_tier0_cents_million_tokens": 300,
+        "output_tier0_cents_million_tokens": 1500,
+        "cache_read_tier0_cents_million_tokens": 30,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 375,
+        "output_priority_tier0_cents_million_tokens": 1875,
+        "cache_read_priority_tier0_cents_million_tokens": 37.5
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/routers/spot-deepseek-v4-flash": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/routers/spot-deepseek-v4-flash",
+      "variants": ["accounts/fireworks/routers/spot-deepseek-v4-flash"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 384000,
+        "input_tier0_cents_million_tokens": 10.5,
+        "output_tier0_cents_million_tokens": 21,
+        "cache_read_tier0_cents_million_tokens": 2.1,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/routers/kimi-k3-spot": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/routers/kimi-k3-spot",
+      "variants": ["accounts/fireworks/routers/kimi-k3-spot"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 131072,
+        "input_tier0_cents_million_tokens": 210,
+        "output_tier0_cents_million_tokens": 1050,
+        "cache_read_tier0_cents_million_tokens": 21,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/routers/glm-5p3-spot": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/routers/glm-5p3-spot",
+      "variants": ["accounts/fireworks/routers/glm-5p3-spot"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 128000,
+        "input_tier0_cents_million_tokens": 98,
+        "output_tier0_cents_million_tokens": 308,
+        "cache_read_tier0_cents_million_tokens": 18.2,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-spot": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/routers/deepseek-v4p1-flash-spot",
+      "variants": ["accounts/fireworks/routers/deepseek-v4p1-flash-spot"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 393216,
+        "input_tier0_cents_million_tokens": 21,
+        "output_tier0_cents_million_tokens": 84,
+        "cache_read_tier0_cents_million_tokens": 0.42,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/models/muse-spark-open": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/models/muse-spark-open",
+      "variants": ["accounts/fireworks/models/muse-spark-open"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "input_tier0_cents_million_tokens": 125,
+        "output_tier0_cents_million_tokens": 425,
+        "cache_read_tier0_cents_million_tokens": 15,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 187.5,
+        "output_priority_tier0_cents_million_tokens": 637.5,
+        "cache_read_priority_tier0_cents_million_tokens": 22.5
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
     "accounts/fireworks/models/deepseek-v4p1-flash-1017": {
       "provider": "fireworks",
       "model_family": "accounts/fireworks/models/deepseek-v4p1-flash-1017",
@@ -3648,6 +3929,25 @@
         "cache_modes": ["implicit"]
       }
     },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot",
+      "variants": ["accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 393216,
+        "input_tier0_cents_million_tokens": 21,
+        "output_tier0_cents_million_tokens": 84,
+        "cache_read_tier0_cents_million_tokens": 0.42,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
     "accounts/fireworks/models/minimax-m3p1-flash": {
       "provider": "fireworks",
       "model_family": "accounts/fireworks/models/minimax-m3p1-flash",
@@ -3662,6 +3962,85 @@
         "input_priority_tier0_cents_million_tokens": 22.5,
         "output_priority_tier0_cents_million_tokens": 90,
         "cache_read_priority_tier0_cents_million_tokens": 2.25
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/routers/rune": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/routers/rune",
+      "variants": ["accounts/fireworks/routers/rune"],
+      "costs": {
+        "max_input_tokens": 262144,
+        "input_tier0_cents_million_tokens": 4.2,
+        "output_tier0_cents_million_tokens": 0,
+        "cache_read_tier0_cents_million_tokens": 0.84,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/models/rune": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/models/rune",
+      "variants": ["accounts/fireworks/models/rune"],
+      "costs": {
+        "max_input_tokens": 262144,
+        "input_tier0_cents_million_tokens": 4.2,
+        "output_tier0_cents_million_tokens": 0,
+        "cache_read_tier0_cents_million_tokens": 0.84,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast",
+      "variants": [
+        "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast"
+      ],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 393216,
+        "input_tier0_cents_million_tokens": 240,
+        "output_tier0_cents_million_tokens": 960,
+        "cache_read_tier0_cents_million_tokens": 4.8,
+        "cache_read_tier0_start_tokens": 0
+      },
+      "caching": {
+        "cache_start_tokens_docs": 0,
+        "cache_start_tokens": 0,
+        "cache_block_size": 1,
+        "cache_modes": ["implicit"]
+      }
+    },
+    "accounts/fireworks/models/kimi-k3p1-pro": {
+      "provider": "fireworks",
+      "model_family": "accounts/fireworks/models/kimi-k3p1-pro",
+      "variants": ["accounts/fireworks/models/kimi-k3p1-pro"],
+      "costs": {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 131072,
+        "input_tier0_cents_million_tokens": 200,
+        "output_tier0_cents_million_tokens": 1000,
+        "cache_read_tier0_cents_million_tokens": 20,
+        "cache_read_tier0_start_tokens": 0,
+        "input_priority_tier0_cents_million_tokens": 300,
+        "output_priority_tier0_cents_million_tokens": 1500,
+        "cache_read_priority_tier0_cents_million_tokens": 30
       },
       "caching": {
         "cache_start_tokens_docs": 0,
