@@ -20,7 +20,7 @@
     "@context-cup/shared": "workspace:*",
     "drizzle-orm": "catalog:",
     "execa": "catalog:",
-    "ignore": "^7.0.12",
+    "ignore": "^7.0.14",
     "nanoid": "catalog:",
     "pg": "catalog:",
     "pino": "catalog:",
